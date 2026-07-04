@@ -8,3 +8,9 @@ class SolveRequest(BaseModel):
 class SolveResponse(BaseModel):
     expression: str
     result: str
+
+
+class HistoryItem(BaseModel):
+    expression: str
+    result: str
+    timestamp: str

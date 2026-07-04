@@ -2,8 +2,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.history import add_entry, get_history
 from app.math_engine import ExpressionError, solve_expression
-from app.schemas import SolveRequest, SolveResponse
+from app.schemas import HistoryItem, SolveRequest, SolveResponse
 
 app = FastAPI(title=settings.app_name)
 
@@ -27,4 +28,10 @@ def solve(request: SolveRequest) -> SolveResponse:
         result = solve_expression(request.expression)
     except ExpressionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    add_entry(request.expression, result)
     return SolveResponse(expression=request.expression, result=result)
+
+
+@app.get("/history", response_model=list[HistoryItem])
+def history() -> list[HistoryItem]:
+    return get_history()

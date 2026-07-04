@@ -1,14 +1,36 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+interface HistoryItem {
+  expression: string;
+  result: string;
+  timestamp: string;
+}
 
 export default function Home() {
   const [expression, setExpression] = useState("");
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+
+  async function fetchHistory() {
+    try {
+      const response = await fetch(`${API_URL}/history`);
+      if (!response.ok) return;
+      const data = await response.json();
+      setHistory(data);
+    } catch {
+      // histórico é secundário: falha silenciosa não deve quebrar a tela principal
+    }
+  }
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -31,6 +53,7 @@ export default function Home() {
       }
 
       setResult(data.result);
+      await fetchHistory();
     } catch {
       setError("Não foi possível conectar ao servidor. Tente novamente.");
     } finally {
@@ -73,6 +96,24 @@ export default function Home() {
           <p className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-700">
             {error}
           </p>
+        )}
+      </section>
+
+      <section className="w-full max-w-md">
+        <h2 className="mb-2 text-sm font-medium text-zinc-500">Histórico</h2>
+        {history.length === 0 ? (
+          <p className="text-sm text-zinc-400">Nenhuma expressão resolvida ainda.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {history.map((item) => (
+              <li key={`${item.timestamp}-${item.expression}`} className="rounded-md border border-zinc-200 p-3 text-sm">
+                <div>{item.expression} = {item.result}</div>
+                <span className="text-xs text-zinc-400">
+                  {new Date(item.timestamp).toLocaleString()}
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
     </main>
