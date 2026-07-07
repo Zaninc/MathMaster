@@ -121,4 +121,56 @@ Implementar a área de Logaritmos/Exponenciais (`backend/app/math_engine/logarit
 
 ---
 
+## 7. Sprint 7.2 — Output Formatting & UX (2026-07-07)
+
+Nova camada de apresentação, `backend/app/formatter/` (pacote irmão de `math_engine/`, não aninhado nele), inserida em um único ponto de `main.py` entre `solve_expression()` e a montagem de `SolveResponse`. `math_engine/`, o dispatcher central, `solve_expression` e a API pública permanecem com diff zero.
+
+Arquitetura **classification-first**: `classify.py` decide, via regex estrutural, a qual de quatro formas conhecidas a string bruta pertence (intervalo/união, `FiniteSet`, lista `x = ...`, expressão pura) **antes** de qualquer tentativa de parsing; `pipeline.py` só despacha para o formatter específico daquela forma. Qualquer ambiguidade ou falha de parsing devolve a string original intocada. Blocos de texto composto (`"Tipo: ...; Domínio: ...; ..."`, saída de `functions/`/`trigonometry/`) foram deixados **totalmente intocados** por decisão explícita — tratados como "texto comum", não como uma quinta forma a reconstruir.
+
+Resultado: raízes múltiplas passam a vir ordenadas (parte real, depois imaginária) e indexadas com subscrito unicode (`x₁ = -2, x₂ = 2`); `Interval`/`Union` do SymPy viram notação matemática convencional (`Interval.open(3, oo)` → `(3, ∞)`); `FiniteSet` de equações modulares ganha rótulo de variável quando possível (`{-2, 4}` → `x₁ = -2, x₂ = 4`); expressões algébricas passam por uma bateria restrita e segura de simplificação (`radsimp`, `trigsimp`, `factor`, e `cancel` só quando a expressão já é uma fração).
+
+Duas regressões reais foram encontradas e corrigidas durante os testes, antes de qualquer commit: `sympify("{a, b}")` retorna um `set` nativo do Python (não `FiniteSet` do SymPy) — corrigido parseando cada elemento individualmente dentro das chaves; e `simplify()`/`cancel()`/`sqrtdenest()` desfatoravam `(x-1)*(x+1)` → `x**2-1` (mais curto, porém contradiz a prioridade "fatorar primeiro" de `algebra/dispatcher.py` desde a Sprint 4) — corrigido restringindo a bateria de simplificação a funções que nunca expandem um produto já fatorado.
+
+Validado com `solve_expression` direto (19+ casos cobrindo as 7 áreas) e via API real (`uvicorn` + `curl` em `/solve` e `/history`), zero regressão matemática.
+
+## 8. Sprint 7.3 — Mathematical Renderer (2026-07-07)
+
+Segunda camada dentro de `backend/app/formatter/`, rodando **depois** de `format_result()` (Sprint 7.2): um passe cosmético final de substituição Unicode por token, sem KaTeX, sem conversão para decimal, sem tocar em `math_engine/`, `solve_expression`, dispatcher ou API pública.
+
+### 8.1 Arquivos novos
+
+| Arquivo | Responsabilidade |
+|---|---|
+| `unicode_math.py` | Funções puras e isoladas de substituição por regex: `superscript_exponents` (`**N` → sobrescrito Unicode, dígito a dígito, qualquer quantidade de dígitos), `render_sqrt` (`sqrt(ATOM)` → `√ATOM` só para argumento atômico), `replace_constants` (`pi`/`tau`/`oo` → `π`/`τ`/`∞`), `replace_comparisons` (`<=`/`>=`/`!=` → `≤`/`≥`/`≠`), `replace_imaginary_unit` (`I` → `i`) |
+| `renderer.py` | `render_math(text)` — orquestra as funções acima em ordem fixa, dentro de um `try/except` que devolve o texto original em qualquer falha inesperada |
+
+`__init__.py` passou a exportar `render_math` além de `format_result`. `main.py`: uma linha alterada — `result = render_math(format_result(request.expression, raw_result))`.
+
+### 8.2 Decisões de arquitetura confirmadas com Theo antes da implementação
+
+- **Aplicação universal, não só nas formas classificadas pela 7.2**: o renderer roda sobre a string inteira, inclusive dentro dos blocos `"Tipo: ...; ..."` que a 7.2 deixou intocados — porque são trocas de token sem necessidade de entender a estrutura (diferente da reconstrução da 7.2, que exigia parsing real). Por isso `asin(1/2)` → `"Tipo: trigonometria inversa; Resultado: pi/6"` (7.2, intocado) passa a virar `"...Resultado: π/6"` (7.3).
+- **Expoentes multi-dígito**: cada dígito é traduzido individualmente pela tabela Unicode de sobrescritos — `x**10` → `x¹⁰`, `x**123` → `x¹²³`, `1/x**2` (SymPy: `x**(-2)`) → `x⁻²`.
+- **Unidade imaginária**: `I` → `i` apenas troca a letra (`\bI\b`, fronteira de palavra — nunca casa dentro de `Interval`). `2*I` → `2*i`; colapsar para `2i` foi explicitamente adiado para uma sprint futura.
+- **`sqrt()` com constantes nomeadas**: `sqrt(pi)` → `√π`, `sqrt(tau)` → `√τ`, `sqrt(E)` → `√E` funcionam pelo mesmo regex genérico de "argumento atômico" (identificador ou inteiro) usado para `sqrt(x)`/`sqrt(2)` — sem caso especial. Argumentos compostos (`sqrt(x+1)`, `sqrt(2*x)`, `sqrt(x**2-4)`) permanecem intocados: decidir parênteses corretos para um argumento composto a partir da string, sem AST, não é seguro.
+
+### 8.3 Bug evitado antes de qualquer teste rodar
+
+Um único regex de expoente com parêntese opcional (`\*\*\(?(-?\d+)\)?`) teria "engolido" parênteses não relacionados — ex.: `(x**2)` viraria `(x²` (parêntese de fechamento perdido), pois o `\)?` opcional casaria com qualquer `)` seguinte, mesmo um que fechasse um grupo externo sem relação com o expoente. Corrigido com dois padrões distintos e ancorados: `\*\*\((-\d+)\)` (negativo, exige `-` dentro dos parênteses — a única forma que o SymPy realmente produz) e `\*\*(\d+)\b` (positivo, nunca tem parênteses).
+
+Também identificada uma dependência de ordem não óbvia: `render_sqrt()` precisa rodar **antes** de `replace_constants()` — se `pi`/`tau` já tivessem virado `π`/`τ`, o regex de argumento atômico do `sqrt` (que exige um identificador ASCII) deixaria de casar, e `sqrt(pi)` ficaria preso como `sqrt(π)` em vez de `√π`. Documentado em comentário no código e no docstring de `render_sqrt`.
+
+### 8.4 Testes executados
+
+25 casos unitários de `unicode_math`/`render_math` isolados (expoentes de 1 a 3+ dígitos, expoente negativo, `sqrt` atômico vs. composto, constantes, complexos, comparações, idempotência sobre saída já formatada pela 7.2 como `(3, ∞)`) + 21 casos reais via `solve_expression` → `format_result` → `render_math` cobrindo álgebra, equações reais/complexas, inequações, valor absoluto, sistemas, funções, trigonometria — zero regressão matemática, só apresentação mudou. Smoke test final via API real (`uvicorn` + `curl` em `/solve` e `/history`), servidor encerrado limpo.
+
+### 8.5 Limitações intencionais (documentadas, não são bugs)
+
+- `sqrt(x + 1)`, `sqrt(2*x)`, `sqrt(x**2 - 4)` continuam como `sqrt(...)` — argumento composto fora de escopo.
+- `sqrt(sqrt(2))` (raiz aninhada, caso raro neste domínio) pode ficar parcialmente convertido (`sqrt(√2)`) — ainda correto, só estilisticamente inconsistente.
+- Expoentes não inteiros (`x**(1/2)`, `x**n` simbólico) não viram sobrescrito.
+- `<=`/`>=`/`!=` não têm nenhum caso real para exercitar hoje (inequações já viram notação de intervalo na 7.2) — incluído como rede de segurança futura.
+- `2*I` não colapsa para `2i` nesta sprint (decisão explícita, adiada).
+
+---
+
 *Fim do documento.*
