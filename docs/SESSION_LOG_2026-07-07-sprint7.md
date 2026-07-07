@@ -75,14 +75,49 @@ Nenhuma alteração — `SolveRequest`/`SolveResponse`/`HistoryItem` e os três 
 - **API pública**: inalterada.
 - **Frontend**: inalterado.
 - **Ainda sem**: `sec`/`csc`/`cot`, funções hiperbólicas, graus/conversão grau↔radiano, Lei dos Senos/Cossenos, resolução de triângulos, logaritmos, exponenciais, derivadas, integrais, gráficos (todos explicitamente fora de escopo desta sprint), equações trigonométricas com mais de uma incógnita ou sistemas, passos pedagógicos para nenhuma área.
-- **Limitação conhecida, não regressiva**: `f(x) = sin(x)` (Sprint 6) sem chamada de avaliação continua levantando `ExpressionError` na classificação de `functions/` (`Poly(sin(x), x)` falha) — comportamento pré-existente da Sprint 6, não afetado por esta sprint.
-- **Ainda sem testes automatizados**: validação manual (script descartável + curl), como nas sprints anteriores.
+- **Limitação conhecida, corrigida na Sprint 7.1**: `f(x) = sin(x)` (Sprint 6) sem chamada de avaliação levantava `ExpressionError` na classificação de `functions/` (`Poly(sin(x), x)` falhava) — resolvido pela Sprint 7.1 (ver seção 6 abaixo), que introduziu a classificação "função transcendente".
+- **Ainda sem testes automatizados**: validação manual (script descartável + curl), como nas sprints anteriores. Permanece assim após a Sprint 7.1.
 
 ---
 
-## 5. Objetivo da Sprint 8
+## 5. Objetivo original da Sprint 8 (antes do hardening)
 
 Implementar a área de Logaritmos/Exponenciais (`backend/app/math_engine/logarithms/`), seguindo o mesmo padrão arquitetural (operações isoladas + dispatcher de área), sem alterar a API pública além do estritamente necessário. Atenção redobrada na ordem de detecção do dispatcher central, dado o precedente desta sprint (colisão sintática entre `functions/` e nomes de função reservados de outras áreas).
+
+---
+
+## 6. Sprint 7.1 — Hardening pós-auditoria (2026-07-08)
+
+Antes de iniciar a Sprint 8, foi conduzida uma auditoria técnica completa das Sprints 1-7 (arquitetura, dispatcher, compatibilidade, performance, segurança, organização, código morto, dívida técnica, escalabilidade). A auditoria confirmou **zero regressão** em todo o histórico do projeto, mas encontrou 3 problemas reais que foram corrigidos nesta sprint pontual de hardening — sem adicionar nenhuma funcionalidade nova, sem tocar em frontend/API pública/comportamento já correto.
+
+### 6.1 Problemas encontrados e como foram resolvidos
+
+**1. `functions/classification.py` falhava para corpos de função transcendentes.**
+`f(x) = sin(x)`, `f(x) = log(x)`, `f(x) = exp(x)`, `f(x) = sqrt(x)` (sem chamada de avaliação) levantavam `ExpressionError: Não foi possível classificar a função`, porque `Poly(expr, symbol)` não sabe representar corpos não-polinomiais e o `except Exception` genérico convertia qualquer falha em erro. Confirmado empiricamente que `Poly()` levanta `sympy.polys.polyerrors.PolynomialError` de forma uniforme para os 4 casos.
+**Correção:** o `except` foi estreitado para capturar especificamente `PolynomialError`, retornando um novo tipo de classificação (`TRANSCENDENTE`, rótulo "função transcendente") em vez de erro. Qualquer outra exceção continua virando `ExpressionError` exatamente como antes. `domain.py`, `roots.py` e `vertex.py` já tratam esse novo tipo automaticamente pelos próprios ramos `else`/condicionais existentes — nenhuma mudança foi necessária neles (confirmado: `solve()` e a avaliação em x=0 já funcionavam sem erro para os 4 corpos, apenas a classificação estava barrando o caminho).
+
+**2. Colisão sintática `nome(var) = expr` entre `functions/` e outras áreas.**
+O regex de definição de função (`functions/dispatcher.py`) não distingue "definir uma função chamada X" de "chamar uma função matemática conhecida seguida de uma equação/comparação". A Sprint 7 já havia corrigido isso para `sin`/`cos`/`tan`/`asin`/`acos`/`atan`; a auditoria confirmou ao vivo que `sqrt(x) = 2`, `log(x) = 5`, `ln(x) = 3`, `exp(x) = 1` caíam todos incorretamente em `functions/`, com o mesmo erro errado ("Funções de grau 0...").
+**Correção:** `_RESERVED_FUNCTION_NAMES` foi ampliado para incluir `log`, `ln`, `exp`, `sqrt`, com um comentário explícito documentando que esta é uma lista mantida manualmente — não existe uma alternativa estrutural simples sem introduzir o Parser Inteligente (Sprint 11); confirmado que `sqrt` nem é uma classe `Function` do SymPy (é uma função Python comum), então uma checagem reflexiva genérica ainda precisaria de casos especiais. Após a correção, essas quatro expressões passam a cair no fallback correto (`equations/`, que rejeita com um erro honesto de "não foi possível determinar o grau da equação" em vez do erro enganoso anterior).
+
+**3. Inequações trigonométricas retornavam um resultado enganoso.**
+`sin(x) > 0`, `tan(x) >= 1`, `cos(x) < sin(x)` não levantavam erro — caíam no branch de "expressão genérica" de `trigonometry/dispatcher.py` e voltavam inalteradas, rotuladas como `"Tipo: expressão trigonométrica"`, como se fossem um resultado válido.
+**Correção:** adicionada uma checagem de inequação (mesmo padrão regex já usado em `equations/dispatcher.py`) no início de `solve_trigonometry_text`, levantando `ExpressionError` explícita ("Inequações trigonométricas ainda não fazem parte do escopo desta versão.") antes de qualquer tentativa de parsing/simplificação.
+
+### 6.2 Compatibilidade
+
+Os ~40 casos de compatibilidade das Sprints 1-7 foram re-executados na validação isolada e via smoke test (`uvicorn` + `curl`) desta sprint — todos idênticos, incluindo o erro de domínio de `asin(2)`/`acos(-2)` (não regressivo). `GET /history` conferido: apenas as chamadas bem-sucedidas geram entrada, schema intacto.
+
+### 6.3 Limitações que permanecem intencionais (não corrigidas nesta sprint)
+
+- O denylist de nomes reservados em `functions/dispatcher.py` continua sendo mantido manualmente — qualquer área futura com sintaxe `nome(...)` pode colidir de novo e precisar estender essa lista. Resolver isso estruturalmente (gramática que distingue definição de uso) é trabalho reservado para o Parser Inteligente (Sprint 11).
+- O domínio real de funções transcendentes (ex.: `log(x)` deveria excluir `x <= 0`; `f(x) = log(x)` hoje reporta `Domínio: ℝ` e `Intercepto em y: (0, zoo)`) não é calculado — permanece `ℝ` por simplificação deliberada. Calcular isso corretamente é funcionalidade nova, fora do escopo de hardening.
+- Inequações trigonométricas continuam **não suportadas** — esta sprint só tornou a rejeição explícita e honesta, não adicionou suporte a elas.
+- Os demais itens "⚠ pode melhorar" da auditoria (duplicação de regex entre `equations/`/`functions/`/`trigonometry/`, recomputação redundante em `functions/rational.py`, ausência de testes automatizados, inconsistência de nomenclatura entre áreas, módulos de `algebra/` nunca invocados) permanecem como estavam — fora do escopo desta sprint pontual.
+
+### 6.4 Objetivo da Sprint 8 (mantido)
+
+Implementar a área de Logaritmos/Exponenciais (`backend/app/math_engine/logarithms/`), agora com a colisão de nomes já coberta pelo denylist ampliado e com `functions/` já classificando corpos transcendentes sem erro — os dois riscos que a auditoria havia identificado como mais prováveis de se repetir na Sprint 8 já estão neutralizados.
 
 ---
 

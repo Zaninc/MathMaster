@@ -23,6 +23,7 @@ _LOCAL_DICT = {"tau": 2 * pi}
 
 _TRIG_FUNCTION_PATTERN = re.compile(r"\b(sin|cos|tan|asin|acos|atan)\s*\(")
 _EQUALS_PATTERN = re.compile(r"(?<![<>=!])=(?!=)")
+_INEQUALITY_PATTERN = re.compile(r"<=|>=|<|>")
 
 
 def is_trigonometry_domain_expression(expression: str) -> bool:
@@ -33,7 +34,16 @@ def _looks_like_equation(expression: str) -> bool:
     return bool(_EQUALS_PATTERN.search(expression))
 
 
+def _looks_like_inequality(expression: str) -> bool:
+    return bool(_INEQUALITY_PATTERN.search(expression))
+
+
 def solve_trigonometry_text(expression: str) -> str:
+    if _looks_like_inequality(expression):
+        raise ExpressionError(
+            "Inequações trigonométricas ainda não fazem parte do escopo desta versão."
+        )
+
     if _looks_like_equation(expression):
         return solve_trig_equation(expression)
 

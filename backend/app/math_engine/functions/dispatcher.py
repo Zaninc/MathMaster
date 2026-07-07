@@ -20,10 +20,25 @@ _TRANSFORMATIONS = standard_transformations + (implicit_multiplication_applicati
 _SPLIT_PATTERN = re.compile(r"[;\n]+")
 _DEFINITION_PATTERN = re.compile(r"^\s*([a-zA-Z_]\w*)\s*\(\s*([a-zA-Z_]\w*)\s*\)\s*=\s*(.+)$")
 
-# Nomes reservados de outras áreas do motor (ex.: trigonometria, Sprint 7) que
-# sintaticamente também casam com "nome(var) = expr" — "sin(x) = 1/2" não é uma
-# definição de função chamada "sin", é uma equação trigonométrica.
-_RESERVED_FUNCTION_NAMES = {"sin", "cos", "tan", "asin", "acos", "atan"}
+# Nomes reservados de outras áreas do motor que sintaticamente também casam
+# com "nome(var) = expr" — ex.: "sin(x) = 1/2" não é uma definição de função
+# chamada "sin", é uma equação trigonométrica; "log(x) = 5" não é uma função
+# chamada "log", é (por enquanto, até a Sprint 8) uma expressão que deve cair
+# no fallback de equations/algebra em vez de ser roubada por functions/.
+#
+# Esta é uma lista mantida manualmente porque a sintaxe "nome(var) = expr" é
+# estruturalmente ambígua entre "definição de função do usuário" e "chamada de
+# função matemática conhecida seguida de comparação/equação de outra área".
+# Qualquer área futura que precise reconhecer "nome(...)" sem uma palavra nova
+# aqui vai colidir com functions/ do mesmo jeito. Resolver isso de verdade
+# (gramática que distingue definição de uso, ou exigir uma palavra-chave como
+# "f(x) := expr") é o tipo de mudança estrutural reservada para o Parser
+# Inteligente (Sprint 11) — mudar a sintaxe de definição de função agora
+# quebraria a compatibilidade das Sprints 6-7.
+_RESERVED_FUNCTION_NAMES = {
+    "sin", "cos", "tan", "asin", "acos", "atan",
+    "log", "ln", "exp", "sqrt",
+}
 
 
 def _split_parts(expression: str) -> list[str]:

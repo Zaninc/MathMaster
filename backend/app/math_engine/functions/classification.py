@@ -1,6 +1,7 @@
 from sympy import Poly
 from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
+from sympy.polys.polyerrors import PolynomialError
 
 from ..errors import ExpressionError
 from .modular import is_modular_function
@@ -12,6 +13,7 @@ QUADRATICA = "quadratica"
 POLINOMIAL = "polinomial"
 RACIONAL = "racional"
 MODULAR = "modular"
+TRANSCENDENTE = "transcendente"
 
 _LABELS = {
     AFIM: "função afim",
@@ -20,6 +22,7 @@ _LABELS = {
     POLINOMIAL: "função polinomial",
     RACIONAL: "função racional",
     MODULAR: "função modular",
+    TRANSCENDENTE: "função transcendente",
 }
 
 
@@ -36,6 +39,11 @@ def classify_function(expr: Expr, symbol: Symbol) -> str:
 
     try:
         poly = Poly(expr, symbol)
+    except PolynomialError:
+        # Corpo não-polinomial legítimo (sin, log, exp, sqrt, ...) — não é um
+        # erro de entrada, é uma função transcendente. domain/roots/vertex já
+        # tratam esse kind pelos seus próprios ramos "else" existentes.
+        return TRANSCENDENTE
     except Exception as exc:
         raise ExpressionError(
             f"Não foi possível classificar a função: {expr}"
