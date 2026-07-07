@@ -20,13 +20,21 @@ _TRANSFORMATIONS = standard_transformations + (implicit_multiplication_applicati
 _SPLIT_PATTERN = re.compile(r"[;\n]+")
 _DEFINITION_PATTERN = re.compile(r"^\s*([a-zA-Z_]\w*)\s*\(\s*([a-zA-Z_]\w*)\s*\)\s*=\s*(.+)$")
 
+# Nomes reservados de outras áreas do motor (ex.: trigonometria, Sprint 7) que
+# sintaticamente também casam com "nome(var) = expr" — "sin(x) = 1/2" não é uma
+# definição de função chamada "sin", é uma equação trigonométrica.
+_RESERVED_FUNCTION_NAMES = {"sin", "cos", "tan", "asin", "acos", "atan"}
+
 
 def _split_parts(expression: str) -> list[str]:
     return [part.strip() for part in _SPLIT_PATTERN.split(expression) if part.strip()]
 
 
 def looks_like_function_definition(text: str) -> bool:
-    return bool(_DEFINITION_PATTERN.match(text))
+    match = _DEFINITION_PATTERN.match(text)
+    if not match:
+        return False
+    return match.group(1) not in _RESERVED_FUNCTION_NAMES
 
 
 def is_function_domain_expression(expression: str) -> bool:

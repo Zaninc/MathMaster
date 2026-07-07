@@ -8,6 +8,10 @@ from .algebra.dispatcher import solve_algebra
 from .equations.dispatcher import is_equation_domain_expression, solve_equation_text
 from .errors import ExpressionError
 from .functions.dispatcher import is_function_domain_expression, solve_function_text
+from .trigonometry.dispatcher import (
+    is_trigonometry_domain_expression,
+    solve_trigonometry_text,
+)
 
 _TRANSFORMATIONS = standard_transformations + (implicit_multiplication_application,)
 
@@ -19,6 +23,9 @@ def solve_expression(expression: str) -> str:
 
     if is_function_domain_expression(expression):
         return solve_function_text(expression)
+
+    if is_trigonometry_domain_expression(expression):
+        return solve_trigonometry_text(expression)
 
     if is_equation_domain_expression(expression):
         return solve_equation_text(expression)
