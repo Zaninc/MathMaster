@@ -173,4 +173,82 @@ Também identificada uma dependência de ordem não óbvia: `render_sqrt()` prec
 
 ---
 
+## 9. Sprint 8 — Módulo de Logaritmos e Exponenciais (2026-07-07)
+
+Novo pacote `backend/app/math_engine/logarithms/`, seguindo exatamente o padrão arquitetural das demais áreas (operações isoladas + `dispatcher.py` de área), inserido no dispatcher central entre `trigonometry/` e `equations/`. Sprint planejada em quatro rodadas de revisão com Theo antes da implementação (plano técnico completo aprovado com ajustes de escopo a cada rodada — ver `C:\Users\THÉO\.claude\plans\reactive-twirling-aho.md`).
+
+### 9.1 Decisão oficial e permanente do produto
+
+A convenção do MathMaster para logaritmos e exponenciais fica definida como **regra permanente**, prevalecendo sobre o comportamento padrão do SymPy (onde `log(x)` bare é natural):
+
+- `log(x)` = logaritmo decimal (base 10)
+- `ln(x)` = logaritmo natural (base e)
+- `exp(x)` = eˣ
+
+Imposta via um `local_dict` de `parse_expr` (`{"log": lambda x: sympy_log(x, 10), "ln": sympy_log}`), duplicado em `dispatcher.py` e `equations.py` seguindo o mesmo padrão de duplicação já usado entre `trigonometry/dispatcher.py` e `trigonometry/equations.py`. `exp` não precisa de override — já resolve nativamente para `sympy.exp` via o namespace padrão do `parse_expr`.
+
+### 9.2 Arquivos novos
+
+| Arquivo | Responsabilidade |
+|---|---|
+| `classification.py` | `AVALIACAO`/`IDENTIDADE`/`GERAL` + `classify_log_expression`/`label_for`, espelhando `trigonometry/classification.py` |
+| `evaluate.py` | Avaliação de expressões sem incógnita (`log(100)`, `ln(E)`, `exp(0)`) |
+| `simplify.py` | `simplify_log` — simplificação genérica com incógnita |
+| `identities.py` | Detecção de identidades (expressão com símbolo livre que colapsa para constante) |
+| `domain.py` | `validate_log_domain` — validação de domínio para argumento **literal** (ver §9.3) |
+| `equations.py` | `solve_log_equation` — equações logarítmicas e exponenciais (base `e` e base literal arbitrária, ver §9.4) |
+| `dispatcher.py` | `is_logarithm_domain_expression`/`solve_logarithm_text`, `_LOCAL_DICT`, roteamento |
+
+`__init__.py` permanece vazio (mesmo padrão de `trigonometry/__init__.py`). `math_engine/dispatcher.py`: um import + um branch novo, ordem `functions → trigonometry → logarithms → equations → algebra`. Nenhuma outra mudança em `main.py`, `functions/`, `trigonometry/`, `equations/`, `algebra/` ou no schema público.
+
+### 9.3 Descobertas técnicas que exigiram ajuste de rota durante a implementação
+
+Três comportamentos do SymPy só foram descobertos empiricamente durante a implementação (testados isoladamente antes de codar cada peça), e cada um exigiu um ajuste de design em relação ao plano inicial:
+
+1. **`log(0)`/`log(-5, 10)` não levantam exceção nativamente.** `log(0)` resolve para `zoo` na própria construção do nó; `log(-5, 10)` reescreve o argumento em termos complexos (`log(5) + I*pi`) já no parse, perdendo o sinal original antes de qualquer checagem sobre a árvore já construída conseguir enxergá-lo. **Ajuste:** `validate_log_domain` roda sobre o **texto original** da expressão (regex `log|ln` + literal numérico), antes do parse — mesma necessidade que já havia levado `trigonometry/inverse.py` a detectar `asin`/`acos` via regex no texto-fonte em vez de inspecionar a árvore avaliada.
+2. **`log(exp(x))` não colapsa para `x` com `simplify()`/`logcombine()` puros** (SymPy é conservador sobre a periodicidade complexa de `exp` sem assumir `x` real), mas **`exp(log(x))` já colapsa** (direção sem essa ambiguidade). **Ajuste:** `simplify_log` combina `simplify(powdenest(logcombine(expr, force=True), force=True))` — validado contra os 4 casos de identidade/simplificação antes de escrever o arquivo final.
+3. **`log(x, 10)` nunca sobrevive como nó "log de base 10" na árvore** — o SymPy expande imediatamente para `log(x)/log(10)` (dois nós de log natural). Consequência: qualquer `log(` que sobreviva no resultado final é sempre log natural do SymPy — nunca o nosso `log` de base 10. **Ajuste:** um passo final de renomeação (`\blog(?=\() → ln`) é aplicado ao resultado antes de devolver, tanto para expressões simples quanto para equações — propagando a convenção também para a saída, não só para a entrada (com o efeito colateral correto de `log(x)` simbólico exibir `ln(x)/ln(10)`, a forma pedagogicamente padrão).
+
+### 9.4 Equações exponenciais de base literal arbitrária
+
+Suporte confirmado para `a**x = b` (ex.: `2**x = 8`, `10**x = 1000`, `5**x = 125`), restrito a base **literal**, positiva e diferente de 1 — decisão de escopo tomada junto com Theo durante a revisão do plano. Detecção via `_EXP_LITERAL_BASE_PATTERN` (regex que só casa base numérica seguida de `**` e expoente iniciado por identificador/parêntese — `x**2` e `2**3` não casam, então potências comuns de `algebra/`/`equations/` continuam intocadas). Base simbólica (`a**x = b` com `a` incógnita) fica fora do escopo **estruturalmente**: o regex de detecção não casa base não-numérica, então esses casos nem chegam a ser roteados para `logarithms/` — continuam caindo no fallback de `equations/`/`algebra/` como antes, comportamento inalterado. Validação de base (`> 0` e `≠ 1`) roda em `equations.py` sobre os nós `Pow` da equação já parseada, antes de chamar `solve()`.
+
+### 9.5 Bug de integração encontrado e corrigido no smoke test (fora do escopo original do plano)
+
+Durante o smoke test via API real, `exp(x) = 8` retornou `"x = log(8)"` em vez de `"x = ln(8)"` — a renomeação de §9.3 item 3 funcionava na chamada direta a `solve_expression()`, mas era desfeita pelo `formatter/` da Sprint 7.2. Causa: o resultado de uma equação (`"x = ..."`, sem o wrapper `"Tipo: ...; ..."`) bate no formato de "assignment shape" do `format_result()`, que faz `sympify()` no valor para reordenar/relabelar raízes — e o SymPy só tem **um** nome de impressão (`"log"`) para logaritmo natural, então `sympify("ln(8)")` retorna e reimprime `"log(8)"`, apagando a renomeação. Resultados com o wrapper `"Tipo: ...; ..."` não sofrem esse problema (o formatter devolve esse formato intocado, sem re-parsear).
+
+Apresentadas três opções a Theo (patch mínimo no formatter / aceitar como limitação documentada / redesenhar a saída de `equations.py` para escapar do reformatador); **aprovado o patch mínimo**. Alteração feita, fora do escopo originalmente aprovado no plano ("nenhuma mudança em `formatter/`"), mas necessária para não violar a convenção oficial de §9.1 na saída real da API:
+
+- `backend/app/formatter/pipeline.py`: nova constante `_NATURAL_LOG_PATTERN` + helper `_rename_natural_log`, aplicado ao final de `_format_assignment_list` (todos os `return`) e `_format_pure_expression`. Nenhum outro arquivo do formatter tocado. Mudança segura e isolada: nenhuma outra área do `math_engine` produz `"log("` em sua saída hoje (confirmado por busca completa na árvore antes de implementar `logarithms/`), então a substituição é um no-op garantido para todo o resto do pipeline.
+
+Revalidado após o patch: `exp(x) = 8` → `"x = ln(8)"` correto; re-executada a amostra de smoke test completa (avaliação, domínio inválido, identidade, expressão simbólica geral, equação log, equação exponencial base `e`, equação exponencial base literal, regressão cross-domain trigonometria/funções/equações) — todos corretos, zero regressão.
+
+### 9.6 Testes executados
+
+29 casos via script descartável chamando `solve_expression()` diretamente (24 obrigatórios do plano + 5 adicionais de regressão cross-domain) — 100% aprovados após a correção de dois erros no próprio script de teste (não no código: um `UnicodeEncodeError` de console ao imprimir `ℝ`, e uma conta errada em `2*x+3=7`, que dá `x=2` e não `x=1`). 19 casos adicionais de regressão cross-domain (`algebra/`, `equations/` linear/quadrática/polinomial/sistema/inequação/valor absoluto, `functions/` classificação e avaliação — incluindo os dois corpos transcendentes que a Sprint 7.1 já havia corrigido preventivamente —, `trigonometry/` valor notável/equação/inversa/inequação rejeitada) confirmando zero regressão nas Sprints 1–7.1. Smoke test via API real (`uvicorn` + `curl`) em `/solve` e `/history`: schema intacto, só chamadas bem-sucedidas geram entrada (o erro 400 de domínio inválido não aparece no histórico), servidor encerrado limpo em ambas as rodadas (antes e depois do patch de §9.5).
+
+### 9.7 Limitações intencionais (documentadas, não são bugs)
+
+- `log(x, base)` com base customizada (dois argumentos) não suportado.
+- Equações exponenciais de base **simbólica** (`a**x = b` com `a` incógnita) fora do escopo — ver §9.4.
+- Domínio de `log`/`ln` só é validado para argumento numérico **literal**; símbolo livre não tem sinal verificado — `# TODO` em `domain.py` aponta isso para uma sprint futura dedicada a domínios (mesma limitação já aceita para `functions/` transcendentes desde a Sprint 7.1).
+- Sem inequações logarítmicas/exponenciais (mesmo padrão de exclusão já usado para inequações trigonométricas na 7.1).
+- Sem renderização Unicode especial para `log₁₀`/`ln` em `formatter/unicode_math.py` nesta sprint.
+
+### 9.8 Roadmap futuro — TODO de escopo (documentação apenas, não implementado nesta sprint)
+
+`logarithms/` é responsável **apenas** por operações matemáticas (avaliação, simplificação, identidades, equações, validação de domínio literal). Análise completa de função logarítmica/exponencial como tipos próprios de `functions/classification.py` — domínio, imagem, assíntotas, monotonicidade, interceptos e raízes, no formato:
+
+```
+f(x) = log(x)  →  Tipo: função logarítmica; Domínio: (0, +∞); Imagem: ℝ; Raiz: x=1;
+                   Intercepto em y: inexistente; Assíntota vertical: x=0; Monotonicidade: crescente
+
+f(x) = exp(x)  →  Tipo: função exponencial; Domínio: ℝ; Imagem: (0, +∞); Raiz: nenhuma;
+                   Intercepto em y: (0, 1); Assíntota horizontal: y=0; Monotonicidade: crescente
+```
+
+fica para uma sprint futura dedicada, mantendo a separação arquitetural já existente entre operações (`logarithms/`) e análise de funções (`functions/`).
+
+---
+
 *Fim do documento.*

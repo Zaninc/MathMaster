@@ -1,0 +1,90 @@
+import re
+
+from sympy import log as sympy_log
+from sympy.parsing.sympy_parser import (
+    implicit_multiplication_application,
+    parse_expr,
+    standard_transformations,
+)
+
+from ..errors import ExpressionError
+from .classification import AVALIACAO, classify_log_expression, label_for
+from .domain import validate_log_domain
+from .equations import solve_log_equation
+from .evaluate import evaluate_log_expression
+from .simplify import simplify_log
+
+_TRANSFORMATIONS = standard_transformations + (implicit_multiplication_application,)
+
+# Sobrescreve deliberadamente a convenção padrão do SymPy (onde log() bare é
+# natural) para impor a convenção OFICIAL e PERMANENTE do MathMaster:
+# log(x) = base 10, ln(x) = base e. Todo ponto de parse desta área deve usar
+# este dicionário para garantir consistência — nunca chamar parse_expr sem
+# ele.
+_LOCAL_DICT = {
+    "log": lambda x: sympy_log(x, 10),  # convenção MathMaster: log = base 10
+    "ln": sympy_log,  # ln = log natural (base e)
+}
+
+_LOG_FUNCTION_PATTERN = re.compile(r"\b(log|ln|exp)\s*\(")
+# Casa base numérica literal seguida de "**" e um expoente que começa com
+# identificador ou parênteses (2**x, 10**(x+1)) — não casa x**2 (base é
+# símbolo, não dígito) nem 2**3 (expoente puramente numérico), então
+# potências comuns de algebra/ continuam intocadas.
+_EXP_LITERAL_BASE_PATTERN = re.compile(r"(?<!\w)\d+(\.\d+)?\s*\*\*\s*[\(a-zA-Z]")
+_EQUALS_PATTERN = re.compile(r"(?<![<>=!])=(?!=)")
+_INEQUALITY_PATTERN = re.compile(r"<=|>=|<|>")
+
+# Qualquer "log(" que sobreviver no resultado final é sempre o log natural
+# nativo do SymPy — nosso log de base 10 nunca aparece como um nó "log(...)"
+# isolado no resultado (ele já foi expandido para log(x)/log(10) no parse) —
+# por isso é seguro renomear para "ln(" ao formatar a saída, propagando a
+# convenção do produto também para a resposta, não só para a entrada.
+_NATURAL_LOG_PATTERN = re.compile(r"\blog(?=\()")
+
+
+def _rename_natural_log(text: str) -> str:
+    return _NATURAL_LOG_PATTERN.sub("ln", text)
+
+
+def is_logarithm_domain_expression(expression: str) -> bool:
+    return bool(
+        _LOG_FUNCTION_PATTERN.search(expression)
+        or _EXP_LITERAL_BASE_PATTERN.search(expression)
+    )
+
+
+def _looks_like_equation(expression: str) -> bool:
+    return bool(_EQUALS_PATTERN.search(expression))
+
+
+def _looks_like_inequality(expression: str) -> bool:
+    return bool(_INEQUALITY_PATTERN.search(expression))
+
+
+def solve_logarithm_text(expression: str) -> str:
+    if _looks_like_inequality(expression):
+        raise ExpressionError(
+            "Inequações logarítmicas/exponenciais ainda não fazem parte do escopo desta versão."
+        )
+
+    validate_log_domain(expression)
+
+    if _looks_like_equation(expression):
+        return _rename_natural_log(solve_log_equation(expression))
+
+    try:
+        expr = parse_expr(expression, transformations=_TRANSFORMATIONS, local_dict=_LOCAL_DICT)
+    except Exception as exc:
+        raise ExpressionError(
+            f"Não foi possível interpretar a expressão: {expression}"
+        ) from exc
+
+    kind = classify_log_expression(expr)
+    if kind == AVALIACAO:
+        resultado = evaluate_log_expression(expr)
+    else:
+        resultado = str(simplify_log(expr))
+
+    resultado = _rename_natural_log(resultado)
+    return f"Tipo: {label_for(kind)}; Resultado: {resultado}"

@@ -16,6 +16,7 @@ math_engine.
 """
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from .classify import (
@@ -30,6 +31,20 @@ from .render_sets import render_finiteset_values, render_interval
 from .safe_parse import guess_symbol, safe_sympify, split_top_level
 
 Mode = Literal["exact", "decimal"]
+
+# SymPy só tem um único nome de impressão ("log") para logaritmo natural —
+# um "ln(...)" vindo de math_engine/logarithms/ (Sprint 8) que passe por
+# safe_sympify()/str() aqui reimprime como "log(...)", quebrando em silêncio
+# a convenção oficial do MathMaster (log = base 10, ln = base e) para
+# soluções de equação que não colapsam a um número exato (ex.: exp(x) = 8 ->
+# x = log(8), na verdade log natural). Nenhuma outra área do math_engine
+# produz "log(" hoje, então esta substituição é um no-op seguro para todo o
+# resto do pipeline.
+_NATURAL_LOG_PATTERN = re.compile(r"\blog(?=\()")
+
+
+def _rename_natural_log(text: str) -> str:
+    return _NATURAL_LOG_PATTERN.sub("ln", text)
 
 
 def _apply_mode(expr, mode: Mode):
@@ -77,21 +92,25 @@ def _format_assignment_list(segments: list[str], mode: Mode) -> str | None:
         pairs.sort(key=lambda pair: sort_key(pair[1]))
         rendered = [str(_apply_mode(value, mode)) for _, value in pairs]
         if len(rendered) == 1:
-            return f"{symbol} = {rendered[0]}"
-        return ", ".join(
-            f"{symbol}{subscript(i + 1)} = {value}" for i, value in enumerate(rendered)
+            return _rename_natural_log(f"{symbol} = {rendered[0]}")
+        return _rename_natural_log(
+            ", ".join(
+                f"{symbol}{subscript(i + 1)} = {value}" for i, value in enumerate(rendered)
+            )
         )
 
     # Different symbols per segment => a system's solution tuple, not
     # multiple roots of one unknown: preserve segment order, don't index.
-    return ", ".join(f"{symbol} = {_apply_mode(value, mode)}" for symbol, value in pairs)
+    return _rename_natural_log(
+        ", ".join(f"{symbol} = {_apply_mode(value, mode)}" for symbol, value in pairs)
+    )
 
 
 def _format_pure_expression(raw: str, mode: Mode) -> str | None:
     parsed = safe_sympify(raw)
     if parsed is None:
         return None
-    return str(_apply_mode(parsed, mode))
+    return _rename_natural_log(str(_apply_mode(parsed, mode)))
 
 
 def format_result(expression: str, raw: str, mode: Mode = "exact") -> str:
