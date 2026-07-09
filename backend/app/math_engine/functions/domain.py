@@ -1,13 +1,16 @@
 from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
-from .classification import RACIONAL
+from .classification import LOGARITMICA, RACIONAL
 from .rational import denominator_roots
 
 _REAIS = "ℝ"
 
 
 def compute_domain(expr: Expr, symbol: Symbol, kind: str) -> str:
+    if kind == LOGARITMICA:
+        return "(0, +∞)"
+
     if kind != RACIONAL:
         return _REAIS
 

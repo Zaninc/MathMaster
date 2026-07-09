@@ -1,6 +1,5 @@
 import re
 
-from sympy import log as sympy_log
 from sympy.parsing.sympy_parser import (
     implicit_multiplication_application,
     parse_expr,
@@ -8,6 +7,7 @@ from sympy.parsing.sympy_parser import (
 )
 
 from ..errors import ExpressionError
+from ..log_convention import LOCAL_DICT as _LOCAL_DICT
 from .classification import AVALIACAO, classify_log_expression, label_for
 from .domain import validate_log_domain
 from .equations import solve_log_equation
@@ -16,15 +16,11 @@ from .simplify import simplify_log
 
 _TRANSFORMATIONS = standard_transformations + (implicit_multiplication_application,)
 
-# Sobrescreve deliberadamente a convenção padrão do SymPy (onde log() bare é
-# natural) para impor a convenção OFICIAL e PERMANENTE do MathMaster:
-# log(x) = base 10, ln(x) = base e. Todo ponto de parse desta área deve usar
-# este dicionário para garantir consistência — nunca chamar parse_expr sem
-# ele.
-_LOCAL_DICT = {
-    "log": lambda x: sympy_log(x, 10),  # convenção MathMaster: log = base 10
-    "ln": sympy_log,  # ln = log natural (base e)
-}
+# A convenção OFICIAL e PERMANENTE do MathMaster (log(x) = base 10, ln(x) =
+# base e) agora vive em `math_engine/log_convention.py`, compartilhada com
+# `functions/` (Sprint 9) — ver docstring de lá para o motivo de não
+# duplicar. Sobrescreve deliberadamente o padrão do SymPy (onde log() bare é
+# natural); todo ponto de parse desta área deve usar `_LOCAL_DICT`.
 
 _LOG_FUNCTION_PATTERN = re.compile(r"\b(log|ln|exp)\s*\(")
 # Casa base numérica literal seguida de "**" e um expoente que começa com

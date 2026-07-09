@@ -8,10 +8,12 @@ from sympy.parsing.sympy_parser import (
 )
 
 from ..errors import ExpressionError
-from .classification import QUADRATICA, classify_function, label_for
+from ..log_convention import LOCAL_DICT as _LOG_LOCAL_DICT
+from .classification import EXPONENCIAL, LOGARITMICA, QUADRATICA, classify_function, label_for
 from .domain import compute_domain
 from .evaluate import evaluate_function
 from .intercepts import y_intercept
+from .logexp import asymptote_field_for, detect_logexp_kind, image_for, monotonicity_for
 from .roots import compute_roots
 from .vertex import compute_vertex
 
@@ -75,8 +77,20 @@ def solve_function_text(expression: str) -> str:
     nome, variavel, lado_direito = definicao.groups()
     symbol = Symbol(variavel)
 
+    # Detecção roda sobre o texto bruto ANTES do parse (ver logexp.py) porque
+    # só as 4 formas canônicas (log(x)/ln(x)/exp(x)/a**x com argumento igual
+    # à variável isolada) precisam da convenção MathMaster log=base10/
+    # ln=natural — qualquer forma composta continua parseada sem local_dict,
+    # exatamente como antes da Sprint 9 (comportamento inalterado).
+    logexp_match = detect_logexp_kind(lado_direito, variavel)
+
     try:
-        expr = parse_expr(lado_direito, transformations=_TRANSFORMATIONS)
+        if logexp_match is not None:
+            expr = parse_expr(
+                lado_direito, transformations=_TRANSFORMATIONS, local_dict=_LOG_LOCAL_DICT
+            )
+        else:
+            expr = parse_expr(lado_direito, transformations=_TRANSFORMATIONS)
     except Exception as exc:
         raise ExpressionError(
             f"Não foi possível interpretar a função: {lado_direito}"
@@ -95,12 +109,19 @@ def solve_function_text(expression: str) -> str:
             resultados.append(f"{nome}({valor}) = {resultado}")
         return ", ".join(resultados)
 
-    kind = classify_function(expr, symbol)
+    if logexp_match is not None:
+        kind, base = logexp_match
+    else:
+        kind = classify_function(expr, symbol)
+        base = None
 
     campos = [
         f"Tipo: {label_for(kind)}",
         f"Domínio: {compute_domain(expr, symbol, kind)}",
     ]
+
+    if kind in (LOGARITMICA, EXPONENCIAL):
+        campos.append(f"Imagem: {image_for(kind)}")
 
     raizes = compute_roots(expr, symbol, kind)
     if raizes:
@@ -109,9 +130,13 @@ def solve_function_text(expression: str) -> str:
     else:
         campos.append("Raízes: nenhuma")
 
-    campos.append(f"Intercepto em y: {y_intercept(expr, symbol)}")
+    campos.append(f"Intercepto em y: {y_intercept(expr, symbol, kind)}")
 
     if kind == QUADRATICA:
         campos.append(f"Vértice: {compute_vertex(expr, symbol)}")
+
+    if kind in (LOGARITMICA, EXPONENCIAL):
+        campos.append(asymptote_field_for(kind))
+        campos.append(f"Monotonicidade: {monotonicity_for(kind, base)}")
 
     return "; ".join(campos)

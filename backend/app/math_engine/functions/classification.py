@@ -14,6 +14,8 @@ POLINOMIAL = "polinomial"
 RACIONAL = "racional"
 MODULAR = "modular"
 TRANSCENDENTE = "transcendente"
+LOGARITMICA = "logaritmica"
+EXPONENCIAL = "exponencial"
 
 _LABELS = {
     AFIM: "função afim",
@@ -23,6 +25,8 @@ _LABELS = {
     RACIONAL: "função racional",
     MODULAR: "função modular",
     TRANSCENDENTE: "função transcendente",
+    LOGARITMICA: "função logarítmica",
+    EXPONENCIAL: "função exponencial",
 }
 
 
