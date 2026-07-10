@@ -1,11 +1,17 @@
-from fastapi import FastAPI, HTTPException
+import logging
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.formatter import format_result, render_math
 from app.history import add_entry, get_history
 from app.math_engine import ExpressionError, solve_expression
 from app.schemas import HistoryItem, SolveRequest, SolveResponse
+
+logging.basicConfig(level=settings.log_level)
+logger = logging.getLogger("mathmaster")
 
 app = FastAPI(title=settings.app_name)
 
@@ -18,6 +24,19 @@ app.add_middleware(
 )
 
 
+# Hardening II — captura qualquer exceção que NÃO seja um HTTPException já
+# tratado (ex.: um bug real de math_engine/formatter, não um ExpressionError
+# esperado): loga o traceback completo no servidor, mas nunca expõe detalhes
+# internos ao cliente. Starlette despacha para o handler mais específico
+# registrado, então isso não intercepta HTTPException (400) nem
+# RequestValidationError (422) — ambos continuam com o comportamento padrão
+# do FastAPI, verificado empiricamente em tests/test_api.py.
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Erro não tratado em %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Erro interno do servidor."})
+
+
 @app.get("/health")
 def health_check() -> dict[str, str]:
     return {"status": "ok"}
@@ -28,9 +47,11 @@ def solve(request: SolveRequest) -> SolveResponse:
     try:
         raw_result = solve_expression(request.expression)
     except ExpressionError as exc:
+        logger.warning("ExpressionError para %r: %s", request.expression, exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     result = render_math(format_result(request.expression, raw_result))
     add_entry(request.expression, result)
+    logger.info("Resolvido: %r -> %r", request.expression, result)
     return SolveResponse(expression=request.expression, result=result)
 
 
