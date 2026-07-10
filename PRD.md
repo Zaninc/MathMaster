@@ -321,7 +321,7 @@ Usuário realiza uma prova simulada de vestibular/concurso com correção detalh
 | RF-01 | O sistema deve permitir entrada de problemas matemáticos via texto digitado com editor de fórmulas. |
 | RF-02 | O sistema deve permitir upload de imagem (foto/scan) e realizar reconhecimento óptico de expressões matemáticas. |
 | RF-03 | O sistema deve exibir ao usuário a interpretação do problema antes de resolvê-lo, permitindo correção manual. |
-| RF-04 | O sistema deve resolver problemas dos domínios: aritmética, álgebra, funções, trigonometria, cálculo diferencial e integral, estatística básica e álgebra linear introdutória. |
+| RF-04 | O sistema deve resolver problemas dos domínios: aritmética, álgebra, funções, trigonometria, logaritmos e exponenciais, geometria analítica, cálculo diferencial e integral, estatística básica e álgebra linear introdutória. |
 | RF-05 | O sistema deve gerar explicação passo a passo para toda resolução, com níveis de detalhamento configuráveis via **Explain Like...**. |
 | RF-06 | O sistema deve permitir que o usuário informe sua própria resolução e receber diagnóstico de correção/erro. |
 | RF-07 | O sistema deve classificar o tipo de erro identificado (conceitual, operacional, de interpretação) quando aplicável. |
@@ -374,7 +374,7 @@ Validar a hipótese central do produto: **usuários preferem e permanecem mais e
 ### 13.2 Escopo incluído no MVP
 
 - Entrada de problemas via texto digitado e via foto (OCR).
-- Motor de resolução para: aritmética, álgebra (equações e inequações até sistemas simples), funções, trigonometria básica, cálculo diferencial e integral introdutório.
+- Motor de resolução para: aritmética, álgebra (equações e inequações até sistemas simples), funções, trigonometria básica, logaritmos e exponenciais, geometria analítica (retas; cônicas em iteração futura), cálculo diferencial e integral introdutório.
 - Explicação passo a passo com **Explain Like...** em versão reduzida: dois registros disponíveis no lançamento (padrão e iniciante), expansão para os quatro registros completos na v1.1.
 - Verificação da tentativa do usuário com identificação do passo do erro.
 - **Learning Graph** em versão inicial: cobertura dos tópicos do MVP, com nível de domínio por conceito e visualização básica de mapa de progresso.

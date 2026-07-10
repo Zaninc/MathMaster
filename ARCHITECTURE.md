@@ -286,7 +286,7 @@ O Math Engine é a **única fonte de verdade matemática** do MathMaster (Seçã
 
 ### 8.3 Estratégia de multi-domínio
 
-O Math Engine é organizado internamente por **módulos de domínio matemático independentes** (aritmética, álgebra, funções, trigonometria, cálculo, estatística, álgebra linear), cada um com seu próprio conjunto de estratégias de resolução, permitindo adicionar um novo domínio (ex.: equações diferenciais no roadmap futuro) sem tocar nos módulos existentes (RNF-10).
+O Math Engine é organizado internamente por **módulos de domínio matemático independentes** (aritmética, álgebra, funções, trigonometria, logaritmos/exponenciais, geometria analítica, cálculo, estatística, álgebra linear), cada um com seu próprio conjunto de estratégias de resolução, permitindo adicionar um novo domínio (ex.: equações diferenciais no roadmap futuro) sem tocar nos módulos existentes (RNF-10).
 
 ### 8.4 Verificação cruzada (input para o Confidence Engine)
 

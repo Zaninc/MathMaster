@@ -35,6 +35,14 @@ _OO_PATTERN = re.compile(r"\boo\b")
 
 _IMAGINARY_UNIT_PATTERN = re.compile(r"\bI\b")
 
+# Sprint 10 — analytic_geometry/classification.py só produz os rótulos
+# semânticos "Paralelas"/"Perpendiculares" (ver decisão registrada no
+# plano da Sprint 10: lógica interna nunca usa ∥/⊥ diretamente); os
+# símbolos são acrescentados aqui, na camada de apresentação, como
+# qualquer outra substituição cosmética deste módulo.
+_PARALELAS_PATTERN = re.compile(r"\bParalelas\b")
+_PERPENDICULARES_PATTERN = re.compile(r"\bPerpendiculares\b")
+
 
 def _to_superscript(digits: str) -> str:
     if digits.startswith("-"):
@@ -94,3 +102,14 @@ def replace_imaginary_unit(text: str) -> str:
     boundaries keep "Interval" untouched. "2*I" becomes "2*i"; collapsing
     to "2i" is deliberately out of scope for this sprint."""
     return _IMAGINARY_UNIT_PATTERN.sub("i", text)
+
+
+def replace_geometry_relations(text: str) -> str:
+    """Paralelas -> Paralelas ∥, Perpendiculares -> Perpendiculares ⊥
+    (Sprint 10). Word-boundary literal substitution, same pattern as the
+    rest of this module — analytic_geometry/'s internal logic never uses
+    these symbols, only the plain-Portuguese labels this function looks
+    for."""
+    text = _PARALELAS_PATTERN.sub("Paralelas ∥", text)
+    text = _PERPENDICULARES_PATTERN.sub("Perpendiculares ⊥", text)
+    return text

@@ -16,6 +16,7 @@ from .unicode_math import (
     render_sqrt,
     replace_comparisons,
     replace_constants,
+    replace_geometry_relations,
     replace_imaginary_unit,
     superscript_exponents,
 )
@@ -34,6 +35,7 @@ def render_math(text: str) -> str:
         rendered = replace_constants(rendered)
         rendered = replace_comparisons(rendered)
         rendered = replace_imaginary_unit(rendered)
+        rendered = replace_geometry_relations(rendered)
         return rendered
     except Exception:
         return text

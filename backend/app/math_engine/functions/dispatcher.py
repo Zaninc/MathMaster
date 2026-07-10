@@ -40,6 +40,12 @@ _DEFINITION_PATTERN = re.compile(r"^\s*([a-zA-Z_]\w*)\s*\(\s*([a-zA-Z_]\w*)\s*\)
 _RESERVED_FUNCTION_NAMES = {
     "sin", "cos", "tan", "asin", "acos", "atan",
     "log", "ln", "exp", "sqrt",
+    # Sprint 10 (Geometria Analítica I): mesma ambiguidade estrutural,
+    # agora entre "definição de função" e uma chamada de operação de
+    # analytic_geometry/ — "reta(x) = 2*x" não é uma função chamada
+    # "reta", é sintaxe reservada de geometria.
+    "distancia", "ponto_medio", "coeficiente_angular",
+    "reta", "reta_m", "relacao_retas",
 }
 
 
