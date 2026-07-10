@@ -33,3 +33,13 @@ uvicorn app.main:app --reload
 ```
 
 Acesse http://localhost:8000/health e http://localhost:8000/docs.
+
+## Rodando os testes do backend
+
+```
+cd backend
+pip install -r requirements-dev.txt
+pytest
+```
+
+A suíte (`backend/tests/`) cobre o `math_engine/` por domínio, o `formatter/` por shape de saída, e os contratos HTTP (`/solve`, `/history`, `/health`) via `TestClient`. Roda automaticamente em cada push/PR para `main` via GitHub Actions (`.github/workflows/backend-tests.yml`).
