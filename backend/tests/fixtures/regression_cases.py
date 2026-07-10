@@ -1,35 +1,16 @@
-"""Script de regressão persistido, sem pytest (decisão explícita: pytest
-fica reservado para o Hardening II/Sprint 12 do roadmap).
+"""Fonte única de verdade para a suíte de compatibilidade (Sprints 4-11 +
+hotfix 11.1). Consumida tanto pela suíte pytest (`tests/test_regression_compat.py`)
+quanto — até a Etapa 1 do Hardening II confirmar paridade — pelo script
+descartável `scripts/check_regression.py`, para as duas fontes nunca
+divergirem entre si.
 
-Cobre, com asserções de saída EXATA (não só "não lança exceção"): os casos
-que motivaram o hotfix da Sprint 11.1 (formatação de soluções periódicas
-trigonométricas) e a suíte de compatibilidade cross-domain das Sprints
-7-11, para detectar regressões futuras nesses mesmos pontos.
-
-Uso: `.venv/Scripts/python.exe scripts/check_regression.py` a partir de
-`backend/` (mesmo ambiente/convenção de todo smoke test manual do projeto).
-Sai com código 0 se tudo passar, 1 caso contrário — utilizável como base
-direta para os testes reais do Hardening II, mas não é pytest.
+Cada tupla é (expressão, saída EXATA esperada após
+`format_result()`+`render_math()`). `ERROR_CASES` são entradas que devem
+levantar `ExpressionError` (mensagem não comparada, só o tipo).
 """
 from __future__ import annotations
 
-import sys
-
-sys.path.insert(0, ".")
-
-from app.formatter.pipeline import format_result
-from app.formatter.renderer import render_math
-from app.math_engine.dispatcher import solve_expression
-from app.math_engine.errors import ExpressionError
-
-
-def _solve(expression: str) -> str:
-    raw = solve_expression(expression)
-    return render_math(format_result(expression, raw))
-
-
-# (expressão, saída EXATA esperada após format_result()+render_math())
-EXACT_CASES = [
+EXACT_CASES: list[tuple[str, str]] = [
     # --- Sprint 11.1 hotfix: formatação de soluções periódicas trigonométricas ---
     ("sin(x)=1/2", "x = 2*π*k + π/6 ou x = 2*π*k + 5*π/6, k ∈ ℤ"),
     ("cos(x)=0", "x = 2*π*k + π/2 ou x = 2*π*k + 3*π/2, k ∈ ℤ"),
@@ -108,38 +89,9 @@ EXACT_CASES = [
     ),
 ]
 
-# Casos que devem levantar ExpressionError (mensagem não comparada — só o tipo)
-ERROR_CASES = [
+ERROR_CASES: list[str] = [
     "circunferencia((0,0),0)",
     "parabola((0,0),(0,0))",
     "elipse((0,0),3,5)",
     "hiperbole((0,0),-1,3)",
 ]
-
-
-def main() -> int:
-    failures = 0
-
-    for expression, expected in EXACT_CASES:
-        actual = _solve(expression)
-        if actual != expected:
-            failures += 1
-            print(f"FALHOU | {expression!r}\n  esperado: {expected!r}\n  obtido  : {actual!r}")
-        else:
-            print(f"ok     | {expression!r} -> {actual!r}")
-
-    for expression in ERROR_CASES:
-        try:
-            actual = _solve(expression)
-            failures += 1
-            print(f"FALHOU | {expression!r} deveria levantar ExpressionError, retornou {actual!r}")
-        except ExpressionError as exc:
-            print(f"ok     | {expression!r} -> ExpressionError: {exc}")
-
-    total = len(EXACT_CASES) + len(ERROR_CASES)
-    print(f"\n{total - failures}/{total} casos passaram.")
-    return 1 if failures else 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
