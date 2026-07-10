@@ -24,6 +24,16 @@ PERPENDICULARES = "perpendiculares"
 COINCIDENTES = "coincidentes"
 CONCORRENTES = "concorrentes"
 
+# Sprint 11 (Geometria Analítica II) — kinds das quatro cônicas, mesmo
+# padrão (constante + label_for()) usado acima para retas. HORIZONTAL/
+# VERTICAL já existentes são reaproveitados por parabola.py para
+# descrever o eixo (mesmo valor de string, significado análogo: orientação
+# em relação aos eixos coordenados), sem redefinição.
+CIRCUNFERENCIA = "circunferencia"
+PARABOLA = "parabola"
+ELIPSE = "elipse"
+HIPERBOLE = "hiperbole"
+
 _LABELS = {
     HORIZONTAL: "reta horizontal",
     VERTICAL: "reta vertical",
@@ -33,6 +43,10 @@ _LABELS = {
     PERPENDICULARES: "Perpendiculares",
     COINCIDENTES: "Coincidentes",
     CONCORRENTES: "Concorrentes (não perpendiculares)",
+    CIRCUNFERENCIA: "circunferência",
+    PARABOLA: "parábola",
+    ELIPSE: "elipse",
+    HIPERBOLE: "hipérbole",
 }
 
 

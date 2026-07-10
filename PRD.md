@@ -374,7 +374,7 @@ Validar a hipótese central do produto: **usuários preferem e permanecem mais e
 ### 13.2 Escopo incluído no MVP
 
 - Entrada de problemas via texto digitado e via foto (OCR).
-- Motor de resolução para: aritmética, álgebra (equações e inequações até sistemas simples), funções, trigonometria básica, logaritmos e exponenciais, geometria analítica (retas; cônicas em iteração futura), cálculo diferencial e integral introdutório.
+- Motor de resolução para: aritmética, álgebra (equações e inequações até sistemas simples), funções, trigonometria básica, logaritmos e exponenciais, geometria analítica (retas e as quatro cônicas — circunferência, parábola, elipse, hipérbole), cálculo diferencial e integral introdutório.
 - Explicação passo a passo com **Explain Like...** em versão reduzida: dois registros disponíveis no lançamento (padrão e iniciante), expansão para os quatro registros completos na v1.1.
 - Verificação da tentativa do usuário com identificação do passo do erro.
 - **Learning Graph** em versão inicial: cobertura dos tópicos do MVP, com nível de domínio por conceito e visualização básica de mapa de progresso.

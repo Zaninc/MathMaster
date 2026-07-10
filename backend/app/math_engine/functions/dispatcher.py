@@ -46,6 +46,10 @@ _RESERVED_FUNCTION_NAMES = {
     # "reta", é sintaxe reservada de geometria.
     "distancia", "ponto_medio", "coeficiente_angular",
     "reta", "reta_m", "relacao_retas",
+    # Sprint 11 (Geometria Analítica II): mesma ambiguidade estrutural,
+    # agora para as quatro cônicas — "circunferencia(x) = 2*x" não é uma
+    # função chamada "circunferencia", é sintaxe reservada de geometria.
+    "circunferencia", "parabola", "elipse", "hiperbole",
 }
 
 
