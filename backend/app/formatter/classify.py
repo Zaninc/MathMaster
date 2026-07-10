@@ -16,9 +16,24 @@ _FINITESET_PATTERN = re.compile(r"^\{.*\}$")
 _ASSIGNMENT_SEGMENT_PATTERN = re.compile(r"^[a-zA-Z_]\w*\s*=\s*.+$")
 _PURE_EXPRESSION_PATTERN = re.compile(r"^[0-9A-Za-z_+\-*/().,\s^%!]*$")
 
+# Sprint 11.1 hotfix — trigonometry/equations.py returns SymPy's raw
+# solveset() repr for periodic solutions (e.g. sin(x)=1/2), which prints as
+# either "ImageSet(Lambda(_n, ...), Integers)" (one branch, e.g. tan(x)=1)
+# or "Union(ImageSet(Lambda(_n, ...), Integers), ImageSet(...))" (multiple
+# branches, e.g. sin/cos). This positively-identified prefix must be
+# checked BEFORE is_interval_shape (whose "Union(" prefix would otherwise
+# also match the multi-branch case) and before is_pure_expression_shape
+# (which would otherwise swallow the single-branch case, since it contains
+# none of "=":";").
+_PERIODIC_SOLUTION_PATTERN = re.compile(r"^(Union\(ImageSet\(Lambda\(|ImageSet\(Lambda\()")
+
 
 def is_interval_shape(text: str) -> bool:
     return bool(_INTERVAL_PATTERN.match(text.strip()))
+
+
+def is_periodic_solution_shape(text: str) -> bool:
+    return bool(_PERIODIC_SOLUTION_PATTERN.match(text.strip()))
 
 
 def is_finiteset_shape(text: str) -> bool:

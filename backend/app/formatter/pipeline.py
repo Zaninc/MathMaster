@@ -23,11 +23,12 @@ from .classify import (
     is_assignment_shape,
     is_finiteset_shape,
     is_interval_shape,
+    is_periodic_solution_shape,
     is_pure_expression_shape,
 )
 from .expr_clean import clean_expr, evalf_expr
 from .render_roots import parse_assignment, sort_key, subscript
-from .render_sets import render_finiteset_values, render_interval
+from .render_sets import render_finiteset_values, render_interval, render_periodic_solution
 from .safe_parse import guess_symbol, safe_sympify, split_top_level
 
 Mode = Literal["exact", "decimal"]
@@ -57,6 +58,11 @@ def _format_interval(raw: str) -> str | None:
     if parsed is None:
         return None
     return render_interval(parsed)
+
+
+def _format_periodic_solution(raw: str, expression: str) -> str | None:
+    symbol = guess_symbol(expression)
+    return render_periodic_solution(raw, symbol)
 
 
 def _format_finiteset(raw: str, expression: str) -> str | None:
@@ -127,6 +133,10 @@ def format_result(expression: str, raw: str, mode: Mode = "exact") -> str:
 
     try:
         stripped = raw.strip()
+
+        if is_periodic_solution_shape(stripped):
+            rendered = _format_periodic_solution(stripped, expression)
+            return rendered if rendered is not None else raw
 
         if is_interval_shape(stripped):
             rendered = _format_interval(stripped)

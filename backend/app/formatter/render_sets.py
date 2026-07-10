@@ -10,12 +10,14 @@ string untouched rather than risk misrepresenting it.
 """
 from __future__ import annotations
 
-from sympy import EmptySet, Interval, S, Union
+from sympy import EmptySet, ImageSet, Interval, S, Symbol, Union
 
 from .expr_clean import clean_expr
 from .render_roots import sort_key, subscript
+from .safe_parse import safe_sympify
 
 _INFINITY = "∞"
+_INTEGER_K = Symbol("k")
 
 
 def _format_bound(value) -> str:
@@ -43,6 +45,49 @@ def render_interval(obj) -> str | None:
             return None
         return " ∪ ".join(rendered)
     return None
+
+
+def render_periodic_solution(raw: str, symbol: str | None) -> str | None:
+    """Sprint 11.1 hotfix — renders the periodic ImageSet/Union solution
+    trigonometry/equations.py returns for equations like sin(x)=1/2 (see
+    classify.is_periodic_solution_shape). `raw` has already been positively
+    identified as this shape; `safe_sympify` re-parses the whole string
+    (safe here specifically because the shape check already anchored it to
+    "ImageSet(Lambda(" / "Union(ImageSet(Lambda(", not because sympify() is
+    ever trusted on unclassified text). Returns None — same conservative
+    fallback-to-raw contract as render_interval() — if the reparsed object
+    doesn't actually have the expected structure (every branch a single-
+    variable ImageSet over the integers), so the caller never risks
+    misrepresenting an unexpected shape.
+    """
+    parsed = safe_sympify(raw)
+    if parsed is None:
+        return None
+
+    branches = parsed.args if isinstance(parsed, Union) else (parsed,)
+    if not branches or not all(
+        isinstance(branch, ImageSet) and branch.base_set == S.Integers for branch in branches
+    ):
+        return None
+
+    # NOTE: deliberately NOT run through clean_expr() here (unlike every
+    # other shape in this module) — solveset() already returns each branch
+    # in the canonical "k*pi + constant" additive form, and clean_expr's
+    # factor() step turns exactly one of two branches with an odd numerator
+    # (e.g. "2*pi*k + 3*pi/2" from cos(x)=0) into "pi*(4*k + 3)/2" purely
+    # because that's one character shorter — leaving the two branches of the
+    # same periodic family in visibly inconsistent styles. The unsimplified
+    # form is both already minimal and uniform across branches.
+    var = symbol or "x"
+    equations = []
+    for branch in branches:
+        variables = branch.lamda.variables
+        if len(variables) != 1:
+            return None
+        expr = branch.lamda.expr.xreplace({variables[0]: _INTEGER_K})
+        equations.append(f"{var} = {expr}")
+
+    return " ou ".join(equations) + ", k ∈ ℤ"
 
 
 def render_finiteset_values(values: list, symbol: str | None) -> str:
