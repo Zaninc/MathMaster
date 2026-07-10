@@ -1,0 +1,83 @@
+"""Testes de integração HTTP (Hardening II, Etapa 2) — cobrem os contratos
+de `/health`, `/solve` e `/history` via `TestClient`, camada que a suíte de
+compatibilidade (`test_regression_compat.py`) nunca exercita (ela chama
+`solve_expression()`/`format_result()`/`render_math()` direto, pulando
+`main.py`/FastAPI por completo).
+"""
+from __future__ import annotations
+
+from fastapi.testclient import TestClient
+
+
+def test_health_check(client: TestClient) -> None:
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_solve_success(client: TestClient) -> None:
+    response = client.post("/solve", json={"expression": "2+2"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {"expression": "2+2", "result": "4"}
+
+
+def test_solve_expression_error_returns_400(client: TestClient) -> None:
+    response = client.post("/solve", json={"expression": "circunferencia((0,0),0)"})
+    assert response.status_code == 400
+    body = response.json()
+    assert "detail" in body
+    assert "raio" in body["detail"].lower()
+
+
+def test_solve_empty_expression_returns_422(client: TestClient) -> None:
+    response = client.post("/solve", json={"expression": ""})
+    assert response.status_code == 422
+
+
+def test_solve_missing_field_returns_422(client: TestClient) -> None:
+    response = client.post("/solve", json={})
+    assert response.status_code == 422
+
+
+def test_history_empty_by_default(client: TestClient) -> None:
+    response = client.get("/history")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_history_records_successful_solves_most_recent_first(client: TestClient) -> None:
+    client.post("/solve", json={"expression": "2+2"})
+    client.post("/solve", json={"expression": "3+3"})
+
+    response = client.get("/history")
+    assert response.status_code == 200
+    body = response.json()
+
+    assert len(body) == 2
+    assert body[0]["expression"] == "3+3"
+    assert body[0]["result"] == "6"
+    assert body[1]["expression"] == "2+2"
+    assert body[1]["result"] == "4"
+    assert "timestamp" in body[0] and "timestamp" in body[1]
+
+
+def test_history_does_not_record_expression_errors(client: TestClient) -> None:
+    client.post("/solve", json={"expression": "2+2"})
+    client.post("/solve", json={"expression": "circunferencia((0,0),0)"})
+
+    response = client.get("/history")
+    body = response.json()
+
+    assert len(body) == 1
+    assert body[0]["expression"] == "2+2"
+
+
+def test_cors_allows_configured_origin(client: TestClient) -> None:
+    response = client.get("/health", headers={"Origin": "http://localhost:3000"})
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:3000"
+
+
+def test_cors_rejects_unlisted_origin(client: TestClient) -> None:
+    response = client.get("/health", headers={"Origin": "http://evil.example.com"})
+    assert "access-control-allow-origin" not in response.headers
