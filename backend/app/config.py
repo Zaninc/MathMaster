@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     app_name: str = "MathMaster API (V0)"
     cors_origins: list[str] = ["http://localhost:3000"]
     log_level: str = "INFO"
+    history_max_entries: int = 500
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="MATHMASTER_")
 

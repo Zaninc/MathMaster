@@ -2,7 +2,12 @@ from pydantic import BaseModel, Field
 
 
 class SolveRequest(BaseModel):
-    expression: str = Field(..., min_length=1, description="Expressão matemática a ser resolvida.")
+    expression: str = Field(
+        ...,
+        min_length=1,
+        max_length=1000,
+        description="Expressão matemática a ser resolvida.",
+    )
 
 
 class SolveResponse(BaseModel):
