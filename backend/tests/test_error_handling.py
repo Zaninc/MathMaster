@@ -19,7 +19,7 @@ def test_unhandled_exception_returns_generic_500(
     def _boom(expression: str) -> str:
         raise RuntimeError("bug interno simulado, nunca deveria vazar ao cliente")
 
-    monkeypatch.setattr(main_module, "solve_expression", _boom)
+    monkeypatch.setattr(main_module, "solve_expression_with_timeout", _boom)
 
     response = client_no_raise.post("/solve", json={"expression": "2+2"})
 
@@ -34,7 +34,7 @@ def test_unhandled_exception_is_logged(
     def _boom(expression: str) -> str:
         raise RuntimeError("bug interno simulado")
 
-    monkeypatch.setattr(main_module, "solve_expression", _boom)
+    monkeypatch.setattr(main_module, "solve_expression_with_timeout", _boom)
 
     with caplog.at_level(logging.ERROR, logger="mathmaster"):
         client_no_raise.post("/solve", json={"expression": "2+2"})

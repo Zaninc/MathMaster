@@ -5,9 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
+from app.execution import solve_expression_with_timeout
 from app.formatter import format_result, render_math
 from app.history import add_entry, get_history
-from app.math_engine import ExpressionError, solve_expression
+from app.math_engine import ExpressionError
 from app.schemas import HistoryItem, SolveRequest, SolveResponse
 
 logging.basicConfig(level=settings.log_level)
@@ -45,7 +46,7 @@ def health_check() -> dict[str, str]:
 @app.post("/solve", response_model=SolveResponse)
 def solve(request: SolveRequest) -> SolveResponse:
     try:
-        raw_result = solve_expression(request.expression)
+        raw_result = solve_expression_with_timeout(request.expression)
     except ExpressionError as exc:
         logger.warning("ExpressionError para %r: %s", request.expression, exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
