@@ -42,4 +42,4 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-A suíte (`backend/tests/`) cobre o `math_engine/` por domínio, o `formatter/` por shape de saída, e os contratos HTTP (`/solve`, `/history`, `/health`) via `TestClient`. Roda automaticamente em cada push/PR para `main` via GitHub Actions (`.github/workflows/backend-tests.yml`).
+A suíte (`backend/tests/`) cobre o `math_engine/` por domínio, o `formatter/` por shape de saída, os contratos HTTP (`/solve`, `/history`, `/health`, `/ready`) via `TestClient`, e o isolamento por processo/timeout/rate limiting/concorrência adicionados no Hardening III. Roda automaticamente em cada push/PR para `main` via GitHub Actions (`.github/workflows/backend-tests.yml`), que também audita as dependências de produção contra vulnerabilidades conhecidas (`pip-audit`, job `security-audit`).
