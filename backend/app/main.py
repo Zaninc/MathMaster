@@ -1,7 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -10,6 +10,7 @@ from app.execution import shutdown_active_processes, solve_expression_with_timeo
 from app.formatter import format_result, render_math
 from app.history import add_entry, get_history
 from app.math_engine import ExpressionError, solve_expression
+from app.rate_limit import enforce_rate_limit
 from app.schemas import HistoryItem, SolveRequest, SolveResponse
 
 logging.basicConfig(level=settings.log_level)
@@ -76,7 +77,9 @@ def readiness_check() -> dict[str, str]:
 
 
 @app.post("/solve", response_model=SolveResponse)
-def solve(request: SolveRequest) -> SolveResponse:
+def solve(
+    request: SolveRequest, _rate_limit: None = Depends(enforce_rate_limit)
+) -> SolveResponse:
     try:
         raw_result = solve_expression_with_timeout(request.expression)
     except ExpressionError as exc:

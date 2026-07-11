@@ -7,6 +7,12 @@ isso, testes que chamam `/solve` vazariam histórico de um teste para o
 próximo. Importa o objeto `_history` diretamente (em vez de adicionar uma
 função de limpeza só para teste em history.py) para não introduzir código
 de produção que só existe para dar suporte à suíte.
+
+`reset_rate_limit` segue o mesmo raciocínio para `app.rate_limit`
+(Hardening III, Etapa 7): o `TestClient` usa sempre o mesmo IP fictício
+("testclient") para toda requisição, então sem isso as dezenas de testes
+que chamam `/solve` acumulariam contagem no mesmo balde e uns começariam a
+receber 429 por causa de outros testes anteriores.
 """
 from __future__ import annotations
 
@@ -15,6 +21,7 @@ from fastapi.testclient import TestClient
 
 from app.history import _history
 from app.main import app
+from app.rate_limit import _requests_by_ip
 
 
 @pytest.fixture(autouse=True)
@@ -22,6 +29,13 @@ def reset_history():
     _history.clear()
     yield
     _history.clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limit():
+    _requests_by_ip.clear()
+    yield
+    _requests_by_ip.clear()
 
 
 @pytest.fixture
