@@ -3,11 +3,11 @@ import re
 from sympy import pi
 from sympy.parsing.sympy_parser import (
     implicit_multiplication_application,
-    parse_expr,
     standard_transformations,
 )
 
 from ..errors import ExpressionError
+from ..safe_parsing import safe_parse_expr
 from .classification import INVERSA, NOTAVEL, classify_trig_expression, label_for
 from .equations import solve_trig_equation
 from .inverse import evaluate_inverse, mentions_inverse_trig, validate_inverse_domain
@@ -48,7 +48,7 @@ def solve_trigonometry_text(expression: str) -> str:
         return solve_trig_equation(expression)
 
     try:
-        expr = parse_expr(expression, transformations=_TRANSFORMATIONS, local_dict=_LOCAL_DICT)
+        expr = safe_parse_expr(expression, transformations=_TRANSFORMATIONS, local_dict=_LOCAL_DICT)
     except Exception as exc:
         raise ExpressionError(
             f"Não foi possível interpretar a expressão: {expression}"

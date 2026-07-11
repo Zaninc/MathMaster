@@ -3,12 +3,12 @@ import re
 from sympy import Symbol
 from sympy.parsing.sympy_parser import (
     implicit_multiplication_application,
-    parse_expr,
     standard_transformations,
 )
 
 from ..errors import ExpressionError
 from ..log_convention import LOCAL_DICT as _LOG_LOCAL_DICT
+from ..safe_parsing import safe_parse_expr
 from .classification import EXPONENCIAL, LOGARITMICA, QUADRATICA, classify_function, label_for
 from .domain import compute_domain
 from .evaluate import evaluate_function
@@ -73,7 +73,7 @@ def is_function_domain_expression(expression: str) -> bool:
 
 def _parse_value(text: str):
     try:
-        return parse_expr(text, transformations=_TRANSFORMATIONS)
+        return safe_parse_expr(text, transformations=_TRANSFORMATIONS)
     except Exception as exc:
         raise ExpressionError(f"Não foi possível interpretar o valor: {text}") from exc
 
@@ -96,11 +96,11 @@ def solve_function_text(expression: str) -> str:
 
     try:
         if logexp_match is not None:
-            expr = parse_expr(
+            expr = safe_parse_expr(
                 lado_direito, transformations=_TRANSFORMATIONS, local_dict=_LOG_LOCAL_DICT
             )
         else:
-            expr = parse_expr(lado_direito, transformations=_TRANSFORMATIONS)
+            expr = safe_parse_expr(lado_direito, transformations=_TRANSFORMATIONS)
     except Exception as exc:
         raise ExpressionError(
             f"Não foi possível interpretar a função: {lado_direito}"

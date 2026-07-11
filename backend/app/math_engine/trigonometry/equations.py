@@ -2,11 +2,11 @@ from sympy import Eq, S, pi, solveset
 from sympy.parsing.sympy_parser import (
     convert_equals_signs,
     implicit_multiplication_application,
-    parse_expr,
     standard_transformations,
 )
 
 from ..errors import ExpressionError
+from ..safe_parsing import safe_parse_expr
 
 _TRANSFORMATIONS = standard_transformations + (
     implicit_multiplication_application,
@@ -21,7 +21,7 @@ _LOCAL_DICT = {"tau": 2 * pi}
 
 def solve_trig_equation(text: str) -> str:
     try:
-        parsed = parse_expr(text, transformations=_TRANSFORMATIONS, local_dict=_LOCAL_DICT)
+        parsed = safe_parse_expr(text, transformations=_TRANSFORMATIONS, local_dict=_LOCAL_DICT)
     except Exception as exc:
         raise ExpressionError(f"Não foi possível interpretar a equação: {text}") from exc
 

@@ -5,11 +5,11 @@ from sympy.core.relational import Relational
 from sympy.parsing.sympy_parser import (
     convert_equals_signs,
     implicit_multiplication_application,
-    parse_expr,
     standard_transformations,
 )
 
 from ..errors import ExpressionError
+from ..safe_parsing import safe_parse_expr
 from .absolute import solve_absolute_equation
 from .inequalities import solve_inequality
 from .linear import solve_linear
@@ -45,7 +45,7 @@ def _split_equations(expression: str) -> list[str]:
 
 def _parse_equation(text: str) -> Eq:
     try:
-        parsed = parse_expr(text, transformations=_TRANSFORMATIONS)
+        parsed = safe_parse_expr(text, transformations=_TRANSFORMATIONS)
     except Exception as exc:
         raise ExpressionError(f"Não foi possível interpretar a equação: {text}") from exc
 
@@ -57,7 +57,7 @@ def _parse_equation(text: str) -> Eq:
 
 def _solve_single_inequality(text: str) -> str:
     try:
-        parsed = parse_expr(text, transformations=_TRANSFORMATIONS)
+        parsed = safe_parse_expr(text, transformations=_TRANSFORMATIONS)
     except Exception as exc:
         raise ExpressionError(f"Não foi possível interpretar a inequação: {text}") from exc
 

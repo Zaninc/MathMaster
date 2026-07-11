@@ -2,12 +2,12 @@ import re
 
 from sympy.parsing.sympy_parser import (
     implicit_multiplication_application,
-    parse_expr,
     standard_transformations,
 )
 
 from ..errors import ExpressionError
 from ..log_convention import LOCAL_DICT as _LOCAL_DICT
+from ..safe_parsing import safe_parse_expr
 from .classification import AVALIACAO, classify_log_expression, label_for
 from .domain import validate_log_domain
 from .equations import solve_log_equation
@@ -70,7 +70,7 @@ def solve_logarithm_text(expression: str) -> str:
         return _rename_natural_log(solve_log_equation(expression))
 
     try:
-        expr = parse_expr(expression, transformations=_TRANSFORMATIONS, local_dict=_LOCAL_DICT)
+        expr = safe_parse_expr(expression, transformations=_TRANSFORMATIONS, local_dict=_LOCAL_DICT)
     except Exception as exc:
         raise ExpressionError(
             f"Não foi possível interpretar a expressão: {expression}"

@@ -4,11 +4,11 @@ from sympy import solve
 from sympy.parsing.sympy_parser import (
     convert_equals_signs,
     implicit_multiplication_application,
-    parse_expr,
     standard_transformations,
 )
 
 from ..errors import ExpressionError
+from ..safe_parsing import safe_parse_expr
 
 _TRANSFORMATIONS = standard_transformations + (
     implicit_multiplication_application,
@@ -43,7 +43,7 @@ def _validate_exponential_base(equation: Eq, symbol) -> None:
 
 def solve_log_equation(text: str) -> str:
     try:
-        parsed = parse_expr(text, transformations=_TRANSFORMATIONS, local_dict=_LOCAL_DICT)
+        parsed = safe_parse_expr(text, transformations=_TRANSFORMATIONS, local_dict=_LOCAL_DICT)
     except Exception as exc:
         raise ExpressionError(f"Não foi possível interpretar a equação: {text}") from exc
 

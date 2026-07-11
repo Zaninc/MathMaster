@@ -16,11 +16,11 @@ from dataclasses import dataclass
 from sympy.core.expr import Expr
 from sympy.parsing.sympy_parser import (
     implicit_multiplication_application,
-    parse_expr,
     standard_transformations,
 )
 
 from ..errors import ExpressionError
+from ..safe_parsing import safe_parse_expr
 
 _TRANSFORMATIONS = standard_transformations + (implicit_multiplication_application,)
 
@@ -57,7 +57,7 @@ def split_top_level(text: str, sep: str = ",") -> list[str]:
 
 def _parse_coordinate(text: str) -> Expr:
     try:
-        value = parse_expr(text, transformations=_TRANSFORMATIONS)
+        value = safe_parse_expr(text, transformations=_TRANSFORMATIONS)
     except Exception as exc:
         raise ExpressionError(f"Não foi possível interpretar a coordenada: {text}") from exc
 

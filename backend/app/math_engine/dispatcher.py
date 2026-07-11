@@ -1,6 +1,5 @@
 from sympy.parsing.sympy_parser import (
     implicit_multiplication_application,
-    parse_expr,
     standard_transformations,
 )
 
@@ -16,6 +15,7 @@ from .logarithms.dispatcher import (
     is_logarithm_domain_expression,
     solve_logarithm_text,
 )
+from .safe_parsing import safe_parse_expr
 from .trigonometry.dispatcher import (
     is_trigonometry_domain_expression,
     solve_trigonometry_text,
@@ -45,7 +45,7 @@ def solve_expression(expression: str) -> str:
         return solve_equation_text(expression)
 
     try:
-        parsed = parse_expr(expression, transformations=_TRANSFORMATIONS)
+        parsed = safe_parse_expr(expression, transformations=_TRANSFORMATIONS)
     except Exception as exc:
         raise ExpressionError(
             f"Não foi possível interpretar a expressão: {expression}"
