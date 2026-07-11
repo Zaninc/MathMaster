@@ -27,3 +27,29 @@ jobs:
 
       - name: Run test suite
         run: pytest -v
+
+  # Hardening III, Etapa 9 — audita as dependências de produção
+  # (requirements.txt) contra vulnerabilidades conhecidas a cada push/PR.
+  # Job separado (não um step do job "test") para que uma falha de
+  # segurança apareça isolada no resumo do CI, sem se misturar com falha
+  # de teste.
+  security-audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: "pip"
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run pip-audit
+        run: pip-audit -r requirements.txt
