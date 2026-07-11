@@ -1,11 +1,12 @@
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.execution import solve_expression_with_timeout
+from app.execution import shutdown_active_processes, solve_expression_with_timeout
 from app.formatter import format_result, render_math
 from app.history import add_entry, get_history
 from app.math_engine import ExpressionError
@@ -14,7 +15,17 @@ from app.schemas import HistoryItem, SolveRequest, SolveResponse
 logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger("mathmaster")
 
-app = FastAPI(title=settings.app_name)
+
+# Hardening III, Etapa 4 — se o servidor for desligado com uma requisição
+# ainda em voo (um processo de cálculo ainda vivo), garante que ele seja
+# encerrado à força em vez de ficar órfão. Sem lógica de startup.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    shutdown_active_processes()
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

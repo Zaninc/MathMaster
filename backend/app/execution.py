@@ -32,11 +32,19 @@ diferenciação automática por parte da fila. Por isso, ao capturar
 vira erro interno genérico (mapeado para 500, nunca 400) — não faz sentido
 dizer ao cliente que "excedeu o tempo" quando o processo já tinha encerrado
 por conta própria.
+
+Shutdown limpo (Etapa 4): cada processo criado é registrado em
+`_active_processes` enquanto a chamada está em andamento e removido no
+`finally` — assim, se o servidor for desligado com uma requisição ainda em
+voo, `shutdown_active_processes()` (chamado pelo lifespan do FastAPI em
+`main.py`) sabe exatamente quais processos ainda podem estar vivos e os
+encerra à força, em vez de deixá-los órfãos.
 """
 from __future__ import annotations
 
 import multiprocessing
 import queue
+import threading
 from multiprocessing.process import BaseProcess
 
 from app.config import settings
@@ -44,6 +52,33 @@ from app.math_engine import ExpressionError, solve_expression
 from app.math_engine.errors import ComputationTimeoutError
 
 _SPAWN_CONTEXT = multiprocessing.get_context("spawn")
+
+_active_processes: set[BaseProcess] = set()
+_active_processes_lock = threading.Lock()
+
+
+def _register_process(process: BaseProcess) -> None:
+    with _active_processes_lock:
+        _active_processes.add(process)
+
+
+def _unregister_process(process: BaseProcess) -> None:
+    with _active_processes_lock:
+        _active_processes.discard(process)
+
+
+def shutdown_active_processes() -> None:
+    """Encerra à força qualquer processo de cálculo ainda vivo no momento em
+    que o servidor é desligado (requisição em andamento quando o processo
+    principal recebe o sinal de shutdown). Chamado pelo lifespan do FastAPI
+    em `main.py` — nunca deixa um processo filho órfão quando o servidor
+    encerra com requisições ainda em voo.
+    """
+    with _active_processes_lock:
+        processes = list(_active_processes)
+    for process in processes:
+        _terminate_and_reap(process)
+        _unregister_process(process)
 
 
 def _run_solve(expression: str, result_queue: multiprocessing.Queue) -> None:
@@ -85,6 +120,7 @@ def solve_expression_with_timeout(expression: str) -> str:
     process = _SPAWN_CONTEXT.Process(
         target=_run_solve, args=(expression, result_queue), daemon=True
     )
+    _register_process(process)
     try:
         process.start()
         try:
@@ -101,6 +137,7 @@ def solve_expression_with_timeout(expression: str) -> str:
             )
     finally:
         _terminate_and_reap(process)
+        _unregister_process(process)
         result_queue.close()
         result_queue.join_thread()
 
