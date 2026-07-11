@@ -9,7 +9,7 @@ from app.config import settings
 from app.execution import shutdown_active_processes, solve_expression_with_timeout
 from app.formatter import format_result, render_math
 from app.history import add_entry, get_history
-from app.math_engine import ExpressionError
+from app.math_engine import ExpressionError, solve_expression
 from app.schemas import HistoryItem, SolveRequest, SolveResponse
 
 logging.basicConfig(level=settings.log_level)
@@ -51,6 +51,27 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 @app.get("/health")
 def health_check() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+# Hardening III, Etapa 5 — diferente de `/health` (sempre "ok", sem
+# dependências, para liveness): valida que o math_engine de fato resolve
+# uma expressão trivial antes de reportar o serviço como pronto para
+# receber tráfego (readiness). Chama `solve_expression` direto (sem
+# isolamento por processo) porque é um check barato que um orquestrador
+# pode sondar com frequência — não faz sentido pagar o custo de um `spawn`
+# a cada poll de readiness. Não checa "pool de processos" porque a Etapa 3
+# não usa um pool persistente (processo novo por requisição).
+@app.get("/ready")
+def readiness_check() -> dict[str, str]:
+    try:
+        result = solve_expression("2+2")
+    except Exception as exc:
+        logger.error("Readiness check falhou: %s", exc)
+        raise HTTPException(status_code=503, detail="Serviço não está pronto.") from exc
+    if result != "4":
+        logger.error("Readiness check retornou resultado inesperado: %r", result)
+        raise HTTPException(status_code=503, detail="Serviço não está pronto.")
     return {"status": "ok"}
 
 
