@@ -6,10 +6,44 @@ compatibilidade (`test_regression_compat.py`) nunca exercita (ela chama
 """
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
+
+import app.main as main_module
 
 
 def test_health_check(client: TestClient) -> None:
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_ready_check_returns_ok_when_math_engine_works(client: TestClient) -> None:
+    response = client.get("/ready")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_ready_check_returns_503_when_math_engine_raises(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _boom(expression: str) -> str:
+        raise RuntimeError("bug interno simulado")
+
+    monkeypatch.setattr(main_module, "solve_expression", _boom)
+    response = client.get("/ready")
+    assert response.status_code == 503
+
+
+def test_ready_check_returns_503_when_result_is_unexpected(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(main_module, "solve_expression", lambda expression: "5")
+    response = client.get("/ready")
+    assert response.status_code == 503
+
+
+def test_ready_check_does_not_affect_health_check_contract(client: TestClient) -> None:
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
