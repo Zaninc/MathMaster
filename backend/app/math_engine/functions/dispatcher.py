@@ -94,13 +94,20 @@ def solve_function_text(expression: str) -> str:
     # exatamente como antes da Sprint 9 (comportamento inalterado).
     logexp_match = detect_logexp_kind(lado_direito, variavel)
 
+    # Sprint Parser — a variável declarada em "nome(variavel)=..." é sempre
+    # conhecida para o corpo desta função, mesmo que tenha mais de uma letra
+    # (ex. "area(largura)=largura**2"): sem isso, a nova camada de
+    # ambiguidade de safe_parsing.py rejeitaria "largura" por não ser um
+    # nome de 1 caractere nem estar na whitelist global. Mesmo padrão já
+    # usado por trigonometry/ para "tau".
+    body_local_dict: dict = {variavel: symbol}
+    if logexp_match is not None:
+        body_local_dict.update(_LOG_LOCAL_DICT)
+
     try:
-        if logexp_match is not None:
-            expr = safe_parse_expr(
-                lado_direito, transformations=_TRANSFORMATIONS, local_dict=_LOG_LOCAL_DICT
-            )
-        else:
-            expr = safe_parse_expr(lado_direito, transformations=_TRANSFORMATIONS)
+        expr = safe_parse_expr(
+            lado_direito, transformations=_TRANSFORMATIONS, local_dict=body_local_dict
+        )
     except Exception as exc:
         raise ExpressionError(
             f"Não foi possível interpretar a função: {lado_direito}"
