@@ -15,6 +15,7 @@ from .logarithms.dispatcher import (
     is_logarithm_domain_expression,
     solve_logarithm_text,
 )
+from .parser.normalize import normalize_expression
 from .safe_parsing import safe_parse_expr
 from .trigonometry.dispatcher import (
     is_trigonometry_domain_expression,
@@ -28,6 +29,12 @@ def solve_expression(expression: str) -> str:
     expression = expression.strip()
     if not expression:
         raise ExpressionError("A expressão não pode estar vazia.")
+
+    # Sprint Parser — normaliza Unicode/aliases ANTES de qualquer
+    # roteamento de domínio, porque os roteadores abaixo decidem por regex
+    # sobre o texto bruto (ex. "sen(x)" só é reconhecido como trigonometria
+    # depois de virar "sin(x)"). Ver docstring de `parser/normalize.py`.
+    expression = normalize_expression(expression)
 
     if is_analytic_geometry_domain_expression(expression):
         return solve_analytic_geometry_text(expression)
