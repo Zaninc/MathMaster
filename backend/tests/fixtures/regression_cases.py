@@ -119,6 +119,12 @@ EXACT_CASES: list[tuple[str, str]] = [
     ("3(x+1)", "3x + 3"),
     ("(x+1)(x-1)", "(x - 1)(x + 1)"),
     ("3√(x²+1)", "3√(x² + 1)"),
+    # --- Formatter Fix hotfix: "pi" seguido de expoente Unicode (pi**2)
+    # não era convertido para π — ver renderer.render_math() ---
+    ("pi**2", "π²"),
+    ("pi**3", "π³"),
+    ("2*pi**2", "2π²"),
+    ("pi*x", "π*x"),
 ]
 
 ERROR_CASES: list[str] = [

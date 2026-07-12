@@ -32,8 +32,14 @@ def render_math(text: str) -> str:
         # docstring) so sqrt(pi)/sqrt(tau) resolve to √π/√τ instead of
         # being stranded as sqrt(π)/sqrt(τ).
         rendered = render_sqrt(text)
-        rendered = superscript_exponents(rendered)
+        # replace_constants MUST run before superscript_exponents: Python's
+        # \w (and therefore \b) treats superscript digits ("²", "³", ...) as
+        # word characters, so "pi**2" -> "pi²" would leave "pi" with no
+        # trailing boundary for _PI_PATTERN to match, stranding it as ASCII
+        # "pi" instead of "π". Converting the constant first, while the
+        # exponent is still the ASCII "**2", sidesteps the issue entirely.
         rendered = replace_constants(rendered)
+        rendered = superscript_exponents(rendered)
         # merge_coefficient_products MUST run after replace_constants (it
         # relies on "pi" already being "π" to merge "2*π" -> "2π") and
         # BEFORE replace_imaginary_unit (its ambiguity guard checks for the

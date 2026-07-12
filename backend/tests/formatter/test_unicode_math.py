@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.formatter.renderer import render_math
 from app.formatter.unicode_math import (
     merge_coefficient_products,
     merge_parenthesized_products,
@@ -100,3 +101,28 @@ def test_merge_parenthesized_products_preserves_function_call_left_side(
     text: str,
 ) -> None:
     assert merge_parenthesized_products(text) == text
+
+
+# Regressão: "pi" seguido de expoente Unicode (pi**2 -> pi²) não era
+# convertido para π. Causa: Python's \w/\b tratam dígitos superescritos
+# ("²", "³", ...) como caracteres de palavra, então "\bpi\b" perdia o
+# boundary de fechamento quando replace_constants() rodava depois de
+# superscript_exponents(). Corrigido invertendo a ordem em render_math()
+# (ver renderer.py) — testado aqui via pipeline completo, não via
+# replace_constants() isolado, pois o bug só se manifesta na composição.
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("pi**2", "π²"),
+        ("pi**3", "π³"),
+        ("2*pi**2", "2π²"),
+        ("pi*x", "π*x"),
+        ("2*pi", "2π"),  # já correto antes da correção — sem regressão
+        ("pi+pi", "π+π"),  # já correto antes da correção — sem regressão
+        ("tau**2", "τ²"),  # mesma causa raiz, mesma correção
+    ],
+)
+def test_render_math_converts_pi_before_unicode_superscript(
+    text: str, expected: str
+) -> None:
+    assert render_math(text) == expected
