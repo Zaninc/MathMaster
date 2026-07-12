@@ -281,7 +281,7 @@ O Math Engine é a **única fonte de verdade matemática** do MathMaster (Seçã
 
 - **SymPy** como motor simbólico principal (álgebra, cálculo, simplificação, resolução de equações/inequações, séries).
 - **NumPy/SciPy** para componentes numéricos: avaliação de funções para plotagem, verificação numérica cruzada de soluções simbólicas (parte do mecanismo do Confidence Engine), estatística e álgebra linear numérica.
-- **Camada de parsing segura**: toda expressão de entrada (vinda do editor matemático estruturado, nunca texto livre não estruturado) é convertida em uma AST validada antes de qualquer avaliação simbólica — nenhuma entrada do usuário é avaliada como código arbitrário.
+- **Camada de parsing segura**: toda expressão de entrada (vinda do editor matemático estruturado, nunca texto livre não estruturado) é convertida em uma AST validada antes de qualquer avaliação simbólica — nenhuma entrada do usuário é avaliada como código arbitrário. Antes da validação, um pré-processamento puramente léxico (Sprint Parser) normaliza notação Unicode (sobrescritos, raízes, π, operadores de comparação) e aliases em português (`sen`/`tg`/`raiz`) para a forma ASCII canônica que a AST validada espera — nunca amplia o que é aceito na validação em si, só a forma como a mesma sintaxe já suportada pode ser escrita.
 - **Sandboxing de execução**: o processo de avaliação simbólica roda em ambiente isolado (contêiner com limites estritos de CPU/memória/tempo), prevenindo tanto abuso (expressões desenhadas para causar explosão computacional) quanto qualquer superfície de execução de código arbitrário.
 
 ### 8.3 Estratégia de multi-domínio
