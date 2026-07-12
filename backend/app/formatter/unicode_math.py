@@ -1,12 +1,13 @@
-"""Sprint 7.3 — pure, token-level Unicode substitutions for math_engine's
-already-correct string output.
+"""Sprint 7.3 (extended by the Formatter Fix sprint) — pure, token-level
+Unicode substitutions for math_engine's already-correct string output.
 
-Each function is a narrow, self-contained regex transform: no parsing, no
-restructuring, no semantic understanding of the surrounding text — only
-literal, unambiguous token replacement. Safe to run over ANY string,
-including the composite "Tipo: ...; ..." blocks Sprint 7.2 deliberately
-left untouched, because none of these transforms need to understand that
-structure, only find safe tokens inside it.
+Each function is a narrow, self-contained transform: no sympify, no
+semantic understanding of the surrounding text — only literal,
+unambiguous token replacement (most via regex; render_sqrt() uses
+balanced-parenthesis counting instead, since its argument can nest). Safe
+to run over ANY string, including the composite "Tipo: ...; ..." blocks
+Sprint 7.2 deliberately left untouched, because none of these transforms
+need to understand that structure, only find safe tokens inside it.
 """
 from __future__ import annotations
 
@@ -23,11 +24,12 @@ _SUPERSCRIPT_MINUS = "⁻"
 _NEGATIVE_EXPONENT_PATTERN = re.compile(r"\*\*\((-\d+)\)")
 _POSITIVE_EXPONENT_PATTERN = re.compile(r"\*\*(\d+)\b")
 
-# Single atomic argument only: a bare integer or a bare identifier
-# (includes named constants like pi/tau/E, which are just identifiers at
-# this point in the pipeline — see render_sqrt()'s docstring for why order
-# matters). Compound arguments never match this pattern, by construction.
-_SQRT_ATOM_PATTERN = re.compile(r"sqrt\((-?\d+|[a-zA-Z_]\w*)\)")
+# A bare integer or a bare identifier (includes named constants like
+# pi/tau/E, which are just identifiers at this point in the pipeline — see
+# render_sqrt()'s docstring for why order matters). Used to decide whether
+# a sqrt(...) argument needs wrapping parens once extracted.
+_SQRT_ATOM_PATTERN = re.compile(r"^-?\d+$|^[a-zA-Z_]\w*$")
+_SQRT_PREFIX_PATTERN = re.compile(r"sqrt\(")
 
 _PI_PATTERN = re.compile(r"\bpi\b")
 _TAU_PATTERN = re.compile(r"\btau\b")
@@ -64,18 +66,54 @@ def superscript_exponents(text: str) -> str:
 def render_sqrt(text: str) -> str:
     """sqrt(2) -> √2, sqrt(x) -> √x, sqrt(pi) -> √pi (still ASCII "pi" at
     this point — replace_constants() runs afterwards and turns it into
-    √π). Only a single atomic argument (a bare integer or identifier,
-    which includes named constants like pi/tau/E) is converted. Compound
-    arguments (sqrt(x + 1), sqrt(2*x), sqrt(x**2 - 4)) are left completely
-    untouched: deciding correct parenthesisation for a compound argument
-    from the string alone is not something a regex can do safely.
+    √π). An atomic argument (a bare integer or identifier, which includes
+    named constants like pi/tau/E) is converted without wrapping parens.
+    A compound argument (sqrt(x + 1), sqrt(x**2 - 4)) is converted too, but
+    wrapped: sqrt(x + 1) -> √(x + 1). The argument is extracted via
+    balanced-parenthesis counting (same technique as
+    safe_parse.split_top_level), not a fixed-shape regex, so nested
+    parentheses inside the argument are handled correctly.
 
     MUST run before replace_constants(): once "pi"/"tau" have already been
     turned into the Greek letters, they no longer match the ASCII
     identifier pattern this function looks for, and sqrt(pi) would be
     stranded as "sqrt(π)" instead of becoming "√π".
     """
-    return _SQRT_ATOM_PATTERN.sub(lambda m: f"√{m.group(1)}", text)
+    result: list[str] = []
+    i = 0
+    length = len(text)
+    while i < length:
+        match = _SQRT_PREFIX_PATTERN.match(text, i)
+        if match is None:
+            result.append(text[i])
+            i += 1
+            continue
+
+        start = match.end()
+        depth = 1
+        j = start
+        while j < length and depth > 0:
+            if text[j] == "(":
+                depth += 1
+            elif text[j] == ")":
+                depth -= 1
+            j += 1
+
+        if depth != 0:
+            # Unbalanced parens (should not happen for well-formed
+            # math_engine output) — leave the rest of the string untouched
+            # rather than risk mangling it.
+            result.append(text[i:])
+            break
+
+        inner = text[start : j - 1]
+        if _SQRT_ATOM_PATTERN.match(inner):
+            result.append(f"√{inner}")
+        else:
+            result.append(f"√({inner})")
+        i = j
+
+    return "".join(result)
 
 
 def replace_constants(text: str) -> str:
