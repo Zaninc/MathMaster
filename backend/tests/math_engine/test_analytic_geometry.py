@@ -18,8 +18,8 @@ def _solve(expression: str) -> str:
 
 def test_reta_m() -> None:
     assert _solve("reta_m((0,0),3)") == (
-        "Tipo: reta oblíqua crescente; Equação geral: 3*x - y = 0; "
-        "Equação reduzida: y = 3*x; Coeficiente angular: 3; "
+        "Tipo: reta oblíqua crescente; Equação geral: 3x - y = 0; "
+        "Equação reduzida: y = 3x; Coeficiente angular: 3; "
         "Intercepto em x: 0; Intercepto em y: 0"
     )
 
@@ -69,5 +69,5 @@ def test_hyperbola_with_offset_center() -> None:
     assert _solve("hiperbole((1,-1),5,2)") == (
         "Tipo: hipérbole; Centro: (1, -1); Semieixos: a = 5, b = 2; "
         "Focos: (1 - √29, -1) e (1 + √29, -1); "
-        "Assíntotas: y = 2*x/5 - 7/5 e y = -2*x/5 - 3/5; Excentricidade: √29/5"
+        "Assíntotas: y = 2x/5 - 7/5 e y = -2x/5 - 3/5; Excentricidade: √29/5"
     )

@@ -14,12 +14,12 @@ EXACT_CASES: list[tuple[str, str]] = [
     # --- Sprint Parser: normalização Unicode e aliases em português ---
     ("x²-4=0", "x₁ = -2, x₂ = 2"),
     ("(x+1)²", "(x + 1)²"),
-    ("√8", "2*√2"),
+    ("√8", "2√2"),
     ("∛8", "2"),
     ("∛(-8)", "-2"),
     ("√x", "√x"),
-    ("2π", "2*π"),
-    ("3√2", "3*√2"),
+    ("2π", "2π"),
+    ("3√2", "3√2"),
     ("6÷2", "3"),
     ("3−2", "1"),
     ("x≤2", "(-∞, 2]"),
@@ -36,8 +36,10 @@ EXACT_CASES: list[tuple[str, str]] = [
     ),
     ("f(x)=x²+3*x; f(2)", "f(2) = 10"),
     # --- Sprint 11.1 hotfix: formatação de soluções periódicas trigonométricas ---
-    ("sin(x)=1/2", "x = 2*π*k + π/6 ou x = 2*π*k + 5*π/6, k ∈ ℤ"),
-    ("cos(x)=0", "x = 2*π*k + π/2 ou x = 2*π*k + 3*π/2, k ∈ ℤ"),
+    # (Formatter Fix sprint: "2*π" colapsa para "2π" — coeficiente numérico
+    # × constante — mas "π*k" permanece com "*", símbolo×símbolo não colapsa.)
+    ("sin(x)=1/2", "x = 2π*k + π/6 ou x = 2π*k + 5π/6, k ∈ ℤ"),
+    ("cos(x)=0", "x = 2π*k + π/2 ou x = 2π*k + 3π/2, k ∈ ℤ"),
     ("tan(x)=1", "x = π*k + π/4, k ∈ ℤ"),
     # --- Sprint 7 trigonometria: valores notáveis, inversas, identidades ---
     ("sin(pi/6)", "Tipo: valor notável; Resultado: 1/2"),
@@ -80,7 +82,7 @@ EXACT_CASES: list[tuple[str, str]] = [
     ("x**2-4>0", "(-∞, -2) ∪ (2, ∞)"),
     # --- Sprint 4 algebra ---
     ("2+2", "4"),
-    ("(x-1)*(x+1)", "(x - 1)*(x + 1)"),
+    ("(x-1)*(x+1)", "(x - 1)(x + 1)"),
     # --- Sprint 10 analytic geometry: retas ---
     ("distancia((0,0),(3,4))", "Distância: 5"),
     ("ponto_medio((0,0),(4,6))", "Ponto médio: (2, 3)"),
@@ -109,8 +111,14 @@ EXACT_CASES: list[tuple[str, str]] = [
     (
         "hiperbole((0,0),4,3)",
         "Tipo: hipérbole; Centro: (0, 0); Semieixos: a = 4, b = 3; Focos: (-5, 0) e (5, 0); "
-        "Assíntotas: y = 3*x/4 e y = -3*x/4; Excentricidade: 5/4",
+        "Assíntotas: y = 3x/4 e y = -3x/4; Excentricidade: 5/4",
     ),
+    # --- Sprint Formatter Fix: gaps de apresentação após a Sprint Parser ---
+    ("√(x+1)", "√(x + 1)"),
+    ("π+π", "2π"),
+    ("3(x+1)", "3x + 3"),
+    ("(x+1)(x-1)", "(x - 1)(x + 1)"),
+    ("3√(x²+1)", "3√(x² + 1)"),
 ]
 
 ERROR_CASES: list[str] = [

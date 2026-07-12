@@ -18,8 +18,8 @@ def _solve(expression: str) -> str:
     "expression, expected",
     [
         ("x/x", "1"),  # factor não se aplica; simplify resolve
-        ("2*x + 3*x", "5*x"),  # factor trivial
-        ("sqrt(8)", "2*√2"),  # simplify (radsimp)
+        ("2*x + 3*x", "5x"),  # factor trivial
+        ("sqrt(8)", "2√2"),  # simplify (radsimp)
         ("(x**2-1)/(x-1)", "x + 1"),  # cancelamento de fator comum
         ("x**2 + 2*x + 1", "(x + 1)²"),  # factor não trivial
     ],

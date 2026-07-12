@@ -135,15 +135,14 @@ def test_solve_unicode_expression_response_echoes_original_input(client: TestCli
 
 
 def test_history_preserves_original_unicode_expression(client: TestClient) -> None:
-    # render_sqrt() só converte sqrt(...) para √... quando o argumento é
-    # atômico (ver formatter/unicode_math.py) — sqrt(x+1) fica "sqrt(x + 1)"
-    # mesmo depois de normalizado a partir de "√(x+1)"; o que este teste
-    # confirma é que o HISTÓRICO guarda a expressão original digitada, não
-    # a versão normalizada internamente.
+    # O HISTÓRICO guarda a expressão original digitada ("√(x+1)"), não a
+    # versão normalizada internamente ("sqrt(x + 1)") usada pelo motor —
+    # o resultado exibido já passa por render_sqrt() com suporte a
+    # argumento composto (Sprint Formatter Fix), por isso "√(x + 1)".
     client.post("/solve", json={"expression": "√(x+1)"})
 
     response = client.get("/history")
     body = response.json()
 
     assert body[0]["expression"] == "√(x+1)"
-    assert body[0]["result"] == "sqrt(x + 1)"
+    assert body[0]["result"] == "√(x + 1)"
