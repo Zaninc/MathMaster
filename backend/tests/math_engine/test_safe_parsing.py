@@ -178,3 +178,56 @@ def test_preserves_existing_legitimate_expressions(expression: str) -> None:
     )
     expected = parse_expr(expression, transformations=transformations)
     assert safe_parse_expr(expression, transformations=transformations) == expected
+
+
+# --- Sprint Parser: rejeição de identificadores ambíguos --------------
+
+# "xy"/"abc" eram silenciosamente quebrados letra a letra e multiplicados
+# pelo `split_symbols` do SymPy antes desta sprint (ex. "xy" -> "x*y",
+# resultado matemático diferente do pretendido, sem nenhum erro); "x2"/"x1"
+# falhavam com um NameError interno genérico (bug de whitelist, ver
+# _REQUIRED_CONSTRUCTORS["Number"] acima). Todos agora são rejeitados de
+# forma explícita e uniforme por `_reject_ambiguous_identifiers`.
+@pytest.mark.parametrize("payload", ["xy", "abc", "x2", "x1", "tau", "area"])
+def test_rejects_ambiguous_multiletter_identifiers(payload: str) -> None:
+    with pytest.raises(ExpressionError):
+        safe_parse_expr(payload)
+
+
+# Nomes de 1 caractere nunca são ambíguos, mesmo fora da whitelist.
+@pytest.mark.parametrize("payload", ["x", "y", "k", "z"])
+def test_accepts_single_letter_identifiers(payload: str) -> None:
+    result = safe_parse_expr(payload)
+    assert str(result) == payload
+
+
+# `local_dict` (mesmo mecanismo já usado por trigonometry/ para "tau", ou
+# por functions/ para o nome do parâmetro de uma função do usuário) isenta
+# um nome específico da rejeição, só para aquela chamada.
+def test_local_dict_exempts_name_from_ambiguity_rejection() -> None:
+    from sympy import Symbol
+
+    result = safe_parse_expr("area", local_dict={"area": Symbol("area")})
+    assert str(result) == "area"
+
+
+def test_digit_suffixed_identifier_raises_clean_expression_error() -> None:
+    # Confirma que o bug de whitelist do Number (NameError interno genérico)
+    # não vaza mais: "x2" agora é rejeitado pela camada de ambiguidade, uma
+    # ExpressionError limpa, nunca uma exceção crua do Python/SymPy.
+    with pytest.raises(ExpressionError) as exc_info:
+        safe_parse_expr("x2")
+    assert "x2" in str(exc_info.value)
+
+
+def test_cbrt_of_negative_literal_returns_real_root() -> None:
+    # sympy.cbrt sozinho devolve a raiz complexa principal para negativos
+    # (2*(-1)**(1/3)); o wrapper `_cbrt` de safe_parsing.py usa real_root
+    # para números literais, dando o valor real que um estudante espera.
+    result = safe_parse_expr("cbrt(-8)")
+    assert result == -2
+
+
+def test_cbrt_of_symbolic_argument_stays_symbolic() -> None:
+    result = safe_parse_expr("cbrt(x)")
+    assert str(result) == "x**(1/3)"

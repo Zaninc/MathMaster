@@ -115,3 +115,35 @@ def test_cors_allows_configured_origin(client: TestClient) -> None:
 def test_cors_rejects_unlisted_origin(client: TestClient) -> None:
     response = client.get("/health", headers={"Origin": "http://evil.example.com"})
     assert "access-control-allow-origin" not in response.headers
+
+
+# --- Sprint Parser: normalização Unicode via /solve, histórico preserva o original ---
+
+def test_solve_unicode_expression_matches_ascii_equivalent(client: TestClient) -> None:
+    ascii_response = client.post("/solve", json={"expression": "x**2-4=0"})
+    unicode_response = client.post("/solve", json={"expression": "x²-4=0"})
+
+    assert ascii_response.status_code == 200
+    assert unicode_response.status_code == 200
+    assert ascii_response.json()["result"] == unicode_response.json()["result"]
+
+
+def test_solve_unicode_expression_response_echoes_original_input(client: TestClient) -> None:
+    response = client.post("/solve", json={"expression": "x²-4=0"})
+    assert response.status_code == 200
+    assert response.json()["expression"] == "x²-4=0"
+
+
+def test_history_preserves_original_unicode_expression(client: TestClient) -> None:
+    # render_sqrt() só converte sqrt(...) para √... quando o argumento é
+    # atômico (ver formatter/unicode_math.py) — sqrt(x+1) fica "sqrt(x + 1)"
+    # mesmo depois de normalizado a partir de "√(x+1)"; o que este teste
+    # confirma é que o HISTÓRICO guarda a expressão original digitada, não
+    # a versão normalizada internamente.
+    client.post("/solve", json={"expression": "√(x+1)"})
+
+    response = client.get("/history")
+    body = response.json()
+
+    assert body[0]["expression"] == "√(x+1)"
+    assert body[0]["result"] == "sqrt(x + 1)"

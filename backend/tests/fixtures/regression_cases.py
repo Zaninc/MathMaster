@@ -11,6 +11,30 @@ levantar `ExpressionError` (mensagem não comparada, só o tipo).
 from __future__ import annotations
 
 EXACT_CASES: list[tuple[str, str]] = [
+    # --- Sprint Parser: normalização Unicode e aliases em português ---
+    ("x²-4=0", "x₁ = -2, x₂ = 2"),
+    ("(x+1)²", "(x + 1)²"),
+    ("√8", "2*√2"),
+    ("∛8", "2"),
+    ("∛(-8)", "-2"),
+    ("√x", "√x"),
+    ("2π", "2*π"),
+    ("3√2", "3*√2"),
+    ("6÷2", "3"),
+    ("3−2", "1"),
+    ("x≤2", "(-∞, 2]"),
+    ("x≥2", "[2, ∞)"),
+    ("sen(x)**2 + cos(x)**2", "Tipo: identidade trigonométrica fundamental; Resultado: 1"),
+    ("sen²(x) + cos²(x)", "Tipo: identidade trigonométrica fundamental; Resultado: 1"),
+    ("raiz(16)", "4"),
+    ("tg(pi/4)", "Tipo: valor notável; Resultado: 1"),
+    ("sen(pi/6)", "Tipo: valor notável; Resultado: 1/2"),
+    (
+        "f(x)=x²+3*x",
+        "Tipo: função quadrática; Domínio: ℝ; Raízes: x = -3, x = 0; "
+        "Intercepto em y: (0, 0); Vértice: (-3/2, -9/4)",
+    ),
+    ("f(x)=x²+3*x; f(2)", "f(2) = 10"),
     # --- Sprint 11.1 hotfix: formatação de soluções periódicas trigonométricas ---
     ("sin(x)=1/2", "x = 2*π*k + π/6 ou x = 2*π*k + 5*π/6, k ∈ ℤ"),
     ("cos(x)=0", "x = 2*π*k + π/2 ou x = 2*π*k + 3*π/2, k ∈ ℤ"),
@@ -94,4 +118,9 @@ ERROR_CASES: list[str] = [
     "parabola((0,0),(0,0))",
     "elipse((0,0),3,5)",
     "hiperbole((0,0),-1,3)",
+    # --- Sprint Parser: identificadores ambíguos rejeitados explicitamente ---
+    "xy",
+    "abc",
+    "x2",
+    "x1",
 ]
