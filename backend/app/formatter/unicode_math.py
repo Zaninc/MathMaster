@@ -3,11 +3,12 @@ Unicode substitutions for math_engine's already-correct string output.
 
 Each function is a narrow, self-contained transform: no sympify, no
 semantic understanding of the surrounding text — only literal,
-unambiguous token replacement (most via regex; render_sqrt() uses
-balanced-parenthesis counting instead, since its argument can nest). Safe
-to run over ANY string, including the composite "Tipo: ...; ..." blocks
-Sprint 7.2 deliberately left untouched, because none of these transforms
-need to understand that structure, only find safe tokens inside it.
+unambiguous token replacement (most via regex; render_sqrt() and
+merge_parenthesized_products() use balanced-parenthesis counting instead,
+since their target shape can nest). Safe to run over ANY string, including
+the composite "Tipo: ...; ..." blocks Sprint 7.2 deliberately left
+untouched, because none of these transforms need to understand that
+structure, only find safe tokens inside it.
 """
 from __future__ import annotations
 
@@ -52,6 +53,12 @@ _IMAGINARY_UNIT_PATTERN = re.compile(r"\bI\b")
 _COEFFICIENT_PRODUCT_PATTERN = re.compile(
     r"(?<=\d)\*(?!I\b)(?!E\b)(?=(?:[^\W\d_](?!\w*\()|√))"
 )
+
+# Function-call identifier immediately before a "(" — used by
+# merge_parenthesized_products() to tell "(x-1)*(x+1)" (bare factors, safe
+# to collapse) apart from "sin(x)*(x+1)" (a call result times a factor;
+# collapsing would read as calling sin(x) with (x+1), which is wrong).
+_IDENTIFIER_CHAR_PATTERN = re.compile(r"[A-Za-z_]")
 
 # Sprint 10 — analytic_geometry/classification.py só produz os rótulos
 # semânticos "Paralelas"/"Perpendiculares" (ver decisão registrada no
@@ -139,6 +146,46 @@ def merge_coefficient_products(text: str) -> str:
     the exact ambiguity guards (never before I/E, never into a function
     call, never between two numbers, never symbol×symbol)."""
     return _COEFFICIENT_PRODUCT_PATTERN.sub("", text)
+
+
+def merge_parenthesized_products(text: str) -> str:
+    """(x - 1)*(x + 1) -> (x - 1)(x + 1). Only collapses "*" directly
+    between two parenthesized groups, and only when the left group is a
+    bare factor — not a function call. Finding the left group's matching
+    "(" requires balanced-parenthesis counting (see render_sqrt()), since a
+    fixed-width regex lookbehind cannot handle nested parentheses."""
+    result: list[str] = []
+    i = 0
+    length = len(text)
+    while i < length:
+        is_boundary = (
+            text[i] == ")"
+            and i + 2 < length
+            and text[i + 1] == "*"
+            and text[i + 2] == "("
+        )
+        if not is_boundary:
+            result.append(text[i])
+            i += 1
+            continue
+
+        depth = 1
+        j = i - 1
+        while j >= 0 and depth > 0:
+            if text[j] == ")":
+                depth += 1
+            elif text[j] == "(":
+                depth -= 1
+            j -= 1
+        # j now sits one character before the left group's matching "(".
+        is_function_call = j >= 0 and bool(_IDENTIFIER_CHAR_PATTERN.match(text[j]))
+
+        result.append(")")
+        if is_function_call:
+            result.append("*")
+        i += 2  # skip ")" (already appended) and "*"; "(" is handled next
+
+    return "".join(result)
 
 
 def replace_constants(text: str) -> str:

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from .unicode_math import (
     merge_coefficient_products,
+    merge_parenthesized_products,
     render_sqrt,
     replace_comparisons,
     replace_constants,
@@ -38,6 +39,7 @@ def render_math(text: str) -> str:
         # BEFORE replace_imaginary_unit (its ambiguity guard checks for the
         # reserved uppercase "I" token, before it becomes lowercase "i").
         rendered = merge_coefficient_products(rendered)
+        rendered = merge_parenthesized_products(rendered)
         rendered = replace_comparisons(rendered)
         rendered = replace_imaginary_unit(rendered)
         rendered = replace_geometry_relations(rendered)
