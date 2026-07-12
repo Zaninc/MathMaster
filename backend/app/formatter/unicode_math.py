@@ -37,6 +37,22 @@ _OO_PATTERN = re.compile(r"\boo\b")
 
 _IMAGINARY_UNIT_PATTERN = re.compile(r"\bI\b")
 
+# Sprint Formatter Fix — implicit-multiplication cleanup. Only removes "*"
+# when it is unambiguous: a numeric coefficient directly touching a symbol,
+# a named constant, or a √. Two lookaheads guard against ambiguity:
+#   - "(?!I\b)" / "(?!E\b)": "I"/"E" are reserved (never a user variable,
+#     see replace_imaginary_unit()'s docstring) but this module deliberately
+#     keeps their product notation as-is ("2*I", "2*E") rather than
+#     collapsing to "2i"/"2E" — same scope decision already made for I in
+#     Sprint 7.3, extended here to E for consistency.
+#   - "(?!\w*\()": never collapse into a function call — "2*sin(x)" must
+#     stay "2*sin(x)", not become "2sin(x)".
+# Symbol×symbol products (e.g. "pi*k") are deliberately NOT covered: only
+# a numeric coefficient triggers the merge, so "π*k" stays "π*k".
+_COEFFICIENT_PRODUCT_PATTERN = re.compile(
+    r"(?<=\d)\*(?!I\b)(?!E\b)(?=(?:[^\W\d_](?!\w*\()|√))"
+)
+
 # Sprint 10 — analytic_geometry/classification.py só produz os rótulos
 # semânticos "Paralelas"/"Perpendiculares" (ver decisão registrada no
 # plano da Sprint 10: lógica interna nunca usa ∥/⊥ diretamente); os
@@ -116,6 +132,15 @@ def render_sqrt(text: str) -> str:
     return "".join(result)
 
 
+def merge_coefficient_products(text: str) -> str:
+    """2*x -> 2x, 2*π -> 2π, 3*√2 -> 3√2, 3*√(x + 1) -> 3√(x + 1). Only
+    collapses "*" directly between a numeric coefficient and a symbol,
+    named constant, or √ — see _COEFFICIENT_PRODUCT_PATTERN's comment for
+    the exact ambiguity guards (never before I/E, never into a function
+    call, never between two numbers, never symbol×symbol)."""
+    return _COEFFICIENT_PRODUCT_PATTERN.sub("", text)
+
+
 def replace_constants(text: str) -> str:
     """pi -> π, tau -> τ, oo -> ∞ (word-boundary safe; "-oo" becomes "-∞"
     automatically since "-" isn't a word character, so the boundary before
@@ -137,8 +162,9 @@ def replace_imaginary_unit(text: str) -> str:
     """I -> i (presentation only). "I" is never a user-chosen variable name
     in this system's output — SymPy's parser resolves any bare "I" to the
     imaginary unit constant — so this substitution is unambiguous. Word
-    boundaries keep "Interval" untouched. "2*I" becomes "2*i"; collapsing
-    to "2i" is deliberately out of scope for this sprint."""
+    boundaries keep "Interval" untouched. "2*I" becomes "2*i": the "*" is
+    deliberately preserved by merge_coefficient_products() (see its
+    pattern's comment) rather than collapsed to "2i"."""
     return _IMAGINARY_UNIT_PATTERN.sub("i", text)
 
 
