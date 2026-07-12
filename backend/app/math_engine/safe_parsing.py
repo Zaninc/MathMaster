@@ -140,6 +140,15 @@ _BRACKET_PAIRS = {")": "(", "]": "[", "}": "{"}
 _OPENERS = set(_BRACKET_PAIRS.values())
 _CLOSERS = set(_BRACKET_PAIRS.keys())
 
+# Sprint Parser — nomes que o usuário pode digitar sem parênteses e que já
+# são conhecidos pelo sistema (funções e constantes matemáticas). Não inclui
+# `_REQUIRED_CONSTRUCTORS`: esses nomes (Symbol, Integer, Number...) existem
+# só para o SymPy reescrever código internamente, nunca são digitados por um
+# usuário legítimo.
+_KNOWN_IDENTIFIER_NAMES = frozenset(_ALLOWED_FUNCTIONS) | frozenset(_ALLOWED_CONSTANTS)
+
+_IDENTIFIER_PATTERN = re.compile(r"[a-zA-Z_]\w*")
+
 
 def _reject_forbidden_content(text: str) -> None:
     for token in _FORBIDDEN_SUBSTRINGS:
@@ -147,6 +156,35 @@ def _reject_forbidden_content(text: str) -> None:
             raise ExpressionError(f"Não foi possível interpretar a expressão: {text}")
     if not _ALLOWED_CHARS_PATTERN.match(text):
         raise ExpressionError(f"Não foi possível interpretar a expressão: {text}")
+
+
+def _reject_ambiguous_identifiers(text: str, local_dict: dict | None) -> None:
+    """Sprint Parser, camada [3] — antes desta etapa, um identificador de
+    múltiplas letras que não é um nome conhecido (ex. "xy", "abc", "x2")
+    caía silenciosamente na transformação `split_symbols` do SymPy, que o
+    quebra letra a letra e multiplica ("xy" -> "x*y", "sen" -> "e*n*s*x*..."
+    quando seguido de outro identificador) — uma resposta matemática
+    diferente da pretendida, sem nenhum erro. Ver auditoria da Sprint
+    Parser: qualquer alias em português (sen/tg/raiz) precisa ser resolvido
+    ANTES desta checagem (já é, em `parser/normalize.py`, que roda antes de
+    `safe_parse_expr`); qualquer nome que sobra aqui e não é de 1 caractere
+    nem está na whitelist é rejeitado explicitamente, nunca adivinhado.
+
+    `local_dict` é o mesmo dicionário já passado pelo chamador a
+    `safe_parse_expr` (ex. `{"tau": 2*pi}` em trigonometria, ou o nome do
+    parâmetro de uma função do usuário) — nomes ali são tratados como
+    conhecidos só para esta chamada, sem precisar duplicar a whitelist
+    global.
+    """
+    known = _KNOWN_IDENTIFIER_NAMES | frozenset(local_dict) if local_dict else _KNOWN_IDENTIFIER_NAMES
+    for match in _IDENTIFIER_PATTERN.finditer(text):
+        name = match.group()
+        if len(name) == 1 or name in known:
+            continue
+        raise ExpressionError(
+            f"Nome não reconhecido: '{name}'. Use uma única letra por variável "
+            "(ex. x, y) ou uma função/constante conhecida."
+        )
 
 
 def _validate_delimiters(text: str) -> None:
@@ -179,11 +217,14 @@ def safe_parse_expr(text: str, *, local_dict: dict | None = None, transformation
     uma exceção interna do SymPy ou do Python vazar) para entrada que:
     contenha `__`; contenha caracteres fora da whitelist; tenha delimitadores
     incompatíveis, não fechados ou fechados sem abertura; exceda a
-    profundidade máxima de aninhamento; ou falhe o parse por qualquer outro
+    profundidade máxima de aninhamento; contenha um identificador de
+    múltiplas letras não reconhecido (Sprint Parser — ver
+    `_reject_ambiguous_identifiers`); ou falhe o parse por qualquer outro
     motivo.
     """
     _reject_forbidden_content(text)
     _validate_delimiters(text)
+    _reject_ambiguous_identifiers(text, local_dict)
 
     resolved_transformations = (
         transformations if transformations is not None else DEFAULT_TRANSFORMATIONS
