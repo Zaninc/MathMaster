@@ -59,6 +59,7 @@ from sympy import (
     acos,
     asin,
     atan,
+    cbrt,
     cos,
     exp,
     factorial,
@@ -66,6 +67,7 @@ from sympy import (
     log,
     oo,
     pi,
+    real_root,
     sin,
     sqrt,
     tan,
@@ -101,6 +103,23 @@ _REQUIRED_CONSTRUCTORS = {
     "Number": Number,
 }
 
+
+def _cbrt(value):
+    """Sprint Parser (raiz cúbica, "∛"). `sympy.cbrt` sozinho devolve a raiz
+    complexa principal para números negativos (ex. `cbrt(-8)` ==
+    `2*(-1)**(1/3)`, não `-2`) — confirmado empiricamente, e matematicamente
+    errado para o caso que um estudante espera. Para um NÚMERO literal
+    (`is_number`), usa `real_root` (raiz real de verdade: `real_root(-8, 3)
+    == -2`). Para uma expressão simbólica (ex. "∛x"), `real_root` produz uma
+    `Piecewise` (não pode provar o sinal de x em geral) — pior para leitura
+    do que o `cbrt` simbólico limpo (`x**(1/3)`), que é o que já se espera
+    de qualquer outra raiz/potência simbólica neste projeto.
+    """
+    if getattr(value, "is_number", False):
+        return real_root(value, 3)
+    return cbrt(value)
+
+
 # Whitelist explícita das funções matemáticas hoje suportadas pelos
 # dispatchers de domínio (trigonometria, logaritmos/exponencial, módulo).
 _ALLOWED_FUNCTIONS = {
@@ -115,6 +134,7 @@ _ALLOWED_FUNCTIONS = {
     "ln": ln,
     "exp": exp,
     "sqrt": sqrt,
+    "cbrt": _cbrt,
     "factorial": factorial,
 }
 
