@@ -53,6 +53,7 @@ from sympy import (
     Float,
     I,
     Integer,
+    Number,
     Rational,
     Symbol,
     acos,
@@ -91,6 +92,13 @@ _REQUIRED_CONSTRUCTORS = {
     "Float": Float,
     "Rational": Rational,
     "Eq": Eq,
+    # Sprint Parser: a transformation `split_symbols` (parte de
+    # `implicit_multiplication_application`) gera código que chama
+    # `Number(...)` internamente ao tentar separar um identificador
+    # terminado em dígito (ex. "x2") em símbolo + número — sem isso na
+    # whitelist, esse caminho falhava com um `NameError` interno genérico
+    # em vez de uma rejeição deliberada.
+    "Number": Number,
 }
 
 # Whitelist explícita das funções matemáticas hoje suportadas pelos
