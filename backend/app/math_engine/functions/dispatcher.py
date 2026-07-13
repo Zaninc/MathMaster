@@ -50,6 +50,9 @@ _RESERVED_FUNCTION_NAMES = {
     # agora para as quatro cônicas — "circunferencia(x) = 2*x" não é uma
     # função chamada "circunferencia", é sintaxe reservada de geometria.
     "circunferencia", "parabola", "elipse", "hiperbole",
+    # Sprint 12 (Cálculo): mesma ambiguidade estrutural — "derivada(x) = 5"
+    # não é uma função chamada "derivada", é sintaxe reservada de cálculo.
+    "derivada", "integral", "limite",
 }
 
 

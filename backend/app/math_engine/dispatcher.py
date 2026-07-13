@@ -8,6 +8,7 @@ from .analytic_geometry.dispatcher import (
     is_analytic_geometry_domain_expression,
     solve_analytic_geometry_text,
 )
+from .calculus.dispatcher import is_calculus_domain_expression, solve_calculus_text
 from .equations.dispatcher import is_equation_domain_expression, solve_equation_text
 from .errors import ExpressionError
 from .functions.dispatcher import is_function_domain_expression, solve_function_text
@@ -38,6 +39,12 @@ def solve_expression(expression: str) -> str:
 
     if is_analytic_geometry_domain_expression(expression):
         return solve_analytic_geometry_text(expression)
+
+    # Sprint 12 — precisa vir antes de functions/trigonometry/logarithms:
+    # essas áreas casam "sin("/"log(" em qualquer posição do texto, o que
+    # roubaria uma chamada como "integral(sin(x), x)" se checado depois.
+    if is_calculus_domain_expression(expression):
+        return solve_calculus_text(expression)
 
     if is_function_domain_expression(expression):
         return solve_function_text(expression)
