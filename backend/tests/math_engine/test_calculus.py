@@ -90,3 +90,51 @@ def test_derivative_wrong_argument_count_raises() -> None:
 def test_reserved_calculus_name_is_not_stolen_as_function_definition() -> None:
     with pytest.raises(ExpressionError, match=r"[Nn]ão reconhecido|[Nn]ão foi possível"):
         _solve("derivada(x) = 5")
+
+
+# --- Sprint 12.1: notação natural de cálculo — paridade com a sintaxe técnica ---
+
+
+def test_natural_derivative_notation_matches_technical_syntax() -> None:
+    assert _solve("d/dx(x**2+3*x)") == _solve("derivada(x**2+3*x, x)")
+
+
+def test_natural_indefinite_integral_notation_matches_technical_syntax() -> None:
+    assert _solve("∫x**2 dx") == _solve("integral(x**2, x)")
+
+
+def test_natural_integral_of_sin_is_routed_before_trigonometry() -> None:
+    # Mesma garantia de test_calculus_is_routed_before_trigonometry, agora
+    # também para a entrada em notação natural (∫sin(x)dx contém "sin(").
+    assert _solve("∫ sin(x) dx") == "Integral: -cos(x) + C"
+
+
+def test_natural_definite_integral_ascii_bounds_matches_technical_syntax() -> None:
+    assert _solve("∫_0^2 x**2 dx") == _solve("integral(x**2, x, 0, 2)")
+
+
+def test_natural_definite_integral_unicode_bounds_matches_technical_syntax() -> None:
+    assert _solve("∫₀²x**2 dx") == _solve("integral(x**2, x, 0, 2)")
+
+
+def test_natural_limit_notation_matches_technical_syntax() -> None:
+    assert _solve("lim x→0 sin(x)/x") == _solve("limite(sin(x)/x, x, 0)")
+    assert _solve("lim(x→0) sin(x)/x") == _solve("limite(sin(x)/x, x, 0)")
+    assert _solve("lim_{x→0} sin(x)/x") == _solve("limite(sin(x)/x, x, 0)")
+
+
+def test_natural_limit_at_infinity_matches_technical_syntax() -> None:
+    assert _solve("lim x→∞ 1/x") == _solve("limite(1/x, x, oo)")
+
+
+def test_one_sided_limit_natural_notation_raises_dedicated_message() -> None:
+    with pytest.raises(ExpressionError, match="laterais"):
+        _solve("lim x→0+ 1/x")
+
+
+def test_derivative_without_parentheses_falls_through_to_clean_rejection() -> None:
+    # "d/dx x**2" (sem parênteses) não é reconhecido como notação natural
+    # (ambíguo — ver auditoria da Sprint 12.1); "dx" sobra como identificador
+    # de 2 letras não reconhecido, já rejeitado pelo safe_parsing existente.
+    with pytest.raises(ExpressionError, match=r"[Nn]ão reconhecido|[Nn]ão foi possível"):
+        _solve("d/dx x**2")

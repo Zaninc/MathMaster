@@ -40,6 +40,10 @@ from app.math_engine.parser.normalize import normalize_expression
         ("π", "pi"),
         ("2π", "2pi"),
         ("√π", "sqrt(pi)"),
+        # --- infinito (Sprint 12.1) ---
+        ("∞", "oo"),
+        ("-∞", "-oo"),
+        ("x<∞", "x<oo"),
         ("x×2", "x*2"),
         ("6÷2", "6/2"),
         ("3−2", "3-2"),
@@ -81,7 +85,7 @@ def test_normalize_expression(expression: str, expected: str) -> None:
     [
         "x²", "x²-4=0", "(x+1)²", "2⁻³", "x**2",
         "√x", "√(x+1)", "√8", "∛x", "∛(x+1)", "∛8",
-        "π", "2π", "3√2", "√π",
+        "π", "2π", "3√2", "√π", "∞", "-∞",
         "x×2", "6÷2", "3−2", "x≤2", "x≥2", "x≠2",
         "sen(x)", "tg(x)", "raiz(x)", "raiz(x+1)",
         "sen²(x)", "sen²(x+1)", "sin(x)²", "cos²(x)",

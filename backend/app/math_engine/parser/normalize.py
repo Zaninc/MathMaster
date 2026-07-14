@@ -41,6 +41,7 @@ _FUNC_POWER_PATTERN = re.compile(
 )
 
 _PI_PATTERN = re.compile(r"π")
+_INFINITY_PATTERN = re.compile(r"∞")
 _UNICODE_OPERATORS = {
     "×": "*",
     "÷": "/",
@@ -112,10 +113,14 @@ def _rewrite_function_power(text: str) -> str:
 
 
 def _replace_unicode_constants_and_operators(text: str) -> str:
-    """π -> pi; ×÷−≤≥≠ -> */−(ascii)<=>=!=. Substituições literais,
-    seguras e inequívocas: nenhum desses caracteres Unicode tem outro
-    significado no sistema."""
+    """π -> pi; ∞ -> oo; ×÷−≤≥≠ -> */−(ascii)<=>=!=. Substituições
+    literais, seguras e inequívocas: nenhum desses caracteres Unicode tem
+    outro significado no sistema. "∞" -> "oo" foi adicionado na Sprint
+    12.1 para suportar limites/integrais em notação natural (ex.
+    "lim x→∞"), mas é global como "π" -> "pi" porque "∞" também não tem
+    nenhum outro significado possível fora desse contexto."""
     text = _PI_PATTERN.sub("pi", text)
+    text = _INFINITY_PATTERN.sub("oo", text)
     for symbol, replacement in _UNICODE_OPERATORS.items():
         text = text.replace(symbol, replacement)
     return text
@@ -169,7 +174,7 @@ def normalize_expression(text: str) -> str:
     """Ponto único de entrada da Sprint Parser — compõe, nesta ordem exata:
 
     1. sen²(x) -> sen(x)**2               (antes da troca de alias, preserva o nome)
-    2. π -> pi; ×÷−≤≥≠ -> ascii            (para que √π/superscripts em cima de pi funcionem)
+    2. π -> pi; ∞ -> oo; ×÷−≤≥≠ -> ascii   (para que √π/superscripts em cima de pi funcionem)
     3. √/∛ atômico ou entre parênteses -> sqrt(...)/cbrt(...)
     4. x²/(x+1)²/2⁻³ -> **2/**2/**-3       (genérico, cobre inclusive sqrt(x)² e sen(x)²)
     5. sen/tg/raiz -> sin/tan/sqrt          (por último, forma de chamada apenas)

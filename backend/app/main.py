@@ -9,7 +9,7 @@ from app.config import settings
 from app.execution import shutdown_active_processes, solve_expression_with_timeout
 from app.formatter import format_result, render_math
 from app.history import add_entry, get_history
-from app.math_engine import ExpressionError, normalize_expression, solve_expression
+from app.math_engine import ExpressionError, normalize_all, solve_expression
 from app.rate_limit import enforce_rate_limit
 from app.schemas import HistoryItem, SolveRequest, SolveResponse
 
@@ -85,16 +85,19 @@ def solve(
     except ExpressionError as exc:
         logger.warning("ExpressionError para %r: %s", request.expression, exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    # Sprint Parser — `format_result`/`guess_symbol` precisam do texto já
-    # normalizado (ASCII), não do original: um sobrescrito Unicode como
-    # "x²-4=0" faz `guess_symbol` (que usa \w, Unicode-aware) enxergar "x²"
-    # como se fosse o nome da variável, quebrando a rotulagem x₁/x₂. A
+    # Sprint Parser (+ Sprint 12.1) — `format_result`/`guess_symbol`
+    # precisam do texto já normalizado (ASCII, sintaxe técnica), não do
+    # original: um sobrescrito Unicode como "x²-4=0" faz `guess_symbol`
+    # (que usa \w, Unicode-aware) enxergar "x²" como se fosse o nome da
+    # variável, quebrando a rotulagem x₁/x₂; da mesma forma, uma entrada em
+    # notação natural de cálculo ("d/dx(x**2)") precisa virar
+    # "derivada(x**2, x)" antes de chegar em `format_result`. A
     # normalização é pura e idempotente, então recalculá-la aqui (o
     # processo isolado de `solve_expression_with_timeout` já normalizou a
     # própria cópia internamente) não muda o resultado, só evita acoplar
     # este processo ao interno do outro. `request.expression` continua
     # intocado para o histórico e a resposta.
-    normalized_expression = normalize_expression(request.expression)
+    normalized_expression = normalize_all(request.expression)
     result = render_math(format_result(normalized_expression, raw_result))
     add_entry(request.expression, result)
     logger.info("Resolvido: %r -> %r", request.expression, result)

@@ -9,6 +9,7 @@ from .analytic_geometry.dispatcher import (
     solve_analytic_geometry_text,
 )
 from .calculus.dispatcher import is_calculus_domain_expression, solve_calculus_text
+from .calculus.natural_notation import normalize_calculus_notation
 from .equations.dispatcher import is_equation_domain_expression, solve_equation_text
 from .errors import ExpressionError
 from .functions.dispatcher import is_function_domain_expression, solve_function_text
@@ -26,16 +27,30 @@ from .trigonometry.dispatcher import (
 _TRANSFORMATIONS = standard_transformations + (implicit_multiplication_application,)
 
 
+def normalize_all(expression: str) -> str:
+    """Compõe as duas camadas de normalização puramente textual, nesta
+    ordem exata: Sprint Parser (Unicode/aliases gerais) primeiro, depois
+    Sprint 12.1 (notação natural de cálculo — d/dx, ∫, lim), que já espera
+    receber o texto geral já normalizado (ex. "sen(x)" -> "sin(x)" antes de
+    "d/dx(sen(x))" virar "derivada(sin(x), x)"). Único ponto de entrada
+    usado tanto por `solve_expression` quanto por `main.py` (que recalcula
+    a normalização à parte só para formatar/rotular o resultado, nunca para
+    o histórico — ver `app/main.py`)."""
+    return normalize_calculus_notation(normalize_expression(expression))
+
+
 def solve_expression(expression: str) -> str:
     expression = expression.strip()
     if not expression:
         raise ExpressionError("A expressão não pode estar vazia.")
 
-    # Sprint Parser — normaliza Unicode/aliases ANTES de qualquer
-    # roteamento de domínio, porque os roteadores abaixo decidem por regex
-    # sobre o texto bruto (ex. "sen(x)" só é reconhecido como trigonometria
-    # depois de virar "sin(x)"). Ver docstring de `parser/normalize.py`.
-    expression = normalize_expression(expression)
+    # Sprint Parser + Sprint 12.1 — normaliza Unicode/aliases/notação
+    # natural de cálculo ANTES de qualquer roteamento de domínio, porque os
+    # roteadores abaixo decidem por regex sobre o texto bruto (ex. "sen(x)"
+    # só é reconhecido como trigonometria depois de virar "sin(x)"; "d/dx(x)"
+    # só é reconhecido como cálculo depois de virar "derivada(x, x)"). Ver
+    # docstrings de `parser/normalize.py` e `calculus/natural_notation.py`.
+    expression = normalize_all(expression)
 
     if is_analytic_geometry_domain_expression(expression):
         return solve_analytic_geometry_text(expression)

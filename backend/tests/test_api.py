@@ -146,3 +146,51 @@ def test_history_preserves_original_unicode_expression(client: TestClient) -> No
 
     assert body[0]["expression"] == "√(x+1)"
     assert body[0]["result"] == "√(x + 1)"
+
+
+# --- Sprint 12.1: notação natural de cálculo via /solve, histórico preserva o original ---
+
+def test_solve_natural_derivative_matches_technical_syntax(client: TestClient) -> None:
+    technical_response = client.post("/solve", json={"expression": "derivada(x**2, x)"})
+    natural_response = client.post("/solve", json={"expression": "d/dx(x**2)"})
+
+    assert technical_response.status_code == 200
+    assert natural_response.status_code == 200
+    assert technical_response.json()["result"] == natural_response.json()["result"]
+
+
+def test_solve_natural_integral_matches_technical_syntax(client: TestClient) -> None:
+    technical_response = client.post("/solve", json={"expression": "integral(sin(x), x)"})
+    natural_response = client.post("/solve", json={"expression": "∫ sin(x) dx"})
+
+    assert technical_response.status_code == 200
+    assert natural_response.status_code == 200
+    assert technical_response.json()["result"] == natural_response.json()["result"]
+
+
+def test_solve_natural_limit_matches_technical_syntax(client: TestClient) -> None:
+    technical_response = client.post("/solve", json={"expression": "limite(sin(x)/x, x, 0)"})
+    natural_response = client.post("/solve", json={"expression": "lim x→0 sin(x)/x"})
+
+    assert technical_response.status_code == 200
+    assert natural_response.status_code == 200
+    assert technical_response.json()["result"] == natural_response.json()["result"]
+
+
+def test_history_preserves_original_natural_calculus_notation(client: TestClient) -> None:
+    # Mesma garantia da Sprint Parser (ver test_history_preserves_original_
+    # unicode_expression acima): o histórico guarda "∫₀¹x² dx" digitado, não
+    # "integral(x**2, x, 0, 1)" internamente normalizado.
+    client.post("/solve", json={"expression": "∫₀¹x² dx"})
+
+    response = client.get("/history")
+    body = response.json()
+
+    assert body[0]["expression"] == "∫₀¹x² dx"
+    assert body[0]["result"] == "Integral definida: 1/3"
+
+
+def test_solve_one_sided_limit_natural_notation_returns_400(client: TestClient) -> None:
+    response = client.post("/solve", json={"expression": "lim x→0+ 1/x"})
+    assert response.status_code == 400
+    assert "laterais" in response.json()["detail"]
