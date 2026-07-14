@@ -1,11 +1,16 @@
-import { RoutePlaceholder } from "@/components/shared/RoutePlaceholder";
+import { Suspense } from "react";
 
+import { CalculatorWorkspace } from "@/components/calculator/CalculatorWorkspace";
+
+/**
+ * `Suspense` é exigência técnica do Next.js App Router para qualquer
+ * componente que use `useSearchParams()` (lê `?expression=...`), não uma
+ * escolha de design.
+ */
 export default function CalculadoraPage() {
   return (
-    <RoutePlaceholder
-      title="Calculadora"
-      description="A experiência completa de resolução — editor matemático, teclado, categorias e histórico — chega na Etapa 2 da Sprint Frontend V1."
-      badge="planned"
-    />
+    <Suspense fallback={null}>
+      <CalculatorWorkspace />
+    </Suspense>
   );
 }
