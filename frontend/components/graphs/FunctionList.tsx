@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 
 import { Button } from "@/components/shared/Button";
+import { FadeIn } from "@/components/shared/FadeIn";
 import { GRAPH_EXAMPLES } from "@/data/graph-examples";
 
 import type { PlotFunction } from "./types";
@@ -53,7 +54,7 @@ export function FunctionList({ functions, errors, onAdd, onToggle, onRemove }: F
             type="button"
             onClick={() => onAdd(example.expression)}
             aria-label={`Adicionar exemplo ${example.label}: ${example.expression}`}
-            className="rounded-md border border-border bg-surface px-2.5 py-1 text-xs text-text-secondary transition-colors hover:border-border-hover hover:text-text-primary"
+            className="rounded-md border border-border bg-surface px-2.5 py-1 text-xs text-text-secondary transition-colors duration-(--motion-fast) hover:border-border-hover hover:text-text-primary"
           >
             {example.label}
           </button>
@@ -67,27 +68,33 @@ export function FunctionList({ functions, errors, onAdd, onToggle, onRemove }: F
         {functions.map((fn) => {
           const error = errors.get(fn.id);
           return (
-            <li key={fn.id} className="rounded-md border border-border bg-surface p-3">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={fn.visible}
-                  onChange={() => onToggle(fn.id)}
-                  aria-label={`${fn.visible ? "Ocultar" : "Mostrar"} função ${fn.expression}`}
-                  className="h-4 w-4"
-                />
-                <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: fn.color }} />
-                <code className="flex-1 truncate text-sm text-text-primary">{fn.expression}</code>
-                <button
-                  type="button"
-                  onClick={() => onRemove(fn.id)}
-                  aria-label={`Remover função ${fn.expression}`}
-                  className="text-xs text-text-muted hover:text-danger"
-                >
-                  Remover
-                </button>
-              </div>
-              {error && <p className="mt-1 text-xs text-danger">{error}</p>}
+            <li key={fn.id}>
+              <FadeIn className="rounded-md border border-border bg-surface p-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={fn.visible}
+                    onChange={() => onToggle(fn.id)}
+                    aria-label={`${fn.visible ? "Ocultar" : "Mostrar"} função ${fn.expression}`}
+                    className="h-4 w-4"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="h-3 w-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: fn.color }}
+                  />
+                  <code className="flex-1 truncate text-sm text-text-primary">{fn.expression}</code>
+                  <button
+                    type="button"
+                    onClick={() => onRemove(fn.id)}
+                    aria-label={`Remover função ${fn.expression}`}
+                    className="text-xs text-text-muted transition-colors duration-(--motion-fast) hover:text-danger"
+                  >
+                    Remover
+                  </button>
+                </div>
+                {error && <p className="mt-1 text-xs text-danger">{error}</p>}
+              </FadeIn>
             </li>
           );
         })}

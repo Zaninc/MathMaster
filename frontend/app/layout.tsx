@@ -4,6 +4,7 @@ import "./globals.css";
 
 import { Footer } from "@/components/layout/Footer";
 import { NavBar } from "@/components/layout/NavBar";
+import { RouteTransition } from "@/components/layout/RouteTransition";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -43,9 +44,9 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} antialiased`}
     >
-      <body className="flex min-h-full flex-col bg-background text-text-primary">
+      <body className="flex min-h-screen flex-col bg-background text-text-primary">
         <a
           href="#main-content"
           className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-4 focus-visible:top-4 focus-visible:z-50 focus-visible:rounded-md focus-visible:bg-accent focus-visible:px-4 focus-visible:py-2 focus-visible:text-white"
@@ -54,7 +55,7 @@ export default function RootLayout({
         </a>
         <NavBar />
         <main id="main-content" className="flex-1">
-          {children}
+          <RouteTransition>{children}</RouteTransition>
         </main>
         <Footer />
       </body>

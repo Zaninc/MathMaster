@@ -4,6 +4,7 @@ import { Pillars } from "@/components/home/Pillars";
 import { ProgressPreview } from "@/components/home/ProgressPreview";
 import { QuickCalculator } from "@/components/home/QuickCalculator";
 import { VisualizationPreview } from "@/components/home/VisualizationPreview";
+import { RevealOnScroll } from "@/components/shared/RevealOnScroll";
 
 /**
  * Home (Etapa 1 — Sprint Frontend V1): hero, calculadora rápida, pilares,
@@ -21,10 +22,18 @@ export default function Home() {
     <>
       <Hero />
       <QuickCalculator />
-      <Pillars />
-      <ProgressPreview />
-      <VisualizationPreview />
-      <FutureTeaser />
+      <RevealOnScroll>
+        <Pillars />
+      </RevealOnScroll>
+      <RevealOnScroll>
+        <ProgressPreview />
+      </RevealOnScroll>
+      <RevealOnScroll>
+        <VisualizationPreview />
+      </RevealOnScroll>
+      <RevealOnScroll>
+        <FutureTeaser />
+      </RevealOnScroll>
     </>
   );
 }

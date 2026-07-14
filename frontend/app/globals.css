@@ -127,4 +127,14 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+
+  /* Segunda camada, mais explícita que a duração ~0 acima: garante que
+     qualquer conteúdo de entrada (transição de rota, FadeIn, reveal-on-
+     scroll — todos usam o mesmo atributo) nunca fique opaco/deslocado nem
+     por um instante, em vez de confiar só numa transição "quase
+     instantânea". */
+  [data-motion-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }

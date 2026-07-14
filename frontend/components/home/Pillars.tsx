@@ -1,5 +1,3 @@
-import { cn } from "@/lib/utils/cn";
-
 const PILLARS = [
   { title: "Ensinar", description: "Entenda conceitos, relações e resultados." },
   { title: "Acompanhar", description: "Veja sua evolução e identifique onde precisa melhorar." },
@@ -33,24 +31,21 @@ function PillarIcon({ index }: { index: number }) {
 }
 
 /**
- * Composição conectada, não três cards idênticos: bordas ligando os
- * pilares e o do meio deslocado verticalmente, para que o conjunto se leia
- * como um fluxo único (Ensinar → Acompanhar → Motivar).
+ * Composição conectada, não três cards idênticos: divisórias ligando os
+ * pilares, para que o conjunto se leia como um fluxo único (Ensinar →
+ * Acompanhar → Motivar). `grid-cols-3` + `items-stretch` (hotfix de
+ * alinhamento) garante que as três colunas tenham exatamente a mesma
+ * altura mesmo com textos de tamanhos diferentes — sem isso, `divide-x`
+ * ficaria com alturas inconsistentes entre colunas. Sem `translate-y`
+ * artificial: o pilar do meio não fica mais deslocado verticalmente.
  */
 export function Pillars() {
   return (
     <section id="pilares" className="border-b border-border py-16">
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-10 sm:flex-row sm:items-start sm:gap-0">
+        <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-3 sm:items-stretch sm:divide-x sm:divide-y-0">
           {PILLARS.map((pillar, index) => (
-            <div
-              key={pillar.title}
-              className={cn(
-                "flex flex-1 flex-col gap-3 px-4",
-                index > 0 && "sm:border-l sm:border-border",
-                index === 1 && "sm:translate-y-6"
-              )}
-            >
+            <div key={pillar.title} className="flex flex-col gap-3 px-6 py-6 sm:py-2">
               <span className="flex h-10 w-10 items-center justify-center rounded-full border border-border-hover text-accent">
                 <PillarIcon index={index} />
               </span>

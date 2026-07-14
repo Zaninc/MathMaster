@@ -4,6 +4,7 @@ import {
   buildGridValues,
   dataToPixelX,
   dataToPixelY,
+  fitViewportToAspect,
   niceStep,
   panViewport,
   pixelToDataX,
@@ -59,5 +60,40 @@ describe("niceStep", () => {
 describe("buildGridValues", () => {
   it("gera valores igualmente espaçados dentro do intervalo", () => {
     expect(buildGridValues(-10, 10, 5)).toEqual([-10, -5, 0, 5, 10]);
+  });
+});
+
+describe("fitViewportToAspect", () => {
+  it("expande o eixo x quando o container é proporcionalmente mais largo que os dados", () => {
+    const result = fitViewportToAspect(VIEWPORT, 1200, 500);
+    expect(result.yMin).toBe(-6);
+    expect(result.yMax).toBe(6);
+    expect(result.xMax - result.xMin).toBeCloseTo(12 * (1200 / 500));
+  });
+
+  it("expande o eixo y quando o container é proporcionalmente mais alto que os dados", () => {
+    const square: Viewport = { xMin: -12, xMax: 12, yMin: -12, yMax: 12 };
+    const result = fitViewportToAspect(square, 600, 900);
+    expect(result.xMin).toBe(-12);
+    expect(result.xMax).toBe(12);
+    expect(result.yMax - result.yMin).toBeCloseTo(24 / (600 / 900));
+  });
+
+  it("preserva a escala igual nos dois eixos (não distorce círculos)", () => {
+    const square: Viewport = { xMin: -12, xMax: 12, yMin: -12, yMax: 12 };
+    const result = fitViewportToAspect(square, 900, 600);
+    const scaleX = 900 / (result.xMax - result.xMin);
+    const scaleY = 600 / (result.yMax - result.yMin);
+    expect(scaleX).toBeCloseTo(scaleY);
+  });
+
+  it("não altera o viewport quando o container ainda não foi medido", () => {
+    expect(fitViewportToAspect(VIEWPORT, 0, 0)).toEqual(VIEWPORT);
+  });
+
+  it("mantém o centro fixo", () => {
+    const offCenter: Viewport = { xMin: -4, xMax: 16, yMin: -6, yMax: 6 };
+    const result = fitViewportToAspect(offCenter, 1200, 400);
+    expect((result.xMin + result.xMax) / 2).toBeCloseTo((offCenter.xMin + offCenter.xMax) / 2);
   });
 });

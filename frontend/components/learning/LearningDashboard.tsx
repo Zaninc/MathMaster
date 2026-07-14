@@ -50,7 +50,7 @@ export function LearningDashboard() {
   const nextStep = [...LEARNING_PREVIEW].sort((a, b) => a.percentage - b.percentage)[0];
 
   return (
-    <PageShell className="flex flex-col gap-10 py-10">
+    <PageShell className="flex flex-col gap-10">
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-text-primary">Seu aprendizado</h1>

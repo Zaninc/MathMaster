@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function FerramentasPage() {
   return (
-    <PageShell className="flex flex-col gap-10 py-10">
+    <PageShell className="flex flex-col gap-10">
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold text-text-primary">Ferramentas</h1>
         <p className="max-w-2xl text-sm text-text-secondary">

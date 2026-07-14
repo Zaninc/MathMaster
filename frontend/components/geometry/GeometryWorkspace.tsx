@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 
+import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/shared/Button";
+import { FadeIn } from "@/components/shared/FadeIn";
 import { apiClient } from "@/lib/api/client";
 import { ApiError, friendlyMessage } from "@/lib/api/errors";
 import {
@@ -266,136 +268,142 @@ export function GeometryWorkspace() {
   }
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[340px_minmax(0,1fr)] lg:px-8">
-      <div className="flex flex-col gap-6">
-        <div role="tablist" aria-label="Tipo de figura" className="flex flex-wrap gap-2">
-          {SHAPE_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={activeKind === tab.id}
-              onClick={() => handleSelectShape(tab.id)}
-              className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
-                activeKind === tab.id
-                  ? "border-accent text-text-primary"
-                  : "border-border text-text-secondary hover:text-text-primary"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {activeKind === "triangle" && (
-          <div className="flex flex-col gap-3">
-            <PointFieldGroup legend="Ponto A" value={triA} onChange={setTriA} />
-            <PointFieldGroup legend="Ponto B" value={triB} onChange={setTriB} />
-            <PointFieldGroup legend="Ponto C" value={triC} onChange={setTriC} />
-            <p className="text-xs text-text-muted">
-              Calculado localmente (fórmula fixa, sem chamada ao servidor).
-            </p>
+    <PageShell variant="full-workspace">
+      <div className="grid gap-6 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] lg:gap-8">
+        <div className="flex flex-col gap-6">
+          <div role="tablist" aria-label="Tipo de figura" className="flex flex-wrap gap-2">
+            {SHAPE_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={activeKind === tab.id}
+                onClick={() => handleSelectShape(tab.id)}
+                className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors duration-(--motion-fast) ${
+                  activeKind === tab.id
+                    ? "border-accent text-text-primary"
+                    : "border-border text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
-        )}
 
-        {activeKind === "circle" && (
-          <div className="flex flex-col gap-3">
-            <PointFieldGroup legend="Centro" value={circleCenter} onChange={setCircleCenter} />
-            <NumberField label="Raio" value={circleRadius} onChange={setCircleRadius} />
-            <Button type="button" onClick={handleCalculate} disabled={!shape || status === "loading"}>
-              {status === "loading" ? "Calculando..." : "Calcular"}
-            </Button>
-          </div>
-        )}
-
-        {activeKind === "line" && (
-          <div className="flex flex-col gap-3">
-            <PointFieldGroup legend="Ponto 1" value={lineP1} onChange={setLineP1} />
-            <PointFieldGroup legend="Ponto 2" value={lineP2} onChange={setLineP2} />
-            <Button type="button" onClick={handleCalculate} disabled={!shape || status === "loading"}>
-              {status === "loading" ? "Calculando..." : "Calcular"}
-            </Button>
-          </div>
-        )}
-
-        {activeKind === "parabola" && (
-          <div className="flex flex-col gap-3">
-            <PointFieldGroup legend="Vértice" value={paraVertex} onChange={setParaVertex} />
-            <PointFieldGroup legend="Foco" value={paraFocus} onChange={setParaFocus} />
-            <p className="text-xs text-text-muted">Vértice e foco precisam compartilhar x ou y (eixo alinhado).</p>
-            <Button type="button" onClick={handleCalculate} disabled={!shape || status === "loading"}>
-              {status === "loading" ? "Calculando..." : "Calcular"}
-            </Button>
-          </div>
-        )}
-
-        {activeKind === "ellipse" && (
-          <div className="flex flex-col gap-3">
-            <PointFieldGroup legend="Centro" value={ellipseCenter} onChange={setEllipseCenter} />
-            <div className="flex gap-2">
-              <NumberField label="Semieixo maior (a)" value={ellipseA} onChange={setEllipseA} />
-              <NumberField label="Semieixo menor (b)" value={ellipseB} onChange={setEllipseB} />
-            </div>
-            <Button type="button" onClick={handleCalculate} disabled={!shape || status === "loading"}>
-              {status === "loading" ? "Calculando..." : "Calcular"}
-            </Button>
-          </div>
-        )}
-
-        {activeKind === "hyperbola" && (
-          <div className="flex flex-col gap-3">
-            <PointFieldGroup legend="Centro" value={hyperCenter} onChange={setHyperCenter} />
-            <div className="flex gap-2">
-              <NumberField label="Semieixo real (a)" value={hyperA} onChange={setHyperA} />
-              <NumberField label="Semieixo imaginário (b)" value={hyperB} onChange={setHyperB} />
-            </div>
-            <Button type="button" onClick={handleCalculate} disabled={!shape || status === "loading"}>
-              {status === "loading" ? "Calculando..." : "Calcular"}
-            </Button>
-          </div>
-        )}
-
-        <div aria-live="polite" className="flex flex-col gap-2">
-          {activeKind === "triangle" && triangleStats && (
-            <div className="rounded-lg border border-border bg-surface p-3 text-sm text-text-primary">
-              <p>Área = |x_A(y_B−y_C) + x_B(y_C−y_A) + x_C(y_A−y_B)| / 2 = {fmt(triangleStats.area)}</p>
-              <p>Perímetro = AB + BC + CA = {fmt(triangleStats.perimeter)}</p>
-              <p>
-                Lados: AB = {fmt(triangleStats.ab)}, BC = {fmt(triangleStats.bc)}, CA = {fmt(triangleStats.ca)}
-              </p>
-              <p>
-                Classificação: {triangleStats.sideClass}, {triangleStats.angleClass}
+          {activeKind === "triangle" && (
+            <div className="flex flex-col gap-3">
+              <PointFieldGroup legend="Ponto A" value={triA} onChange={setTriA} />
+              <PointFieldGroup legend="Ponto B" value={triB} onChange={setTriB} />
+              <PointFieldGroup legend="Ponto C" value={triC} onChange={setTriC} />
+              <p className="text-xs text-text-muted">
+                Calculado localmente (fórmula fixa, sem chamada ao servidor).
               </p>
             </div>
           )}
-          {activeKind === "triangle" && !triangleStats && (
-            <p className="text-sm text-danger">Os três pontos não formam um triângulo válido (estão alinhados).</p>
-          )}
 
-          {activeKind === "circle" && circleStats && (
-            <div className="rounded-lg border border-border bg-surface p-3 text-sm text-text-primary">
-              <p>Área = πr² = {fmt(circleStats.area)}</p>
-              <p>Comprimento = 2πr = {fmt(circleStats.circumference)}</p>
+          {activeKind === "circle" && (
+            <div className="flex flex-col gap-3">
+              <PointFieldGroup legend="Centro" value={circleCenter} onChange={setCircleCenter} />
+              <NumberField label="Raio" value={circleRadius} onChange={setCircleRadius} />
+              <Button type="button" onClick={handleCalculate} disabled={!shape || status === "loading"}>
+                {status === "loading" ? "Calculando..." : "Calcular"}
+              </Button>
             </div>
           )}
 
-          {status === "success" && backendResult && (
-            <div className="rounded-lg border border-success/40 bg-success/10 p-3 text-sm text-text-primary">
-              <p className="text-xs text-text-muted">{backendExpression}</p>
-              <p className="mt-1">{backendResult}</p>
+          {activeKind === "line" && (
+            <div className="flex flex-col gap-3">
+              <PointFieldGroup legend="Ponto 1" value={lineP1} onChange={setLineP1} />
+              <PointFieldGroup legend="Ponto 2" value={lineP2} onChange={setLineP2} />
+              <Button type="button" onClick={handleCalculate} disabled={!shape || status === "loading"}>
+                {status === "loading" ? "Calculando..." : "Calcular"}
+              </Button>
             </div>
           )}
-          {status === "error" && backendErrorMessage && (
-            <p className="rounded-lg border border-danger/40 bg-danger/10 p-3 text-sm text-danger">
-              {backendErrorMessage}
-            </p>
+
+          {activeKind === "parabola" && (
+            <div className="flex flex-col gap-3">
+              <PointFieldGroup legend="Vértice" value={paraVertex} onChange={setParaVertex} />
+              <PointFieldGroup legend="Foco" value={paraFocus} onChange={setParaFocus} />
+              <p className="text-xs text-text-muted">Vértice e foco precisam compartilhar x ou y (eixo alinhado).</p>
+              <Button type="button" onClick={handleCalculate} disabled={!shape || status === "loading"}>
+                {status === "loading" ? "Calculando..." : "Calcular"}
+              </Button>
+            </div>
           )}
+
+          {activeKind === "ellipse" && (
+            <div className="flex flex-col gap-3">
+              <PointFieldGroup legend="Centro" value={ellipseCenter} onChange={setEllipseCenter} />
+              <div className="flex gap-2">
+                <NumberField label="Semieixo maior (a)" value={ellipseA} onChange={setEllipseA} />
+                <NumberField label="Semieixo menor (b)" value={ellipseB} onChange={setEllipseB} />
+              </div>
+              <Button type="button" onClick={handleCalculate} disabled={!shape || status === "loading"}>
+                {status === "loading" ? "Calculando..." : "Calcular"}
+              </Button>
+            </div>
+          )}
+
+          {activeKind === "hyperbola" && (
+            <div className="flex flex-col gap-3">
+              <PointFieldGroup legend="Centro" value={hyperCenter} onChange={setHyperCenter} />
+              <div className="flex gap-2">
+                <NumberField label="Semieixo real (a)" value={hyperA} onChange={setHyperA} />
+                <NumberField label="Semieixo imaginário (b)" value={hyperB} onChange={setHyperB} />
+              </div>
+              <Button type="button" onClick={handleCalculate} disabled={!shape || status === "loading"}>
+                {status === "loading" ? "Calculando..." : "Calcular"}
+              </Button>
+            </div>
+          )}
+
+          <div aria-live="polite" className="flex flex-col gap-2">
+            {activeKind === "triangle" && triangleStats && (
+              <div className="rounded-lg border border-border bg-surface p-3 text-sm text-text-primary">
+                <p>Área = |x_A(y_B−y_C) + x_B(y_C−y_A) + x_C(y_A−y_B)| / 2 = {fmt(triangleStats.area)}</p>
+                <p>Perímetro = AB + BC + CA = {fmt(triangleStats.perimeter)}</p>
+                <p>
+                  Lados: AB = {fmt(triangleStats.ab)}, BC = {fmt(triangleStats.bc)}, CA = {fmt(triangleStats.ca)}
+                </p>
+                <p>
+                  Classificação: {triangleStats.sideClass}, {triangleStats.angleClass}
+                </p>
+              </div>
+            )}
+            {activeKind === "triangle" && !triangleStats && (
+              <p className="text-sm text-danger">Os três pontos não formam um triângulo válido (estão alinhados).</p>
+            )}
+
+            {activeKind === "circle" && circleStats && (
+              <div className="rounded-lg border border-border bg-surface p-3 text-sm text-text-primary">
+                <p>Área = πr² = {fmt(circleStats.area)}</p>
+                <p>Comprimento = 2πr = {fmt(circleStats.circumference)}</p>
+              </div>
+            )}
+
+            {status === "success" && backendResult && (
+              <FadeIn>
+                <div className="rounded-lg border border-success/40 bg-success/10 p-3 text-sm text-text-primary">
+                  <p className="text-xs text-text-muted">{backendExpression}</p>
+                  <p className="mt-1">{backendResult}</p>
+                </div>
+              </FadeIn>
+            )}
+            {status === "error" && backendErrorMessage && (
+              <FadeIn>
+                <p className="rounded-lg border border-danger/40 bg-danger/10 p-3 text-sm text-danger">
+                  {backendErrorMessage}
+                </p>
+              </FadeIn>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <GeometryCanvas shape={shape} />
         </div>
       </div>
-
-      <div>
-        <GeometryCanvas shape={shape} />
-      </div>
-    </div>
+    </PageShell>
   );
 }

@@ -11,7 +11,7 @@ import { MENTOR_FEATURES } from "@/data/mentor-features";
  */
 export function MathMentorPreview() {
   return (
-    <PageShell className="flex flex-col items-center gap-10 py-16 text-center">
+    <PageShell className="flex flex-col items-center gap-10 text-center">
       <div className="flex flex-col items-center gap-3">
         <Badge variant="dev" />
         <h1 className="text-3xl font-semibold text-text-primary">Math Mentor</h1>

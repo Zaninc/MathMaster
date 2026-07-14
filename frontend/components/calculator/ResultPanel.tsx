@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/shared/Button";
+import { FadeIn } from "@/components/shared/FadeIn";
 
 import { ResultSkeleton } from "./ResultSkeleton";
 
@@ -40,28 +41,32 @@ export function ResultPanel({ status, expression, result, errorMessage, errorId,
       {status === "loading" && <ResultSkeleton />}
 
       {status === "success" && result !== null && (
-        <div className="rounded-lg border border-success/40 bg-success/10 p-4">
-          <span className="text-xs font-medium uppercase tracking-wide text-text-secondary">Resolvido</span>
-          <p className="mt-1 text-sm text-text-muted">{expression}</p>
-          <p className="mt-2 text-xl text-text-primary">{result}</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" onClick={handleCopy}>
-              {copied ? "Copiado!" : "Copiar"}
-            </Button>
-            <Button type="button" variant="secondary" onClick={onRetry}>
-              Tentar outro
-            </Button>
-            <Button type="button" variant="ghost" disabled aria-label="Ver explicação — recurso em breve">
-              Ver explicação (em breve)
-            </Button>
+        <FadeIn>
+          <div className="rounded-lg border border-success/40 bg-success/10 p-4">
+            <span className="text-xs font-medium uppercase tracking-wide text-text-secondary">Resolvido</span>
+            <p className="mt-1 text-sm text-text-muted">{expression}</p>
+            <p className="mt-2 text-xl text-text-primary">{result}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={handleCopy}>
+                {copied ? "Copiado!" : "Copiar"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={onRetry}>
+                Tentar outro
+              </Button>
+              <Button type="button" variant="ghost" disabled aria-label="Ver explicação — recurso em breve">
+                Ver explicação (em breve)
+              </Button>
+            </div>
           </div>
-        </div>
+        </FadeIn>
       )}
 
       {status === "error" && errorMessage !== null && (
-        <p id={errorId} className="rounded-lg border border-danger/40 bg-danger/10 p-4 text-sm text-danger">
-          {errorMessage}
-        </p>
+        <FadeIn>
+          <p id={errorId} className="rounded-lg border border-danger/40 bg-danger/10 p-4 text-sm text-danger">
+            {errorMessage}
+          </p>
+        </FadeIn>
       )}
     </div>
   );

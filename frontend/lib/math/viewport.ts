@@ -62,6 +62,36 @@ export function niceStep(range: number, targetCount = 8): number {
   return niceResidual * magnitude;
 }
 
+/**
+ * Expande (nunca encolhe) o eixo de dados "que sobra" para que a proporção
+ * dos dados (xRange/yRange) case com a proporção real em pixels do
+ * container medido — permite o canvas preencher 100% do espaço disponível
+ * sem letterboxing E sem distorcer círculos/proporções (mesma técnica de
+ * Desmos/GeoGebra). Mantém o centro fixo. No-op se o container ainda não
+ * foi medido (`pixelWidth`/`pixelHeight` <= 0).
+ */
+export function fitViewportToAspect(viewport: Viewport, pixelWidth: number, pixelHeight: number): Viewport {
+  if (pixelWidth <= 0 || pixelHeight <= 0) return viewport;
+
+  const dataWidth = viewport.xMax - viewport.xMin;
+  const dataHeight = viewport.yMax - viewport.yMin;
+  const dataAspect = dataWidth / dataHeight;
+  const pixelAspect = pixelWidth / pixelHeight;
+
+  if (Math.abs(dataAspect - pixelAspect) < 1e-9) return viewport;
+
+  const centerX = (viewport.xMin + viewport.xMax) / 2;
+  const centerY = (viewport.yMin + viewport.yMax) / 2;
+
+  if (dataAspect < pixelAspect) {
+    const newHalfWidth = (dataHeight * pixelAspect) / 2;
+    return { ...viewport, xMin: centerX - newHalfWidth, xMax: centerX + newHalfWidth };
+  }
+
+  const newHalfHeight = dataWidth / pixelAspect / 2;
+  return { ...viewport, yMin: centerY - newHalfHeight, yMax: centerY + newHalfHeight };
+}
+
 export function buildGridValues(min: number, max: number, step: number): number[] {
   const values: number[] = [];
   const start = Math.ceil(min / step) * step;

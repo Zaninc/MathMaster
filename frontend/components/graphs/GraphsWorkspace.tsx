@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { PageShell } from "@/components/layout/PageShell";
 import { compilePlotFunction, PlotExpressionError, type PlotFn } from "@/lib/math/plot-evaluator";
 import { DEFAULT_VIEWPORT, type Viewport } from "@/lib/math/viewport";
 
@@ -69,19 +70,21 @@ export function GraphsWorkspace() {
   }
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:px-8">
-      <aside>
-        <FunctionList
-          functions={functions}
-          errors={errors}
-          onAdd={handleAdd}
-          onToggle={handleToggle}
-          onRemove={handleRemove}
-        />
-      </aside>
-      <div>
-        <GraphCanvas functions={functions} compiled={compiled} viewport={viewport} onViewportChange={setViewport} />
+    <PageShell variant="full-workspace">
+      <div className="grid gap-6 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] lg:gap-8">
+        <aside>
+          <FunctionList
+            functions={functions}
+            errors={errors}
+            onAdd={handleAdd}
+            onToggle={handleToggle}
+            onRemove={handleRemove}
+          />
+        </aside>
+        <div>
+          <GraphCanvas functions={functions} compiled={compiled} viewport={viewport} onViewportChange={setViewport} />
+        </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

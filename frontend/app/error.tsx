@@ -11,7 +11,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
   }, [error]);
 
   return (
-    <PageShell className="flex flex-col items-center gap-4 py-24 text-center">
+    <PageShell className="flex flex-col items-center gap-4 text-center">
       <p className="text-sm font-medium text-text-muted">Erro inesperado</p>
       <h1 className="text-2xl font-semibold text-text-primary">Algo deu errado por aqui.</h1>
       <p className="max-w-md text-text-secondary">
