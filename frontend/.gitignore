@@ -32,6 +32,11 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...exceto o(s) arquivo(s) de exemplo — não contêm segredo, servem de
+# documentação das variáveis esperadas (achado da auditoria da Sprint
+# Frontend V1, Etapa 0: o próprio .env.local.example nunca tinha sido
+# versionado por causa do padrão acima).
+!.env*.example
 
 # vercel
 .vercel

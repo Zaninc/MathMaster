@@ -1,26 +1,130 @@
 @import "tailwindcss";
 
+/* MathMaster — Design Tokens (Frontend V1, Etapa 0)
+ *
+ * Dark-only nesta versão (decisão da auditoria da Sprint Frontend V1):
+ * "dark-first" no briefing de produto + "botão de tema apenas se
+ * realmente necessário" na navegação levaram a não construir um segundo
+ * tema completo sem necessidade comprovada. Reavaliar se um toggle
+ * claro/escuro for pedido explicitamente no futuro.
+ *
+ * Escala tipográfica (modular 1.25) e escala de espaçamento (base 4px)
+ * reaproveitam UI_UX.md §2.3/§2.4 — só a paleta de cor é definida por
+ * este documento (autoridade de tokens da Sprint Frontend V1).
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* cor */
+  --background: #05070d;
+  --surface: #0d1220;
+  --surface-elevated: #131a2c;
+  --border: #202a42;
+  --border-hover: #33415f;
+  --text-primary: #f2f4f8;
+  --text-secondary: #9aa4bb;
+  --text-muted: #5f6b85;
+  --accent: #3d6eff;
+  --accent-hover: #5c86ff;
+  --accent-secondary: #22d3ee;
+  --success: #34d399;
+  --warning: #f5a524;
+  --danger: #ef4b4b;
+
+  /* raio */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 999px;
+
+  /* sombra — luminância sutil, não drop-shadow pesado (dark-first) */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-3: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-4: 0 16px 48px rgba(0, 0, 0, 0.55);
+
+  /* espaçamento — base 4px (UI_UX.md §2.4) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* tipografia — modular 1.25 (UI_UX.md §2.3) */
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-base: 16px;
+  --font-size-md: 20px;
+  --font-size-lg: 25px;
+  --font-size-xl: 31px;
+  --font-size-2xl: 39px;
+  --font-size-3xl: 49px;
+
+  /* movimento */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 320ms;
+  --motion-easing: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @theme inline {
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-border: var(--border);
+  --color-border-hover: var(--border-hover);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-secondary: var(--accent-secondary);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-full: var(--radius-full);
+
+  --font-size-xs: var(--font-size-xs);
+  --font-size-sm: var(--font-size-sm);
+  --font-size-base: var(--font-size-base);
+  --font-size-md: var(--font-size-md);
+  --font-size-lg: var(--font-size-lg);
+  --font-size-xl: var(--font-size-xl);
+  --font-size-2xl: var(--font-size-2xl);
+  --font-size-3xl: var(--font-size-3xl);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: dark;
 }
 
 body {
   background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--text-primary);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
