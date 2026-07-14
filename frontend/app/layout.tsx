@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,10 +15,24 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_DESCRIPTION = "MathMaster — Ensinar, acompanhar e motivar através da matemática.";
+
 export const metadata: Metadata = {
-  title: "MathMaster — Ensinar, acompanhar e motivar através da matemática",
-  description:
-    "MathMaster — Ensinar, acompanhar e motivar através da matemática.",
+  title: {
+    default: "MathMaster — Ensinar, acompanhar e motivar através da matemática",
+    template: "%s — MathMaster",
+  },
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    title: "MathMaster",
+    description: SITE_DESCRIPTION,
+    locale: "pt_BR",
+    type: "website",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#05070d",
 };
 
 export default function RootLayout({
@@ -32,8 +46,16 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background text-text-primary">
+        <a
+          href="#main-content"
+          className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-4 focus-visible:top-4 focus-visible:z-50 focus-visible:rounded-md focus-visible:bg-accent focus-visible:px-4 focus-visible:py-2 focus-visible:text-white"
+        >
+          Pular para o conteúdo
+        </a>
         <NavBar />
-        <main className="flex-1">{children}</main>
+        <main id="main-content" className="flex-1">
+          {children}
+        </main>
         <Footer />
       </body>
     </html>

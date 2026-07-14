@@ -1,6 +1,12 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { CalculatorWorkspace } from "@/components/calculator/CalculatorWorkspace";
+
+export const metadata: Metadata = {
+  title: "Calculadora",
+  description: "Resolva álgebra, funções, trigonometria, geometria analítica e cálculo com o motor real do MathMaster.",
+};
 
 /**
  * `Suspense` é exigência técnica do Next.js App Router para qualquer
