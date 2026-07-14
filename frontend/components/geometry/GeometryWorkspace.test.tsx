@@ -19,7 +19,7 @@ describe("GeometryWorkspace", () => {
     render(<GeometryWorkspace />);
 
     // valores padrão: A(0,0) B(8,0) C(0,5) -> retângulo, área 20
-    expect(screen.getByText(/= 20/)).toBeInTheDocument();
+    expect(screen.getByText("20")).toBeInTheDocument();
     expect(screen.getByText(/retângulo/)).toBeInTheDocument();
     expect(apiClient.solve).not.toHaveBeenCalled();
   });
@@ -42,7 +42,8 @@ describe("GeometryWorkspace", () => {
     render(<GeometryWorkspace />);
     fireEvent.click(screen.getByRole("tab", { name: "Círculo" }));
 
-    expect(screen.getByText(/πr² = 78.54/)).toBeInTheDocument();
+    expect(screen.getByText("πr²")).toBeInTheDocument();
+    expect(screen.getByText("78.54")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Calcular" }));
 

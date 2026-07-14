@@ -19,7 +19,9 @@ import {
   type Point,
 } from "@/lib/math/geometry";
 
+import { CircleResultPanel } from "./CircleResultPanel";
 import { GeometryCanvas } from "./GeometryCanvas";
+import { TriangleResultPanel } from "./TriangleResultPanel";
 import type { GeometryShape } from "./types";
 
 type ShapeKind = "triangle" | "circle" | "line" | "parabola" | "ellipse" | "hyperbola";
@@ -36,10 +38,6 @@ const SHAPE_TABS: { id: ShapeKind; label: string; source: "local" | "backend" }[
 function toNumber(value: string): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : NaN;
-}
-
-function fmt(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
 interface PointFields {
@@ -359,28 +357,8 @@ export function GeometryWorkspace() {
           )}
 
           <div aria-live="polite" className="flex flex-col gap-2">
-            {activeKind === "triangle" && triangleStats && (
-              <div className="rounded-lg border border-border bg-surface p-3 text-sm text-text-primary">
-                <p>Área = |x_A(y_B−y_C) + x_B(y_C−y_A) + x_C(y_A−y_B)| / 2 = {fmt(triangleStats.area)}</p>
-                <p>Perímetro = AB + BC + CA = {fmt(triangleStats.perimeter)}</p>
-                <p>
-                  Lados: AB = {fmt(triangleStats.ab)}, BC = {fmt(triangleStats.bc)}, CA = {fmt(triangleStats.ca)}
-                </p>
-                <p>
-                  Classificação: {triangleStats.sideClass}, {triangleStats.angleClass}
-                </p>
-              </div>
-            )}
-            {activeKind === "triangle" && !triangleStats && (
-              <p className="text-sm text-danger">Os três pontos não formam um triângulo válido (estão alinhados).</p>
-            )}
-
-            {activeKind === "circle" && circleStats && (
-              <div className="rounded-lg border border-border bg-surface p-3 text-sm text-text-primary">
-                <p>Área = πr² = {fmt(circleStats.area)}</p>
-                <p>Comprimento = 2πr = {fmt(circleStats.circumference)}</p>
-              </div>
-            )}
+            {activeKind === "triangle" && <TriangleResultPanel stats={triangleStats} />}
+            {activeKind === "circle" && <CircleResultPanel stats={circleStats} />}
 
             {status === "success" && backendResult && (
               <FadeIn>
