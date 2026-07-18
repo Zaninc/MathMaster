@@ -1,3 +1,4 @@
+import { MathFormula } from "@/components/shared/MathFormula";
 import { formatNumber } from "@/lib/utils/format";
 
 import { ResultGroup } from "./ResultGroup";
@@ -24,12 +25,13 @@ interface TriangleResultPanelProps {
 /**
  * Puramente de apresentação — recebe os valores já calculados por
  * `GeometryWorkspace` (`lib/math/geometry.ts`), nunca recalcula nada.
- * `<sub>` HTML real para os índices A/B/C (não um lookalike Unicode —
- * Unicode não tem subscrito real para "b"/"c"). `break-words` +
- * `overflow-wrap:anywhere` (via `ResultGroup`) em vez de `break-all`:
- * quebra em espaços/pontos naturais primeiro, só força quebra no meio de
- * um token se não houver alternativa — a coluna lateral (280-340px) nunca
- * estoura horizontalmente.
+ * Fórmulas simbólicas renderizadas via `MathFormula` (KaTeX): notação
+ * real (frações, barras de valor absoluto, subscritos), não aproximação
+ * textual. A fórmula da área quebra em duas linhas (`aligned`, quebra
+ * antes do último termo) para caber inteira na coluna lateral
+ * (280-340px) sem scroll horizontal — `\bigl|`/`\bigr|` porque
+ * `\left|`/`\right|` não podem cruzar quebras de linha, `\tfrac` para
+ * altura compacta. Centralizada (padrão do display mode do KaTeX).
  */
 export function TriangleResultPanel({ stats }: TriangleResultPanelProps) {
   if (!stats) {
@@ -39,24 +41,35 @@ export function TriangleResultPanel({ stats }: TriangleResultPanelProps) {
   return (
     <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-surface">
       <ResultGroup label="Área">
-        <p className="break-words text-text-secondary">
-          |x<sub>A</sub>(y<sub>B</sub> − y<sub>C</sub>) + x<sub>B</sub>(y<sub>C</sub> − y<sub>A</sub>) + x
-          <sub>C</sub>(y<sub>A</sub> − y<sub>B</sub>)| / 2
-        </p>
+        <MathFormula
+          formula="\begin{aligned} A &= \tfrac{1}{2}\,\bigl|\,x_A(y_B - y_C) + x_B(y_C - y_A) \\ &\quad + x_C(y_A - y_B)\,\bigr| \end{aligned}"
+          displayMode
+          className="text-text-secondary"
+        />
         <p className="mt-1 text-lg font-semibold text-text-primary">{formatNumber(stats.area)}</p>
       </ResultGroup>
 
       <ResultGroup label="Perímetro">
         <p>
-          AB + BC + CA = <span className="font-semibold text-text-primary">{formatNumber(stats.perimeter)}</span>
+          <MathFormula
+            formula="P = \overline{AB} + \overline{BC} + \overline{CA} ="
+            className="text-text-secondary"
+          />{" "}
+          <span className="font-semibold text-text-primary">{formatNumber(stats.perimeter)}</span>
         </p>
       </ResultGroup>
 
       <ResultGroup label="Lados">
         <div className="flex flex-col gap-0.5">
-          <p>AB = {formatNumber(stats.ab)}</p>
-          <p>BC = {formatNumber(stats.bc)}</p>
-          <p>CA = {formatNumber(stats.ca)}</p>
+          <p>
+            <MathFormula formula={`\\overline{AB} = ${formatNumber(stats.ab)}`} />
+          </p>
+          <p>
+            <MathFormula formula={`\\overline{BC} = ${formatNumber(stats.bc)}`} />
+          </p>
+          <p>
+            <MathFormula formula={`\\overline{CA} = ${formatNumber(stats.ca)}`} />
+          </p>
         </div>
       </ResultGroup>
 

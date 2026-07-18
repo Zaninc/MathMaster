@@ -42,7 +42,10 @@ describe("GeometryWorkspace", () => {
     render(<GeometryWorkspace />);
     fireEvent.click(screen.getByRole("tab", { name: "Círculo" }));
 
-    expect(screen.getByText("πr²")).toBeInTheDocument();
+    const areaFormula = Array.from(document.querySelectorAll("annotation")).find(
+      (node) => node.textContent === "A = \\pi r^2"
+    );
+    expect(areaFormula).toBeDefined();
     expect(screen.getByText("78.54")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Calcular" }));

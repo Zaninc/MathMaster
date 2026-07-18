@@ -49,6 +49,10 @@ data/           # configuração estática (navegação, exemplos, teclado matem
 - **Aprendizado**: 100% dados demonstrativos (`data/learning-preview.ts`), rotulados com `<Badge variant="preview">` — a Learning Engine real ainda não existe no backend. A única seção real da página é "Atividade recente", que usa `/history` de verdade.
 - **IA (Math Mentor)**: puramente conceitual, `<Badge variant="dev">`, input desabilitado.
 
+## Renderização matemática (KaTeX)
+
+Todo LaTeX exibido ao usuário passa por `components/shared/MathFormula.tsx` — fundação única de renderização matemática (KaTeX via `katex.renderToString`, SSR-safe e determinística, MathML embutido para leitores de tela, fallback gracioso para LaTeX inválido). Hoje é usada nos painéis de resultado de Geometria (`TriangleResultPanel`/`CircleResultPanel`); calculadora, histórico e o futuro editor devem reutilizar o mesmo componente em vez de renderizar KaTeX diretamente. O CSS do KaTeX é importado pelo próprio componente, então só entra nas rotas que exibem fórmulas.
+
 ## Testes
 
 Vitest + React Testing Library (`jsdom`). Arquivos de teste ficam ao lado do código-fonte (`*.test.ts`/`*.test.tsx`), não em uma pasta separada. Cobertura inclui lógica pura (cliente de API, inserção no cursor, avaliador de plotagem sandboxed, geometria) e componentes com estado (fluxos de sucesso/erro/loading).
