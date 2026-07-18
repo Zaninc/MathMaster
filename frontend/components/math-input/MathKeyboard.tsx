@@ -2,6 +2,7 @@
 
 import { KeyboardEvent, useState } from "react";
 
+import { MathFormula } from "@/components/shared/MathFormula";
 import { KEYBOARD_CATEGORIES } from "@/data/keyboard";
 import { cn } from "@/lib/utils/cn";
 
@@ -72,9 +73,19 @@ export function MathKeyboard({ onInsert }: MathKeyboardProps) {
             type="button"
             onClick={() => onInsert(key.insert, key.cursorOffset)}
             aria-label={key.ariaLabel ?? `Inserir ${key.label}`}
-            className="min-h-11 rounded-md border border-border bg-background px-2 py-2 text-sm text-text-primary transition-colors hover:border-border-hover hover:bg-surface-elevated"
+            className="min-h-11 overflow-hidden rounded-md border border-border bg-background px-2 py-2 text-sm text-text-primary transition-colors hover:border-border-hover hover:bg-surface-elevated"
           >
-            {key.label}
+            {/* `latex` é só apresentação (Sprint KaTeX Fase 5): o clique
+                continua inserindo `key.insert` intocado. `aria-hidden` no
+                span porque o nome acessível já vem do aria-label do botão —
+                o MathML interno do KaTeX não deve ser lido em duplicata. */}
+            {key.latex !== undefined ? (
+              <span aria-hidden="true">
+                <MathFormula formula={key.latex} />
+              </span>
+            ) : (
+              key.label
+            )}
           </button>
         ))}
       </div>

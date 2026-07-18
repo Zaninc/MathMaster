@@ -1,5 +1,5 @@
 export interface KeyboardKey {
-  /** Texto exibido no botão. */
+  /** Texto exibido no botão (fallback quando não há `latex`). */
   label: string;
   /** Texto inserido na posição do cursor. */
   insert: string;
@@ -7,6 +7,15 @@ export interface KeyboardKey {
   cursorOffset: number;
   /** Rótulo acessível quando o glifo do botão não é autoexplicativo para leitor de tela. */
   ariaLabel?: string;
+  /**
+   * Rótulo visual em LaTeX (renderizado via `MathFormula`) — APRESENTAÇÃO
+   * apenas: `insert` continua sendo a única string que entra no input.
+   * Toda tecla com `latex` DEVE ter `ariaLabel` (o KaTeX visual fica
+   * `aria-hidden`; o nome acessível vem do botão) — invariante garantido
+   * por teste. Só usado onde há ganho tipográfico real (frações,
+   * raízes, expoentes); glifo/texto simples fica sem.
+   */
+  latex?: string;
 }
 
 export interface KeyboardCategory {
@@ -29,12 +38,12 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
     label: "Básico",
     keys: [
       { label: "( )", insert: "()", cursorOffset: 1, ariaLabel: "Inserir parênteses" },
-      { label: "x²", insert: "²", cursorOffset: 1, ariaLabel: "Inserir expoente 2" },
-      { label: "x³", insert: "³", cursorOffset: 1, ariaLabel: "Inserir expoente 3" },
-      { label: "xⁿ", insert: "**", cursorOffset: 2, ariaLabel: "Inserir potência" },
-      { label: "a/b", insert: "()/()", cursorOffset: 1, ariaLabel: "Inserir fração" },
-      { label: "√", insert: "√()", cursorOffset: 2, ariaLabel: "Inserir raiz quadrada" },
-      { label: "∛", insert: "∛()", cursorOffset: 2, ariaLabel: "Inserir raiz cúbica" },
+      { label: "x²", insert: "²", cursorOffset: 1, ariaLabel: "Inserir expoente 2", latex: "x^2" },
+      { label: "x³", insert: "³", cursorOffset: 1, ariaLabel: "Inserir expoente 3", latex: "x^3" },
+      { label: "xⁿ", insert: "**", cursorOffset: 2, ariaLabel: "Inserir potência", latex: "x^n" },
+      { label: "a/b", insert: "()/()", cursorOffset: 1, ariaLabel: "Inserir fração", latex: "\\dfrac{a}{b}" },
+      { label: "√", insert: "√()", cursorOffset: 2, ariaLabel: "Inserir raiz quadrada", latex: "\\sqrt{x}" },
+      { label: "∛", insert: "∛()", cursorOffset: 2, ariaLabel: "Inserir raiz cúbica", latex: "\\sqrt[3]{x}" },
       { label: "=", insert: "=", cursorOffset: 1, ariaLabel: "Inserir igual" },
     ],
   },
@@ -63,15 +72,16 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
     keys: [
       { label: "f(x) =", insert: "f(x) = ", cursorOffset: 7, ariaLabel: "Inserir definição de função" },
       { label: "f( )", insert: "f()", cursorOffset: 2, ariaLabel: "Inserir avaliação de função" },
-      { label: "log", insert: "log()", cursorOffset: 4, ariaLabel: "Inserir logaritmo de base 10" },
-      { label: "ln", insert: "ln()", cursorOffset: 3, ariaLabel: "Inserir logaritmo natural" },
+      { label: "log", insert: "log()", cursorOffset: 4, ariaLabel: "Inserir logaritmo de base 10", latex: "\\log" },
+      { label: "ln", insert: "ln()", cursorOffset: 3, ariaLabel: "Inserir logaritmo natural", latex: "\\ln" },
       {
         label: "logₐ",
         insert: "log()/log()",
         cursorOffset: 4,
         ariaLabel: "Inserir logaritmo de base arbitrária (mudança de base: log do argumento dividido por log da base)",
+        latex: "\\log_a",
       },
-      { label: "eˣ", insert: "exp()", cursorOffset: 4, ariaLabel: "Inserir exponencial de base e" },
+      { label: "eˣ", insert: "exp()", cursorOffset: 4, ariaLabel: "Inserir exponencial de base e", latex: "e^x" },
     ],
   },
   {
@@ -81,17 +91,17 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
       { label: "sen", insert: "sen()", cursorOffset: 4, ariaLabel: "Inserir seno" },
       { label: "cos", insert: "cos()", cursorOffset: 4, ariaLabel: "Inserir cosseno" },
       { label: "tg", insert: "tg()", cursorOffset: 3, ariaLabel: "Inserir tangente" },
-      { label: "π", insert: "π", cursorOffset: 1, ariaLabel: "Inserir pi" },
+      { label: "π", insert: "π", cursorOffset: 1, ariaLabel: "Inserir pi", latex: "\\pi" },
     ],
   },
   {
     id: "calculo",
     label: "Cálculo",
     keys: [
-      { label: "d/dx", insert: "d/dx()", cursorOffset: 5, ariaLabel: "Inserir derivada" },
-      { label: "∫ dx", insert: "∫() dx", cursorOffset: 2, ariaLabel: "Inserir integral indefinida" },
-      { label: "lim", insert: "lim x→0 ", cursorOffset: 8, ariaLabel: "Inserir limite" },
-      { label: "∞", insert: "∞", cursorOffset: 1, ariaLabel: "Inserir infinito" },
+      { label: "d/dx", insert: "d/dx()", cursorOffset: 5, ariaLabel: "Inserir derivada", latex: "\\dfrac{d}{dx}" },
+      { label: "∫ dx", insert: "∫() dx", cursorOffset: 2, ariaLabel: "Inserir integral indefinida", latex: "\\int dx" },
+      { label: "lim", insert: "lim x→0 ", cursorOffset: 8, ariaLabel: "Inserir limite", latex: "\\lim" },
+      { label: "∞", insert: "∞", cursorOffset: 1, ariaLabel: "Inserir infinito", latex: "\\infty" },
     ],
   },
   {
@@ -123,14 +133,14 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
     id: "simbolos",
     label: "Símbolos",
     keys: [
-      { label: "π", insert: "π", cursorOffset: 1, ariaLabel: "Inserir pi" },
+      { label: "π", insert: "π", cursorOffset: 1, ariaLabel: "Inserir pi", latex: "\\pi" },
       { label: "e", insert: "e", cursorOffset: 1, ariaLabel: "Inserir número de Euler" },
-      { label: "∞", insert: "∞", cursorOffset: 1, ariaLabel: "Inserir infinito" },
+      { label: "∞", insert: "∞", cursorOffset: 1, ariaLabel: "Inserir infinito", latex: "\\infty" },
       { label: "→", insert: "→", cursorOffset: 1, ariaLabel: "Inserir seta (usada em limites)" },
       { label: "≤", insert: "≤", cursorOffset: 1, ariaLabel: "Inserir menor ou igual" },
       { label: "≥", insert: "≥", cursorOffset: 1, ariaLabel: "Inserir maior ou igual" },
       { label: "≠", insert: "≠", cursorOffset: 1, ariaLabel: "Inserir diferente" },
-      { label: "∫", insert: "∫", cursorOffset: 1, ariaLabel: "Inserir integral" },
+      { label: "∫", insert: "∫", cursorOffset: 1, ariaLabel: "Inserir integral", latex: "\\int" },
     ],
   },
 ];

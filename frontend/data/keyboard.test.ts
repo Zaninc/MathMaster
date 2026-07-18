@@ -47,6 +47,30 @@ describe("KEYBOARD_CATEGORIES", () => {
     }
   });
 
+  it("toda tecla com latex tem ariaLabel (o KaTeX visual é aria-hidden no botão)", () => {
+    for (const category of KEYBOARD_CATEGORIES) {
+      for (const key of category.keys) {
+        if (key.latex !== undefined) {
+          expect(key.ariaLabel, `${category.id}/${key.label}`).toBeDefined();
+          expect(key.latex.length).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
+  it("teclas promovidas a LaTeX usam a notação esperada", () => {
+    const byLabel = new Map(
+      KEYBOARD_CATEGORIES.flatMap((category) => category.keys).map((key) => [key.label, key])
+    );
+    expect(byLabel.get("x²")?.latex).toBe("x^2");
+    expect(byLabel.get("a/b")?.latex).toBe("\\dfrac{a}{b}");
+    expect(byLabel.get("√")?.latex).toBe("\\sqrt{x}");
+    expect(byLabel.get("logₐ")?.latex).toBe("\\log_a");
+    expect(byLabel.get("eˣ")?.latex).toBe("e^x");
+    expect(byLabel.get("d/dx")?.latex).toBe("\\dfrac{d}{dx}");
+    expect(byLabel.get("lim")?.latex).toBe("\\lim");
+  });
+
   it("cursor das teclas de log/ln/exp cai dentro do primeiro parêntese", () => {
     const funcoes = KEYBOARD_CATEGORIES.find((category) => category.id === "funcoes");
     for (const label of ["log", "ln", "logₐ", "eˣ"]) {
