@@ -27,7 +27,7 @@ describe("MathKeyboard", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Inserir raiz quadrada" }));
     expect(onInsert).toHaveBeenCalledWith(
-      expect.objectContaining({ insert: "sqrt()", cursorOffset: 5 })
+      expect.objectContaining({ insert: "√()", cursorOffset: 2 })
     );
   });
 

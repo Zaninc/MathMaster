@@ -1,4 +1,5 @@
 import { env } from "@/lib/config/env";
+import { normalizeForBackend } from "@/lib/math/backend-normalize";
 import { ApiError, classifyResponseError } from "./errors";
 import type { HistoryItem, SolveResponse } from "./types";
 
@@ -48,9 +49,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const apiClient = {
   solve(expression: string): Promise<SolveResponse> {
+    // Fronteira única de envio: os templates visuais do teclado (eˣ(, ⁿ)
+    // são traduzidos para a sintaxe canônica AQUI, e só aqui — o valor
+    // visível no input e o preview nunca são alterados.
     return request<SolveResponse>("/solve", {
       method: "POST",
-      body: JSON.stringify({ expression }),
+      body: JSON.stringify({ expression: normalizeForBackend(expression) }),
     });
   },
   getHistory(): Promise<HistoryItem[]> {

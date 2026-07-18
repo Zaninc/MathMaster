@@ -18,13 +18,13 @@ export interface KeyboardKey {
   latex?: string;
   /**
    * Comportamento alternativo quando há texto SELECIONADO no input: a
-   * seleção é preservada e `selection.insert` é acrescentado logo após
-   * ela (ex. selecionar "x" e clicar em xⁿ → "x**()"), com
-   * `selection.cursorOffset` medido a partir do fim da seleção. Sem este
-   * campo, a seleção é substituída por `insert` (comportamento padrão de
+   * seleção é preservada e envolvida (`before` + seleção + `after` — ex.
+   * selecionar "x" e clicar em xⁿ → "(x)ⁿ"), com o cursor posicionado a
+   * `cursorFromEnd` caracteres do fim do texto inserido. Sem este campo,
+   * a seleção é substituída por `insert` (comportamento padrão de
    * qualquer input de texto).
    */
-  selection?: { insert: string; cursorOffset: number };
+  selection?: { before: string; after: string; cursorFromEnd: number };
 }
 
 export interface KeyboardCategory {
@@ -34,12 +34,15 @@ export interface KeyboardCategory {
 }
 
 /**
- * Toda entrada aqui gera texto na MESMA sintaxe que o backend já aceita
- * (Unicode nativo via Sprint Parser/Sprint 12.1, ou sintaxe técnica de
- * geometria/cálculo) — nenhuma tradução acontece depois, o texto inserido
- * é literalmente o que vai para `apiClient.solve()`. Todas as strings
- * abaixo foram validadas manualmente contra o backend real antes desta
- * etapa ser considerada pronta (mesma disciplina da Etapa 1).
+ * Regra central: o usuário enxerga no campo praticamente o mesmo símbolo
+ * que clicou. Quase toda tecla gera texto na MESMA sintaxe que o backend
+ * já aceita (Unicode nativo via Sprint Parser/Sprint 12.1, ou sintaxe
+ * técnica de geometria/cálculo). As DUAS únicas exceções são os
+ * marcadores visuais "ⁿ" (xⁿ) e "eˣ(" (exponencial), não digitáveis em
+ * teclado físico, traduzidos para "**n"/"exp(" por
+ * `lib/math/backend-normalize.ts` exclusivamente na fronteira de envio
+ * (`apiClient.solve()`). Todas as strings abaixo foram validadas contra o
+ * backend real (mesma disciplina da Etapa 1).
  */
 export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
   {
@@ -51,22 +54,25 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
       { label: "x³", insert: "³", cursorOffset: 1, ariaLabel: "Inserir expoente 3", latex: "x^3" },
       {
         label: "xⁿ",
-        // Nunca "**" cru (entrada inutilizável): template completo com a
-        // mesma convenção da fração (cursor no 1º parêntese). Com
-        // seleção, a base selecionada é preservada: "x" -> "x**()".
-        insert: "()**()",
+        // Regra central: o input mostra o que o botão promete. "ⁿ"
+        // (U+207F, não digitável em teclado físico) é o marcador oficial
+        // do template — `normalizeForBackend` o traduz para "**n" só na
+        // fronteira de envio. Nunca "**" cru (entrada inutilizável). Com
+        // seleção, a base é preservada e envolvida: "x" -> "(x)ⁿ".
+        insert: "()ⁿ",
         cursorOffset: 1,
         ariaLabel: "Inserir potência",
         latex: "x^n",
-        selection: { insert: "**()", cursorOffset: 3 },
+        selection: { before: "(", after: ")ⁿ", cursorFromEnd: 0 },
       },
       { label: "a/b", insert: "()/()", cursorOffset: 1, ariaLabel: "Inserir fração", latex: "\\dfrac{a}{b}" },
-      // Raízes em ASCII canônico (sqrt/cbrt, validado contra o backend em
-      // 2026-07-18; root(8,3) é REJEITADO): a mesma string aparece no
-      // input, na origem do preview e no payload do backend — o glifo
-      // √/∛ fica só no rótulo visual (latex).
-      { label: "√", insert: "sqrt()", cursorOffset: 5, ariaLabel: "Inserir raiz quadrada", latex: "\\sqrt{x}" },
-      { label: "∛", insert: "cbrt()", cursorOffset: 5, ariaLabel: "Inserir raiz cúbica", latex: "\\sqrt[3]{x}" },
+      // Raízes em Unicode visual — o usuário enxerga no campo o mesmo
+      // símbolo do botão. O backend aceita √()/∛() NATIVAMENTE (Sprint
+      // Parser dele; validado em 2026-07-18: √(9)->3, ∛(8)->2), então
+      // não há normalização no envio — reescrever aqui duplicaria o
+      // parser do backend.
+      { label: "√", insert: "√()", cursorOffset: 2, ariaLabel: "Inserir raiz quadrada", latex: "\\sqrt{x}" },
+      { label: "∛", insert: "∛()", cursorOffset: 2, ariaLabel: "Inserir raiz cúbica", latex: "\\sqrt[3]{x}" },
       { label: "=", insert: "=", cursorOffset: 1, ariaLabel: "Inserir igual" },
     ],
   },
@@ -104,7 +110,16 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
         ariaLabel: "Inserir logaritmo de base arbitrária (mudança de base: log do argumento dividido por log da base)",
         latex: "\\log_a",
       },
-      { label: "eˣ", insert: "exp()", cursorOffset: 4, ariaLabel: "Inserir exponencial de base e", latex: "e^x" },
+      {
+        label: "eˣ",
+        // Template visual oficial: "eˣ(" é um token único (ˣ = U+02E3,
+        // não digitável) e o parêntese é o slot do expoente —
+        // `normalizeForBackend` traduz "eˣ(" -> "exp(" só no envio.
+        insert: "eˣ()",
+        cursorOffset: 3,
+        ariaLabel: "Inserir exponencial de base e",
+        latex: "e^x",
+      },
     ],
   },
   {

@@ -37,13 +37,14 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(byLabel.get("log")?.insert).toBe("log()");
     expect(byLabel.get("ln")?.insert).toBe("ln()");
     expect(byLabel.get("logₐ")?.insert).toBe("log()/log()");
-    expect(byLabel.get("eˣ")?.insert).toBe("exp()");
+    // Template visual (regra central: o campo mostra o que o botão
+    // promete) — `normalizeForBackend` traduz para exp( só no envio.
+    expect(byLabel.get("eˣ")?.insert).toBe("eˣ()");
+    expect(byLabel.get("eˣ")?.cursorOffset).toBe(3);
 
     for (const key of funcoes?.keys ?? []) {
       expect(key.insert).not.toMatch(/e\*\*/);
       expect(key.insert).not.toMatch(/log\([^)]*,/);
-      // Inserção é sempre ASCII puro — Unicode tipográfico fica só no label.
-      expect(key.insert).toMatch(/^[\x20-\x7E]*$/);
     }
   });
 
@@ -81,28 +82,28 @@ describe("KEYBOARD_CATEGORIES", () => {
   });
 
   /**
-   * Contrato de consistência input==preview==backend (2026-07-18):
-   * raízes em ASCII canônico validado contra o backend real (sqrt/cbrt;
-   * root(8,3) é REJEITADO) e nenhuma tecla insere operador cru sem
-   * operandos (xⁿ era "**", entrada inutilizável).
+   * Regra central (2026-07-18): o input mostra o que o botão promete —
+   * raízes em Unicode visual (o backend as aceita NATIVAMENTE: √(9)->3,
+   * ∛(8)->2, validado) e templates ⁿ/eˣ( traduzidos só na fronteira de
+   * envio. Nenhuma tecla insere operador cru sem operandos.
    */
-  it("raízes usam a sintaxe ASCII canônica com cursor dentro do parêntese", () => {
+  it("raízes inserem o glifo Unicode do botão com cursor dentro do parêntese", () => {
     const byLabel = new Map(
       KEYBOARD_CATEGORIES.flatMap((category) => category.keys).map((key) => [key.label, key])
     );
-    expect(byLabel.get("√")?.insert).toBe("sqrt()");
-    expect(byLabel.get("√")?.cursorOffset).toBe(5);
-    expect(byLabel.get("∛")?.insert).toBe("cbrt()");
-    expect(byLabel.get("∛")?.cursorOffset).toBe(5);
+    expect(byLabel.get("√")?.insert).toBe("√()");
+    expect(byLabel.get("√")?.cursorOffset).toBe(2);
+    expect(byLabel.get("∛")?.insert).toBe("∛()");
+    expect(byLabel.get("∛")?.cursorOffset).toBe(2);
   });
 
-  it("xⁿ insere template completo, nunca '**' cru, e preserva seleção como base", () => {
+  it("xⁿ insere o template visual ()ⁿ, nunca '**', e envolve a seleção como base", () => {
     const power = KEYBOARD_CATEGORIES.flatMap((category) => category.keys).find(
       (key) => key.label === "xⁿ"
     );
-    expect(power?.insert).toBe("()**()");
+    expect(power?.insert).toBe("()ⁿ");
     expect(power?.cursorOffset).toBe(1);
-    expect(power?.selection).toEqual({ insert: "**()", cursorOffset: 3 });
+    expect(power?.selection).toEqual({ before: "(", after: ")ⁿ", cursorFromEnd: 0 });
   });
 
   it("nenhuma tecla insere um operador cru sem operandos", () => {

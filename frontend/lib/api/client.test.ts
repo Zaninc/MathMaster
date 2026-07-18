@@ -33,6 +33,24 @@ describe("apiClient", () => {
     expect(JSON.parse(init.body)).toEqual({ expression: "2+2" });
   });
 
+  it("solve() normaliza os templates visuais do teclado na fronteira de envio", async () => {
+    // Implementação (não mockResolvedValue): um Response só pode ter o
+    // body lido uma vez — cada chamada precisa de uma instância nova.
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(jsonResponse({ expression: "x", result: "x" })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiClient.solve("eˣ(2)");
+    await apiClient.solve("(2)ⁿ");
+    await apiClient.solve("√(9)");
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ expression: "exp(2)" });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ expression: "(2)**n" });
+    // Formas nativas do backend passam intocadas (identidade deliberada).
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ expression: "√(9)" });
+  });
+
   it("getHistory() faz GET /history e devolve a lista", async () => {
     const items = [{ expression: "2+2", result: "4", timestamp: "2026-01-01T00:00:00Z" }];
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(items)));

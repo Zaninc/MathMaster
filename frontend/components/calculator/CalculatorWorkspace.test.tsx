@@ -62,23 +62,23 @@ describe("CalculatorWorkspace", () => {
     expect(screen.getByLabelText("Expressão matemática")).toHaveValue("sen()");
   });
 
-  it("√ insere sqrt() com cursor no parêntese; completar gera preview derivado do MESMO texto", async () => {
+  it("√ insere o glifo visual √() com cursor no parêntese; completado, preview deriva do MESMO texto", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     const { container } = render(<CalculatorWorkspace />);
     const input = screen.getByLabelText<HTMLInputElement>("Expressão matemática");
 
     fireEvent.click(screen.getByRole("button", { name: "Inserir raiz quadrada" }));
-    expect(input).toHaveValue("sqrt()");
-    expect(input.selectionStart).toBe(5);
+    expect(input).toHaveValue("√()");
+    expect(input.selectionStart).toBe(2);
 
     // "digita 9" na posição do cursor
-    fireEvent.change(input, { target: { value: "sqrt(9)" } });
-    expect(input).toHaveValue("sqrt(9)");
+    fireEvent.change(input, { target: { value: "√(9)" } });
+    expect(input).toHaveValue("√(9)");
 
     await waitFor(
       () => {
         const preview = container.querySelector("p[data-latex-source]");
-        expect(preview?.getAttribute("data-latex-source")).toBe("sqrt(9)");
+        expect(preview?.getAttribute("data-latex-source")).toBe("√(9)");
       },
       { timeout: 2000 }
     );
@@ -89,20 +89,20 @@ describe("CalculatorWorkspace", () => {
     ).toBe(true);
   });
 
-  it("∛ insere cbrt() canônico; completado, preview deriva exatamente de cbrt(8)", async () => {
+  it("∛ insere o glifo visual ∛(); completado, preview deriva exatamente de ∛(8)", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     const { container } = render(<CalculatorWorkspace />);
     const input = screen.getByLabelText<HTMLInputElement>("Expressão matemática");
 
     fireEvent.click(screen.getByRole("button", { name: "Inserir raiz cúbica" }));
-    expect(input).toHaveValue("cbrt()");
-    expect(input.selectionStart).toBe(5);
+    expect(input).toHaveValue("∛()");
+    expect(input.selectionStart).toBe(2);
 
-    fireEvent.change(input, { target: { value: "cbrt(8)" } });
+    fireEvent.change(input, { target: { value: "∛(8)" } });
     await waitFor(
       () => {
         const preview = container.querySelector("p[data-latex-source]");
-        expect(preview?.getAttribute("data-latex-source")).toBe("cbrt(8)");
+        expect(preview?.getAttribute("data-latex-source")).toBe("∛(8)");
       },
       { timeout: 2000 }
     );
@@ -113,18 +113,18 @@ describe("CalculatorWorkspace", () => {
     ).toBe(true);
   });
 
-  it("xⁿ sem seleção insere o template ()**() com cursor no primeiro parêntese, nunca '**'", () => {
+  it("xⁿ sem seleção insere o template visual ()ⁿ com cursor na base, nunca '**'", () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     render(<CalculatorWorkspace />);
     const input = screen.getByLabelText<HTMLInputElement>("Expressão matemática");
 
     fireEvent.click(screen.getByRole("button", { name: "Inserir potência" }));
-    expect(input).toHaveValue("()**()");
+    expect(input).toHaveValue("()ⁿ");
     expect(input).not.toHaveValue("**");
     expect(input.selectionStart).toBe(1);
   });
 
-  it("xⁿ com seleção preserva a base selecionada: 'x' vira x**() com cursor no expoente", () => {
+  it("xⁿ com seleção envolve a base preservada: 'x' vira (x)ⁿ com cursor após o expoente", () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     render(<CalculatorWorkspace />);
     const input = screen.getByLabelText<HTMLInputElement>("Expressão matemática");
@@ -133,8 +133,45 @@ describe("CalculatorWorkspace", () => {
     input.setSelectionRange(0, 1);
     fireEvent.click(screen.getByRole("button", { name: "Inserir potência" }));
 
-    expect(input).toHaveValue("x**()");
+    expect(input).toHaveValue("(x)ⁿ");
     expect(input.selectionStart).toBe(4);
+  });
+
+  it("eˣ insere o template visual eˣ() com cursor no parêntese; preview mostra e elevado", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    const { container } = render(<CalculatorWorkspace />);
+    const input = screen.getByLabelText<HTMLInputElement>("Expressão matemática");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Funções" }));
+    fireEvent.click(screen.getByRole("button", { name: "Inserir exponencial de base e" }));
+    expect(input).toHaveValue("eˣ()");
+    expect(input.selectionStart).toBe(3);
+
+    fireEvent.change(input, { target: { value: "eˣ(2)" } });
+    await waitFor(
+      () => {
+        const preview = container.querySelector("p[data-latex-source]");
+        expect(preview?.getAttribute("data-latex-source")).toBe("eˣ(2)");
+      },
+      { timeout: 2000 }
+    );
+    expect(
+      Array.from(container.querySelectorAll("annotation")).some((node) =>
+        node.textContent?.includes("e^{2}")
+      )
+    ).toBe(true);
+  });
+
+  it("ida e volta pelo histórico preserva a expressão exata (Unicode visual incluído)", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([
+      { expression: "√(9)", result: "3", timestamp: "2026-01-01T00:00:00Z" },
+    ]);
+    render(<CalculatorWorkspace />);
+
+    const historyButton = await screen.findByRole("button", { name: /reutilizar expressão: √\(9\)/i });
+    fireEvent.click(historyButton);
+
+    expect(screen.getByLabelText("Expressão matemática")).toHaveValue("√(9)");
   });
 
   it("pré-preenche a partir da query string sem resolver automaticamente", () => {

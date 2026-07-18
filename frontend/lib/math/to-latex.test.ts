@@ -72,13 +72,25 @@ describe("expressionToLatex", () => {
 
   it("chamada de função vazia (template em digitação) nunca converte — cai no fallback", async () => {
     expect(await expressionToLatex("sqrt()")).toBeNull();
-    expect(await expressionToLatex("cbrt()")).toBeNull();
+    expect(await expressionToLatex("√()")).toBeNull();
+    expect(await expressionToLatex("∛()")).toBeNull();
+    expect(await expressionToLatex("eˣ()")).toBeNull();
     expect(await expressionToLatex("log()")).toBeNull();
     expect(await expressionToLatex("log()/log()")).toBeNull();
   });
 
-  it("converte a raiz cúbica canônica cbrt() como radical com índice", async () => {
+  it("converte a raiz cúbica (Unicode e ASCII) como radical com índice", async () => {
+    expect(normalized(await expressionToLatex("∛(8)"))).toContain("\\sqrt[3]{8}");
     expect(normalized(await expressionToLatex("cbrt(8)"))).toContain("\\sqrt[3]{8}");
+  });
+
+  it("renderiza os templates visuais do teclado: eˣ( como e elevado e ⁿ como expoente n", async () => {
+    expect(normalized(await expressionToLatex("eˣ(2)"))).toContain("e^{2}");
+    expect(normalized(await expressionToLatex("exp(2)"))).toContain("e^{2}");
+    expect(normalized(await expressionToLatex("(2)ⁿ"))).toContain("^{n}");
+    expect(normalized(await expressionToLatex("xⁿ"))).toContain("^{n}");
+    // "²ⁿ" não é template oficial — fail-closed.
+    expect(await expressionToLatex("x²ⁿ")).toBeNull();
   });
 });
 

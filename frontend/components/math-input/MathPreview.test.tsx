@@ -64,22 +64,22 @@ describe("MathPreview", () => {
     expect(screen.getByText("(x+1)/(x-")).toBeInTheDocument();
   });
 
-  it("template de função vazio (sqrt()) fica em texto — nunca expõe o nome interno em KaTeX", async () => {
-    const { container } = render(<MathPreview value="sqrt()" />);
+  it("template visual vazio (√()) fica em texto — nunca expõe o nome interno (sqrt) em KaTeX", async () => {
+    const { container } = render(<MathPreview value="√()" />);
 
-    expect(screen.getByText("sqrt()")).toBeInTheDocument();
+    expect(screen.getByText("√()")).toBeInTheDocument();
     await new Promise((resolve) => setTimeout(resolve, 400));
     expect(container.querySelector(".katex")).toBeNull();
-    expect(screen.getByText("sqrt()")).toBeInTheDocument();
+    expect(screen.getByText("√()")).toBeInTheDocument();
   });
 
   it("publica em data-latex-source o texto exato que originou o KaTeX", async () => {
-    const { container } = render(<MathPreview value="sqrt(9)" />);
+    const { container } = render(<MathPreview value="√(9)" />);
 
     await waitFor(
       () => {
         const preview = container.querySelector("p[data-latex-source]");
-        expect(preview?.getAttribute("data-latex-source")).toBe("sqrt(9)");
+        expect(preview?.getAttribute("data-latex-source")).toBe("√(9)");
       },
       { timeout: 2000 }
     );
@@ -90,14 +90,38 @@ describe("MathPreview", () => {
     ).toBe(true);
   });
 
-  it("renderiza raiz cúbica canônica (cbrt) como radical com índice 3", async () => {
-    const { container } = render(<MathPreview value="cbrt(8)" />);
+  it("renderiza a raiz cúbica visual (∛) como radical com índice 3", async () => {
+    const { container } = render(<MathPreview value="∛(8)" />);
     await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull(), {
       timeout: 2000,
     });
     expect(
       Array.from(container.querySelectorAll("annotation")).some((node) =>
         node.textContent?.includes("\\sqrt[3]{8}")
+      )
+    ).toBe(true);
+  });
+
+  it("renderiza o template visual de exponencial (eˣ(2)) como e elevado", async () => {
+    const { container } = render(<MathPreview value="eˣ(2)" />);
+    await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull(), {
+      timeout: 2000,
+    });
+    expect(
+      Array.from(container.querySelectorAll("annotation")).some((node) =>
+        node.textContent?.includes("e^{2}")
+      )
+    ).toBe(true);
+  });
+
+  it("renderiza o template visual de potência ((2)ⁿ) com expoente n", async () => {
+    const { container } = render(<MathPreview value="(2)ⁿ" />);
+    await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull(), {
+      timeout: 2000,
+    });
+    expect(
+      Array.from(container.querySelectorAll("annotation")).some((node) =>
+        node.textContent?.replace(/\s/g, "").includes("^{n}")
       )
     ).toBe(true);
   });

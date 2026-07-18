@@ -99,13 +99,15 @@ export function CalculatorWorkspace() {
     const selectionStart = node?.selectionStart ?? expression.length;
     const selectionEnd = node?.selectionEnd ?? expression.length;
     // Teclas com variante de seleção (ex. xⁿ) PRESERVAM o texto
-    // selecionado como base ("x" -> "x**()") em vez de substituí-lo;
+    // selecionado, envolvendo-o ("x" -> "(x)ⁿ") em vez de substituí-lo;
     // demais teclas substituem a seleção, como qualquer input de texto.
     const selected = expression.slice(selectionStart, selectionEnd);
     const useSelectionVariant = key.selection !== undefined && selected.length > 0;
-    const insertText = useSelectionVariant ? selected + key.selection!.insert : key.insert;
+    const insertText = useSelectionVariant
+      ? key.selection!.before + selected + key.selection!.after
+      : key.insert;
     const cursorOffset = useSelectionVariant
-      ? selected.length + key.selection!.cursorOffset
+      ? insertText.length - key.selection!.cursorFromEnd
       : key.cursorOffset;
     const { value, cursorPosition } = insertAtCursor(
       expression,

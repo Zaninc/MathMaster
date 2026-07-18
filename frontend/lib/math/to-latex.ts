@@ -50,13 +50,16 @@ function loadMathjs(): Promise<Mathjs> {
 const SUPERSCRIPT_TO_ASCII: Record<string, string> = {
   "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4",
   "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9", "⁻": "-",
+  // Marcador do template xⁿ do teclado (expoente simbólico n) —
+  // `backend-normalize.ts` o traduz para "**n" no envio.
+  "ⁿ": "n",
 };
 const SUBSCRIPT_TO_ASCII: Record<string, string> = {
   "₀": "0", "₁": "1", "₂": "2", "₃": "3", "₄": "4",
   "₅": "5", "₆": "6", "₇": "7", "₈": "8", "₉": "9", "₋": "-",
 };
 
-const SUPERSCRIPT_RUN = /[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+/g;
+const SUPERSCRIPT_RUN = /[⁰¹²³⁴⁵⁶⁷⁸⁹⁻ⁿ]+/g;
 /** Sentinela interna: fora do SAFE_CHARSET por construção, derruba a conversão. */
 const INVALID = "\u0000";
 
@@ -81,7 +84,6 @@ const FUNCTION_LATEX: Record<string, string> = {
   ln: "\\ln",
   sen: "\\operatorname{sen}",
   tg: "\\operatorname{tg}",
-  exp: "\\exp",
 };
 
 /** Só o alfabeto que o mathjs entende sobra depois da transliteração. */
@@ -93,6 +95,9 @@ const BARE_WORD = /^[A-Za-z]{3,}$/;
 const SUBSCRIPT_VARIABLE = /^([A-Za-z])([₀₁₂₃₄₅₆₇₈₉]+)$/;
 
 function translateRun(run: string, table: Record<string, string>): string | null {
+  // "ⁿ" só é válido sozinho (é o marcador do template xⁿ, não um dígito
+  // combinável) — "²ⁿ" não é template oficial e fica intocado/fail-closed.
+  if (run.includes("ⁿ") && run !== "ⁿ") return null;
   const digits = Array.from(run, (ch) => table[ch] ?? INVALID).join("");
   if (digits.includes(INVALID) || digits === "-" || digits.lastIndexOf("-") > 0) return null;
   return digits;
@@ -104,6 +109,9 @@ function translateRun(run: string, table: Record<string, string>): string | null
  */
 function transliterate(text: string): string | null {
   let out = text
+    // Template visual oficial do teclado ("eˣ(" é token único; ˣ não é
+    // digitável) — mesma tradução que `backend-normalize.ts` faz no envio.
+    .replace(/eˣ\(/g, "exp(")
     .replace(/\*\*/g, "^")
     .replace(/π/g, "pi")
     .replace(/∞/g, "Infinity")
@@ -175,6 +183,13 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
   if (name !== null && name in FUNCTION_LATEX) {
     const rendered = nodeArgs.map((arg) => texOf(arg, options)).join(",\\,");
     return `${FUNCTION_LATEX[name]}\\left(${rendered}\\right)`;
+  }
+
+  // exp() renderiza como "e elevado" — a linguagem visual do produto
+  // (tecla eˣ), tanto para o template eˣ( quanto para exp( digitado/vindo
+  // do histórico.
+  if (name === "exp" && nodeArgs.length === 1) {
+    return `e^{${texOf(nodeArgs[0], options)}}`;
   }
 
   if ((name === "Integral" || name === "integral") && nodeArgs.length >= 2) {
