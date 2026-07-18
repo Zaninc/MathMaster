@@ -9,6 +9,7 @@ import { MathKeyboard } from "@/components/math-input/MathKeyboard";
 import { MathPreview } from "@/components/math-input/MathPreview";
 import { Button } from "@/components/shared/Button";
 import { QUICK_EXAMPLES } from "@/data/examples";
+import type { KeyboardKey } from "@/data/keyboard";
 import { apiClient } from "@/lib/api/client";
 import type { HistoryItem } from "@/lib/api/types";
 import { ApiError, friendlyMessage } from "@/lib/api/errors";
@@ -93,10 +94,19 @@ export function CalculatorWorkspace() {
     solve(expression);
   }
 
-  function handleInsert(insertText: string, cursorOffset: number) {
+  function handleInsert(key: KeyboardKey) {
     const node = inputRef.current;
     const selectionStart = node?.selectionStart ?? expression.length;
     const selectionEnd = node?.selectionEnd ?? expression.length;
+    // Teclas com variante de seleção (ex. xⁿ) PRESERVAM o texto
+    // selecionado como base ("x" -> "x**()") em vez de substituí-lo;
+    // demais teclas substituem a seleção, como qualquer input de texto.
+    const selected = expression.slice(selectionStart, selectionEnd);
+    const useSelectionVariant = key.selection !== undefined && selected.length > 0;
+    const insertText = useSelectionVariant ? selected + key.selection!.insert : key.insert;
+    const cursorOffset = useSelectionVariant
+      ? selected.length + key.selection!.cursorOffset
+      : key.cursorOffset;
     const { value, cursorPosition } = insertAtCursor(
       expression,
       selectionStart,

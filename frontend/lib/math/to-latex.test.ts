@@ -69,6 +69,17 @@ describe("expressionToLatex", () => {
     expect(await expressionToLatex("crescente")).toBeNull();
     expect(await expressionToLatex("")).toBeNull();
   });
+
+  it("chamada de função vazia (template em digitação) nunca converte — cai no fallback", async () => {
+    expect(await expressionToLatex("sqrt()")).toBeNull();
+    expect(await expressionToLatex("cbrt()")).toBeNull();
+    expect(await expressionToLatex("log()")).toBeNull();
+    expect(await expressionToLatex("log()/log()")).toBeNull();
+  });
+
+  it("converte a raiz cúbica canônica cbrt() como radical com índice", async () => {
+    expect(normalized(await expressionToLatex("cbrt(8)"))).toContain("\\sqrt[3]{8}");
+  });
 });
 
 describe("valueToLatex", () => {

@@ -79,4 +79,37 @@ describe("KEYBOARD_CATEGORIES", () => {
       expect(key!.insert[key!.cursorOffset - 1], label).toBe("(");
     }
   });
+
+  /**
+   * Contrato de consistência input==preview==backend (2026-07-18):
+   * raízes em ASCII canônico validado contra o backend real (sqrt/cbrt;
+   * root(8,3) é REJEITADO) e nenhuma tecla insere operador cru sem
+   * operandos (xⁿ era "**", entrada inutilizável).
+   */
+  it("raízes usam a sintaxe ASCII canônica com cursor dentro do parêntese", () => {
+    const byLabel = new Map(
+      KEYBOARD_CATEGORIES.flatMap((category) => category.keys).map((key) => [key.label, key])
+    );
+    expect(byLabel.get("√")?.insert).toBe("sqrt()");
+    expect(byLabel.get("√")?.cursorOffset).toBe(5);
+    expect(byLabel.get("∛")?.insert).toBe("cbrt()");
+    expect(byLabel.get("∛")?.cursorOffset).toBe(5);
+  });
+
+  it("xⁿ insere template completo, nunca '**' cru, e preserva seleção como base", () => {
+    const power = KEYBOARD_CATEGORIES.flatMap((category) => category.keys).find(
+      (key) => key.label === "xⁿ"
+    );
+    expect(power?.insert).toBe("()**()");
+    expect(power?.cursorOffset).toBe(1);
+    expect(power?.selection).toEqual({ insert: "**()", cursorOffset: 3 });
+  });
+
+  it("nenhuma tecla insere um operador cru sem operandos", () => {
+    for (const category of KEYBOARD_CATEGORIES) {
+      for (const key of category.keys) {
+        expect(key.insert, `${category.id}/${key.label}`).not.toMatch(/^[*/+\-^]+$/);
+      }
+    }
+  });
 });

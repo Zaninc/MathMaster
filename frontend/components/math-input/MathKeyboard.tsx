@@ -3,11 +3,16 @@
 import { KeyboardEvent, useState } from "react";
 
 import { MathFormula } from "@/components/shared/MathFormula";
-import { KEYBOARD_CATEGORIES } from "@/data/keyboard";
+import { KEYBOARD_CATEGORIES, type KeyboardKey } from "@/data/keyboard";
 import { cn } from "@/lib/utils/cn";
 
 interface MathKeyboardProps {
-  onInsert: (insertText: string, cursorOffset: number) => void;
+  /**
+   * Recebe a TECLA inteira (não só insert/cursorOffset): o consumidor
+   * decide o comportamento com seleção (`key.selection`) — o teclado só
+   * apresenta e delega, nunca transforma texto.
+   */
+  onInsert: (key: KeyboardKey) => void;
 }
 
 /**
@@ -71,7 +76,7 @@ export function MathKeyboard({ onInsert }: MathKeyboardProps) {
           <button
             key={key.label}
             type="button"
-            onClick={() => onInsert(key.insert, key.cursorOffset)}
+            onClick={() => onInsert(key)}
             aria-label={key.ariaLabel ?? `Inserir ${key.label}`}
             className="min-h-11 overflow-hidden rounded-md border border-border bg-background px-2 py-2 text-sm text-text-primary transition-colors hover:border-border-hover hover:bg-surface-elevated"
           >

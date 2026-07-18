@@ -16,6 +16,15 @@ export interface KeyboardKey {
    * raízes, expoentes); glifo/texto simples fica sem.
    */
   latex?: string;
+  /**
+   * Comportamento alternativo quando há texto SELECIONADO no input: a
+   * seleção é preservada e `selection.insert` é acrescentado logo após
+   * ela (ex. selecionar "x" e clicar em xⁿ → "x**()"), com
+   * `selection.cursorOffset` medido a partir do fim da seleção. Sem este
+   * campo, a seleção é substituída por `insert` (comportamento padrão de
+   * qualquer input de texto).
+   */
+  selection?: { insert: string; cursorOffset: number };
 }
 
 export interface KeyboardCategory {
@@ -40,10 +49,24 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
       { label: "( )", insert: "()", cursorOffset: 1, ariaLabel: "Inserir parênteses" },
       { label: "x²", insert: "²", cursorOffset: 1, ariaLabel: "Inserir expoente 2", latex: "x^2" },
       { label: "x³", insert: "³", cursorOffset: 1, ariaLabel: "Inserir expoente 3", latex: "x^3" },
-      { label: "xⁿ", insert: "**", cursorOffset: 2, ariaLabel: "Inserir potência", latex: "x^n" },
+      {
+        label: "xⁿ",
+        // Nunca "**" cru (entrada inutilizável): template completo com a
+        // mesma convenção da fração (cursor no 1º parêntese). Com
+        // seleção, a base selecionada é preservada: "x" -> "x**()".
+        insert: "()**()",
+        cursorOffset: 1,
+        ariaLabel: "Inserir potência",
+        latex: "x^n",
+        selection: { insert: "**()", cursorOffset: 3 },
+      },
       { label: "a/b", insert: "()/()", cursorOffset: 1, ariaLabel: "Inserir fração", latex: "\\dfrac{a}{b}" },
-      { label: "√", insert: "√()", cursorOffset: 2, ariaLabel: "Inserir raiz quadrada", latex: "\\sqrt{x}" },
-      { label: "∛", insert: "∛()", cursorOffset: 2, ariaLabel: "Inserir raiz cúbica", latex: "\\sqrt[3]{x}" },
+      // Raízes em ASCII canônico (sqrt/cbrt, validado contra o backend em
+      // 2026-07-18; root(8,3) é REJEITADO): a mesma string aparece no
+      // input, na origem do preview e no payload do backend — o glifo
+      // √/∛ fica só no rótulo visual (latex).
+      { label: "√", insert: "sqrt()", cursorOffset: 5, ariaLabel: "Inserir raiz quadrada", latex: "\\sqrt{x}" },
+      { label: "∛", insert: "cbrt()", cursorOffset: 5, ariaLabel: "Inserir raiz cúbica", latex: "\\sqrt[3]{x}" },
       { label: "=", insert: "=", cursorOffset: 1, ariaLabel: "Inserir igual" },
     ],
   },

@@ -72,17 +72,34 @@ async function convertInput(text: string): Promise<string | null> {
   return latex;
 }
 
+export interface InputLatex {
+  /** LaTeX derivado de `source`, ou null (chamador exibe o texto atual). */
+  latex: string | null;
+  /**
+   * O texto EXATO do input que originou `latex` — contrato de
+   * consistência: o LaTeX nunca vem de outra fonte além do valor do
+   * input. Durante a janela de anti-flicker `source` pode ser o valor
+   * anterior (nunca por mais que debounce+conversão); quando a conversão
+   * do valor atual resolve, `source` === valor atual do input.
+   */
+  source: string | null;
+}
+
+const EMPTY_INPUT: InputLatex = { latex: null, source: null };
+
 /**
  * Preview em tempo quase real do texto que o usuário está digitando
  * (Sprint KaTeX Fase 4): debounce curto para não converter a cada tecla,
  * cache próprio (a digitação revisita os mesmos prefixos ao apagar) e
  * anti-flicker — enquanto a conversão do texto atual está pendente, o
  * último LaTeX resolvido continua sendo devolvido em vez de null, para o
- * preview não alternar formula→texto→formula entre teclas. Null = texto
- * vazio ou nada resolvido ainda (chamador exibe o fallback textual).
+ * preview não alternar formula→texto→formula entre teclas. Um resultado
+ * assíncrono antigo nunca sobrescreve um mais novo: o cleanup do efeito
+ * cancela o handler pendente a cada mudança de texto, e `source` declara
+ * de qual input o LaTeX atual foi derivado.
  */
-export function useInputLatex(text: string, delayMs = 150): string | null {
-  const [display, setDisplay] = useState<{ key: string; latex: string | null } | null>(null);
+export function useInputLatex(text: string, delayMs = 150): InputLatex {
+  const [display, setDisplay] = useState<InputLatex | null>(null);
   const trimmed = text.trim();
 
   useEffect(() => {
@@ -91,7 +108,7 @@ export function useInputLatex(text: string, delayMs = 150): string | null {
     const timer = setTimeout(() => {
       void convertInput(trimmed).then(
         (latex) => {
-          if (!cancelled) setDisplay({ key: trimmed, latex });
+          if (!cancelled) setDisplay({ latex, source: trimmed });
         },
         () => {
           // to-latex é fail-closed; se algo lançar, o fallback textual permanece.
@@ -104,8 +121,8 @@ export function useInputLatex(text: string, delayMs = 150): string | null {
     };
   }, [trimmed, delayMs]);
 
-  if (trimmed === "" || display === null) return null;
-  return display.latex;
+  if (trimmed === "" || display === null) return EMPTY_INPUT;
+  return display;
 }
 
 export function useSolveLatex(expression: string | null, result: string | null): SolveLatex {

@@ -52,7 +52,7 @@ interface MathPreviewProps {
  * incompleto cai no fallback cosmético de antes, sem erro visual.
  */
 export function MathPreview({ value }: MathPreviewProps) {
-  const latex = useInputLatex(value);
+  const { latex, source } = useInputLatex(value);
 
   if (!value.trim()) {
     return (
@@ -62,8 +62,16 @@ export function MathPreview({ value }: MathPreviewProps) {
     );
   }
 
+  // `data-latex-source` publica o contrato de consistência: o texto exato
+  // que originou o KaTeX exibido (asserido em teste — deve convergir para
+  // o value atual). O fallback textual usa SEMPRE o value atual, nunca um
+  // estado paralelo.
   return (
-    <p aria-hidden="true" className="min-h-8 break-words text-lg text-text-primary">
+    <p
+      aria-hidden="true"
+      data-latex-source={latex !== null && source !== null ? source : undefined}
+      className="min-h-8 break-words text-lg text-text-primary"
+    >
       {latex !== null ? <MathFormula formula={latex} /> : renderSegments(value)}
     </p>
   );

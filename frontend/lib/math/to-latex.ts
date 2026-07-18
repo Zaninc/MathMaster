@@ -163,6 +163,15 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
   const name = functionName(node);
   const nodeArgs = args(node);
 
+  // Chamada sem argumentos ("sqrt()", "log()") = template incompleto em
+  // digitação. O toTex default do mathjs renderizaria o NOME INTERNO
+  // pós-transliteração ("\mathrm{sqrt}()" para um input "√()"), expondo
+  // uma string diferente da digitada — contra o contrato input==preview.
+  // Lançar derruba a conversão inteira -> fallback com o texto atual.
+  if (nodeArgs.length === 0) {
+    throw new Error("chamada de função sem argumentos — entrada incompleta");
+  }
+
   if (name !== null && name in FUNCTION_LATEX) {
     const rendered = nodeArgs.map((arg) => texOf(arg, options)).join(",\\,");
     return `${FUNCTION_LATEX[name]}\\left(${rendered}\\right)`;

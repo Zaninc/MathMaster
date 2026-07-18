@@ -13,15 +13,22 @@ describe("MathKeyboard", () => {
     expect(screen.getByRole("button", { name: "Inserir igual" })).toHaveTextContent("=");
   });
 
-  it("clicar numa tecla LaTeX insere o MESMO texto/cursor de antes (latex é só visual)", () => {
+  it("clicar numa tecla entrega a tecla inteira com insert/cursor intactos (latex é só visual)", () => {
     const onInsert = vi.fn();
     render(<MathKeyboard onInsert={onInsert} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Inserir expoente 2" }));
-    expect(onInsert).toHaveBeenCalledWith("²", 1);
+    expect(onInsert).toHaveBeenCalledWith(expect.objectContaining({ insert: "²", cursorOffset: 1 }));
 
     fireEvent.click(screen.getByRole("button", { name: "Inserir fração" }));
-    expect(onInsert).toHaveBeenCalledWith("()/()", 1);
+    expect(onInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ insert: "()/()", cursorOffset: 1 })
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inserir raiz quadrada" }));
+    expect(onInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ insert: "sqrt()", cursorOffset: 5 })
+    );
   });
 
   it("o KaTeX visual fica aria-hidden e o nome acessível continua vindo do aria-label", () => {
@@ -40,6 +47,8 @@ describe("MathKeyboard", () => {
     expect(logBase.querySelector(".katex")).not.toBeNull();
 
     fireEvent.click(logBase);
-    expect(onInsert).toHaveBeenCalledWith("log()/log()", 4);
+    expect(onInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ insert: "log()/log()", cursorOffset: 4 })
+    );
   });
 });

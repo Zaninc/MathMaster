@@ -64,6 +64,44 @@ describe("MathPreview", () => {
     expect(screen.getByText("(x+1)/(x-")).toBeInTheDocument();
   });
 
+  it("template de função vazio (sqrt()) fica em texto — nunca expõe o nome interno em KaTeX", async () => {
+    const { container } = render(<MathPreview value="sqrt()" />);
+
+    expect(screen.getByText("sqrt()")).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(container.querySelector(".katex")).toBeNull();
+    expect(screen.getByText("sqrt()")).toBeInTheDocument();
+  });
+
+  it("publica em data-latex-source o texto exato que originou o KaTeX", async () => {
+    const { container } = render(<MathPreview value="sqrt(9)" />);
+
+    await waitFor(
+      () => {
+        const preview = container.querySelector("p[data-latex-source]");
+        expect(preview?.getAttribute("data-latex-source")).toBe("sqrt(9)");
+      },
+      { timeout: 2000 }
+    );
+    expect(
+      Array.from(container.querySelectorAll("annotation")).some((node) =>
+        node.textContent?.includes("\\sqrt{9}")
+      )
+    ).toBe(true);
+  });
+
+  it("renderiza raiz cúbica canônica (cbrt) como radical com índice 3", async () => {
+    const { container } = render(<MathPreview value="cbrt(8)" />);
+    await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull(), {
+      timeout: 2000,
+    });
+    expect(
+      Array.from(container.querySelectorAll("annotation")).some((node) =>
+        node.textContent?.includes("\\sqrt[3]{8}")
+      )
+    ).toBe(true);
+  });
+
   it("preserva o tratamento cosmético de ** no fallback", async () => {
     const { container } = render(<MathPreview value="x**2 +" />);
 

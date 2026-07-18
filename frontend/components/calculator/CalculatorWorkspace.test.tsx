@@ -62,6 +62,81 @@ describe("CalculatorWorkspace", () => {
     expect(screen.getByLabelText("Expressão matemática")).toHaveValue("sen()");
   });
 
+  it("√ insere sqrt() com cursor no parêntese; completar gera preview derivado do MESMO texto", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    const { container } = render(<CalculatorWorkspace />);
+    const input = screen.getByLabelText<HTMLInputElement>("Expressão matemática");
+
+    fireEvent.click(screen.getByRole("button", { name: "Inserir raiz quadrada" }));
+    expect(input).toHaveValue("sqrt()");
+    expect(input.selectionStart).toBe(5);
+
+    // "digita 9" na posição do cursor
+    fireEvent.change(input, { target: { value: "sqrt(9)" } });
+    expect(input).toHaveValue("sqrt(9)");
+
+    await waitFor(
+      () => {
+        const preview = container.querySelector("p[data-latex-source]");
+        expect(preview?.getAttribute("data-latex-source")).toBe("sqrt(9)");
+      },
+      { timeout: 2000 }
+    );
+    expect(
+      Array.from(container.querySelectorAll("annotation")).some((node) =>
+        node.textContent?.includes("\\sqrt{9}")
+      )
+    ).toBe(true);
+  });
+
+  it("∛ insere cbrt() canônico; completado, preview deriva exatamente de cbrt(8)", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    const { container } = render(<CalculatorWorkspace />);
+    const input = screen.getByLabelText<HTMLInputElement>("Expressão matemática");
+
+    fireEvent.click(screen.getByRole("button", { name: "Inserir raiz cúbica" }));
+    expect(input).toHaveValue("cbrt()");
+    expect(input.selectionStart).toBe(5);
+
+    fireEvent.change(input, { target: { value: "cbrt(8)" } });
+    await waitFor(
+      () => {
+        const preview = container.querySelector("p[data-latex-source]");
+        expect(preview?.getAttribute("data-latex-source")).toBe("cbrt(8)");
+      },
+      { timeout: 2000 }
+    );
+    expect(
+      Array.from(container.querySelectorAll("annotation")).some((node) =>
+        node.textContent?.includes("\\sqrt[3]{8}")
+      )
+    ).toBe(true);
+  });
+
+  it("xⁿ sem seleção insere o template ()**() com cursor no primeiro parêntese, nunca '**'", () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    render(<CalculatorWorkspace />);
+    const input = screen.getByLabelText<HTMLInputElement>("Expressão matemática");
+
+    fireEvent.click(screen.getByRole("button", { name: "Inserir potência" }));
+    expect(input).toHaveValue("()**()");
+    expect(input).not.toHaveValue("**");
+    expect(input.selectionStart).toBe(1);
+  });
+
+  it("xⁿ com seleção preserva a base selecionada: 'x' vira x**() com cursor no expoente", () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    render(<CalculatorWorkspace />);
+    const input = screen.getByLabelText<HTMLInputElement>("Expressão matemática");
+
+    fireEvent.change(input, { target: { value: "x" } });
+    input.setSelectionRange(0, 1);
+    fireEvent.click(screen.getByRole("button", { name: "Inserir potência" }));
+
+    expect(input).toHaveValue("x**()");
+    expect(input.selectionStart).toBe(4);
+  });
+
   it("pré-preenche a partir da query string sem resolver automaticamente", () => {
     searchParamsMock.mockReturnValue(new URLSearchParams("expression=x%C2%B2-4%3D0"));
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
