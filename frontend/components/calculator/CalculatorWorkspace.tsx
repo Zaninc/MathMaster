@@ -126,8 +126,14 @@ export function CalculatorWorkspace() {
 
   return (
     <PageShell variant="full-workspace">
+      {/* `min-w-0` nas duas colunas: itens de grid têm `min-width: auto`
+          (piso = min-content do conteúdo). No mobile (coluna implícita
+          `auto`), a fileira de abas do teclado (~672px de min-content)
+          estourava a página inteira; o desktop já se protegia via
+          `minmax(0,1fr)` no track explícito. Com o piso zerado, a fileira
+          rola no próprio `overflow-x-auto` dela, como sempre foi a intenção. */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] lg:gap-8">
-        <div className="flex flex-col gap-4">
+        <div className="min-w-0 flex flex-col gap-4">
           <form onSubmit={handleSubmit} className="order-1 flex flex-col gap-2">
             <label htmlFor={inputId} className="text-sm font-medium text-text-secondary">
               Expressão matemática
@@ -185,7 +191,7 @@ export function CalculatorWorkspace() {
           </div>
         </div>
 
-        <aside className="lg:border-l lg:border-border lg:pl-8">
+        <aside className="min-w-0 lg:border-l lg:border-border lg:pl-8">
           <HistoryPanel
             items={history}
             hiddenTimestamps={hiddenTimestamps}
