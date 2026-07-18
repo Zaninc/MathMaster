@@ -51,7 +51,9 @@ data/           # configuração estática (navegação, exemplos, teclado matem
 
 ## Renderização matemática (KaTeX)
 
-Todo LaTeX exibido ao usuário passa por `components/shared/MathFormula.tsx` — fundação única de renderização matemática (KaTeX via `katex.renderToString`, SSR-safe e determinística, MathML embutido para leitores de tela, fallback gracioso para LaTeX inválido). Hoje é usada nos painéis de resultado de Geometria (`TriangleResultPanel`/`CircleResultPanel`); calculadora, histórico e o futuro editor devem reutilizar o mesmo componente em vez de renderizar KaTeX diretamente. O CSS do KaTeX é importado pelo próprio componente, então só entra nas rotas que exibem fórmulas.
+Todo LaTeX exibido ao usuário passa por `components/shared/MathFormula.tsx` — fundação única de renderização matemática (KaTeX via `katex.renderToString`, SSR-safe e determinística, MathML embutido para leitores de tela, fallback gracioso para LaTeX inválido). Hoje é usada nos painéis de resultado de Geometria (`TriangleResultPanel`/`CircleResultPanel`) e na Calculadora (`ResultPanel`); histórico e o futuro editor devem reutilizar o mesmo componente em vez de renderizar KaTeX diretamente. O CSS do KaTeX é importado pelo próprio componente, então só entra nas rotas que exibem fórmulas.
+
+A conversão das strings do backend para LaTeX vive em `lib/math/to-latex.ts` (Fase 2): parsing real via mathjs (`parse()`+`toTex()` com handler do vocabulário do produto — nunca um parser artesanal), transliteração léxica 1:1 do Unicode de apresentação do backend, e classificação estrutural do resultado (rótulos, listas de soluções, intervalos, `ou`/`∪`/`k ∈ ℤ`) antes de qualquer conversão. Fail-closed: forma não reconhecida → `null` → o consumidor exibe o texto puro do backend (a calculadora nunca quebra por causa da camada visual). Futuros consumidores (histórico, preview em tempo real, editor híbrido) devem passar por este módulo em vez de gerar LaTeX próprio.
 
 ## Testes
 

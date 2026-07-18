@@ -1,3 +1,7 @@
+"use client";
+
+import { MathFormula } from "@/components/shared/MathFormula";
+import { useSolveLatex } from "@/hooks/useSolveLatex";
 import type { HistoryItem } from "@/lib/api/types";
 
 interface HistoryPanelProps {
@@ -8,10 +12,45 @@ interface HistoryPanelProps {
 }
 
 /**
+ * Linha matemática de um item — mesma infraestrutura da Sprint KaTeX Fase
+ * 2 (`useSolveLatex`/`MathFormula`): texto puro primeiro, promovido a
+ * KaTeX quando a conversão resolve; conversão nula = exibição de antes.
+ * Componente próprio para o hook rodar por item (e o cache do hook evitar
+ * reconversão a cada refetch do histórico).
+ */
+function HistoryEntry({ expression, result }: { expression: string; result: string }) {
+  const { expressionLatex, segments } = useSolveLatex(expression, result);
+
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-1.5 [overflow-wrap:anywhere]">
+      {expressionLatex !== null ? <MathFormula formula={expressionLatex} /> : <span>{expression}</span>}
+      <span>=</span>
+      {segments !== null ? (
+        segments.map((segment) => (
+          <span
+            key={`${segment.label ?? ""}:${segment.text}`}
+            className="inline-flex flex-wrap items-baseline gap-x-1"
+          >
+            {segment.label !== null && <span className="text-text-secondary">{segment.label}:</span>}
+            {segment.latex !== null ? <MathFormula formula={segment.latex} /> : <span>{segment.text}</span>}
+          </span>
+        ))
+      ) : (
+        <span>{result}</span>
+      )}
+    </div>
+  );
+}
+
+/**
  * "Ocultar" é só estado local (não existe endpoint de exclusão no
  * backend) — nunca chamado de "Limpar", que sugeriria apagar do servidor.
  * O histórico em si é global da instância (sem autenticação ainda), não
  * uma conta pessoal — a legenda deixa isso explícito.
+ *
+ * Acessibilidade: o `aria-label` do botão de reutilizar carrega o par
+ * expressão/resultado em texto cru — o KaTeX visual não altera o nome
+ * acessível nem o texto enviado por `onSelect`.
  */
 export function HistoryPanel({ items, hiddenTimestamps, onSelect, onHide }: HistoryPanelProps) {
   const visibleItems = items.filter((item) => !hiddenTimestamps.has(item.timestamp));
@@ -40,9 +79,7 @@ export function HistoryPanel({ items, hiddenTimestamps, onSelect, onHide }: Hist
                 aria-label={`Reutilizar expressão: ${item.expression} igual a ${item.result}`}
                 className="flex-1 text-left text-text-primary hover:text-accent"
               >
-                <div>
-                  {item.expression} = {item.result}
-                </div>
+                <HistoryEntry expression={item.expression} result={item.result} />
                 <span className="text-xs text-text-muted">{new Date(item.timestamp).toLocaleString()}</span>
               </button>
               <button

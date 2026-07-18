@@ -52,9 +52,26 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
   {
     id: "funcoes",
     label: "Funções",
+    // Convenção oficial do backend (log_convention.py): log = base 10,
+    // ln = natural. Base arbitrária NÃO tem sintaxe própria (log(x, a) é
+    // rejeitado) — "logₐ" insere o template de mudança de base
+    // log(x)/log(a), matematicamente equivalente e aceito nativamente.
+    // "eˣ" insere exp(): "e" solto é tratado como VARIÁVEL pelo backend
+    // (e**x não é exponencial), confirmado empiricamente em 2026-07-18.
+    // Os rótulos usam Unicode tipográfico (ₐ/ˣ) só no visual do botão; o
+    // texto inserido é sempre ASCII que o parser aceita.
     keys: [
       { label: "f(x) =", insert: "f(x) = ", cursorOffset: 7, ariaLabel: "Inserir definição de função" },
       { label: "f( )", insert: "f()", cursorOffset: 2, ariaLabel: "Inserir avaliação de função" },
+      { label: "log", insert: "log()", cursorOffset: 4, ariaLabel: "Inserir logaritmo de base 10" },
+      { label: "ln", insert: "ln()", cursorOffset: 3, ariaLabel: "Inserir logaritmo natural" },
+      {
+        label: "logₐ",
+        insert: "log()/log()",
+        cursorOffset: 4,
+        ariaLabel: "Inserir logaritmo de base arbitrária (mudança de base: log do argumento dividido por log da base)",
+      },
+      { label: "eˣ", insert: "exp()", cursorOffset: 4, ariaLabel: "Inserir exponencial de base e" },
     ],
   },
   {

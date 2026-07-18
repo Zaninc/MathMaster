@@ -32,7 +32,10 @@ describe("CalculatorWorkspace", () => {
     fireEvent.change(screen.getByLabelText("Expressão matemática"), { target: { value: "2+2" } });
     fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
 
-    expect(await screen.findByText("4")).toBeInTheDocument();
+    // findAllByText: o resultado aparece primeiro como texto puro e é
+    // promovido a KaTeX (que duplica o "4" em MathML + HTML visual) — a
+    // asserção precisa valer nas duas fases.
+    expect((await screen.findAllByText("4")).length).toBeGreaterThan(0);
   });
 
   it("mostra mensagem amigável de erro quando o backend rejeita a expressão", async () => {
@@ -89,9 +92,15 @@ describe("CalculatorWorkspace", () => {
 
     render(<CalculatorWorkspace />);
 
-    await screen.findByText("2+2 = 4");
+    // Consulta por role/aria-label (texto cru), não pelo texto visual — a
+    // linha do histórico agora é composta (KaTeX após a conversão).
+    await screen.findByRole("button", { name: /reutilizar expressão: 2\+2/i });
     fireEvent.click(screen.getByRole("button", { name: /ocultar da lista: 2\+2/i }));
 
-    await waitFor(() => expect(screen.queryByText("2+2 = 4")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: /reutilizar expressão: 2\+2/i })
+      ).not.toBeInTheDocument()
+    );
   });
 });

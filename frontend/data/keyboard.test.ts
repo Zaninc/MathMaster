@@ -23,4 +23,36 @@ describe("KEYBOARD_CATEGORIES", () => {
     const ids = KEYBOARD_CATEGORIES.map((category) => category.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  /**
+   * As formas abaixo foram validadas contra o backend real (2026-07-18):
+   * log()/ln()/exp() são aceitos nativamente; log(x, a) e e**x NÃO são
+   * ("e" solto é variável, não Euler) — este teste impede regressão para
+   * essas formas não suportadas.
+   */
+  it("teclas de funções inserem apenas sintaxe que o backend aceita", () => {
+    const funcoes = KEYBOARD_CATEGORIES.find((category) => category.id === "funcoes");
+    const byLabel = new Map(funcoes?.keys.map((key) => [key.label, key]));
+
+    expect(byLabel.get("log")?.insert).toBe("log()");
+    expect(byLabel.get("ln")?.insert).toBe("ln()");
+    expect(byLabel.get("logₐ")?.insert).toBe("log()/log()");
+    expect(byLabel.get("eˣ")?.insert).toBe("exp()");
+
+    for (const key of funcoes?.keys ?? []) {
+      expect(key.insert).not.toMatch(/e\*\*/);
+      expect(key.insert).not.toMatch(/log\([^)]*,/);
+      // Inserção é sempre ASCII puro — Unicode tipográfico fica só no label.
+      expect(key.insert).toMatch(/^[\x20-\x7E]*$/);
+    }
+  });
+
+  it("cursor das teclas de log/ln/exp cai dentro do primeiro parêntese", () => {
+    const funcoes = KEYBOARD_CATEGORIES.find((category) => category.id === "funcoes");
+    for (const label of ["log", "ln", "logₐ", "eˣ"]) {
+      const key = funcoes?.keys.find((candidate) => candidate.label === label);
+      expect(key, label).toBeDefined();
+      expect(key!.insert[key!.cursorOffset - 1], label).toBe("(");
+    }
+  });
 });

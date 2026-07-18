@@ -4,6 +4,8 @@ import { useState } from "react";
 
 import { Button } from "@/components/shared/Button";
 import { FadeIn } from "@/components/shared/FadeIn";
+import { MathFormula } from "@/components/shared/MathFormula";
+import { useSolveLatex } from "@/hooks/useSolveLatex";
 
 import { ResultSkeleton } from "./ResultSkeleton";
 
@@ -18,8 +20,21 @@ interface ResultPanelProps {
   onRetry: () => void;
 }
 
+/**
+ * Progressive enhancement (Sprint KaTeX Fase 2): o texto puro do backend é
+ * SEMPRE renderizado primeiro (mesma UI de antes); quando a conversão
+ * assíncrona via `useSolveLatex` (chunk do mathjs, dynamic import) resolve
+ * com sucesso, a exibição é promovida a KaTeX. Conversão nula ou pendente
+ * = exatamente a calculadora anterior — nenhum caminho novo de falha.
+ * "Copiar" continua copiando o texto cru do backend, nunca LaTeX.
+ */
 export function ResultPanel({ status, expression, result, errorMessage, errorId, onRetry }: ResultPanelProps) {
   const [copied, setCopied] = useState(false);
+  const success = status === "success" && result !== null;
+  const { expressionLatex, segments } = useSolveLatex(
+    success ? expression : null,
+    success ? result : null
+  );
 
   async function handleCopy() {
     if (!result) return;
@@ -40,12 +55,34 @@ export function ResultPanel({ status, expression, result, errorMessage, errorId,
     <div aria-live="polite" className="flex flex-col gap-3">
       {status === "loading" && <ResultSkeleton />}
 
-      {status === "success" && result !== null && (
+      {success && (
         <FadeIn>
           <div className="rounded-lg border border-success/40 bg-success/10 p-4">
             <span className="text-xs font-medium uppercase tracking-wide text-text-secondary">Resolvido</span>
-            <p className="mt-1 text-sm text-text-muted">{expression}</p>
-            <p className="mt-2 text-xl text-text-primary">{result}</p>
+            <p className="mt-1 text-sm text-text-muted">
+              {expressionLatex !== null ? <MathFormula formula={expressionLatex} /> : expression}
+            </p>
+            {segments !== null ? (
+              <div className="mt-2 flex flex-col gap-1 text-lg text-text-primary">
+                {segments.map((segment) => (
+                  <p
+                    key={`${segment.label ?? ""}:${segment.text}`}
+                    className="flex flex-wrap items-baseline gap-x-2 [overflow-wrap:anywhere]"
+                  >
+                    {segment.label !== null && (
+                      <span className="text-sm text-text-secondary">{segment.label}:</span>
+                    )}
+                    {segment.latex !== null ? (
+                      <MathFormula formula={segment.latex} />
+                    ) : (
+                      <span>{segment.text}</span>
+                    )}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-xl text-text-primary">{result}</p>
+            )}
             <div className="mt-4 flex flex-wrap gap-2">
               <Button type="button" variant="secondary" onClick={handleCopy}>
                 {copied ? "Copiado!" : "Copiar"}

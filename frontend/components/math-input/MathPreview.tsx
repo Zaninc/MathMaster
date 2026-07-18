@@ -1,12 +1,19 @@
+"use client";
+
 import type { ReactNode } from "react";
+
+import { MathFormula } from "@/components/shared/MathFormula";
+import { useInputLatex } from "@/hooks/useSolveLatex";
 
 const EXPONENT_PATTERN = /\*\*(\(([^()]*)\)|[A-Za-z0-9]+)/g;
 
 /**
- * Só trata cosmeticamente o caso "**expoente" (ASCII) — sobrescritos
- * Unicode como "²"/"³" já aparecem elevados pelo próprio glifo, não
- * precisam de tratamento. Puramente de apresentação: nunca altera o valor
- * real do input, só o que é espelhado aqui.
+ * Fallback cosmético (pré-KaTeX, mantido): só trata o caso "**expoente"
+ * (ASCII) — sobrescritos Unicode como "²"/"³" já aparecem elevados pelo
+ * próprio glifo. Usado enquanto a conversão LaTeX não resolveu ou quando
+ * o texto está fora do catálogo do `to-latex` (entrada incompleta,
+ * sintaxe de geometria, palavra solta). Puramente de apresentação: nunca
+ * altera o valor real do input, só o que é espelhado aqui.
  */
 function renderSegments(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -37,9 +44,16 @@ interface MathPreviewProps {
  * Espelho somente-leitura do input, `aria-hidden`: o valor do input já é
  * lido nativamente por leitor de tela, esta é uma restatement puramente
  * visual (conveniência para usuário vidente), não uma segunda fonte de
- * informação.
+ * informação. O input continua sendo a ÚNICA fonte da verdade — nada
+ * aqui intercepta ou reescreve a digitação.
+ *
+ * Sprint KaTeX Fase 4: o conteúdo é promovido a KaTeX via `useInputLatex`
+ * (debounce curto + cache + anti-flicker); texto fora do catálogo ou
+ * incompleto cai no fallback cosmético de antes, sem erro visual.
  */
 export function MathPreview({ value }: MathPreviewProps) {
+  const latex = useInputLatex(value);
+
   if (!value.trim()) {
     return (
       <p aria-hidden="true" className="min-h-8 text-lg text-text-muted">
@@ -50,7 +64,7 @@ export function MathPreview({ value }: MathPreviewProps) {
 
   return (
     <p aria-hidden="true" className="min-h-8 break-words text-lg text-text-primary">
-      {renderSegments(value)}
+      {latex !== null ? <MathFormula formula={latex} /> : renderSegments(value)}
     </p>
   );
 }
