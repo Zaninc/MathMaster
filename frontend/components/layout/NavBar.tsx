@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { NavAuth } from "@/components/auth/NavAuth";
 import { Badge } from "@/components/shared/Badge";
 import { NAV_ITEMS } from "@/data/nav";
 import { cn } from "@/lib/utils/cn";
@@ -97,16 +98,21 @@ export function NavBar() {
           </ul>
         </nav>
 
-        <button
-          type="button"
-          className="rounded-md border border-border p-2 text-text-secondary md:hidden"
-          aria-expanded={mobileOpen}
-          aria-controls="mobile-nav"
-          aria-label={mobileOpen ? "Fechar menu de navegação" : "Abrir menu de navegação"}
-          onClick={() => setMobileOpen((open) => !open)}
-        >
-          <span aria-hidden="true">{mobileOpen ? "✕" : "☰"}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <span className="hidden md:block">
+            <NavAuth variant="desktop" />
+          </span>
+          <button
+            type="button"
+            className="rounded-md border border-border p-2 text-text-secondary md:hidden"
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-nav"
+            aria-label={mobileOpen ? "Fechar menu de navegação" : "Abrir menu de navegação"}
+            onClick={() => setMobileOpen((open) => !open)}
+          >
+            <span aria-hidden="true">{mobileOpen ? "✕" : "☰"}</span>
+          </button>
+        </div>
       </div>
 
       {mobileOpen && (
@@ -131,6 +137,9 @@ export function NavBar() {
                 </li>
               );
             })}
+            <li>
+              <NavAuth variant="mobile" onNavigate={() => setMobileOpen(false)} />
+            </li>
           </ul>
         </nav>
       )}

@@ -11,6 +11,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.3",
+    "@supabase/supabase-js": "^2.110.7",
     "katex": "^0.18.0",
     "mathjs": "^15.2.0",
     "next": "16.2.10",
