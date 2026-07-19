@@ -3,7 +3,9 @@ import type { Metadata } from "next";
 import { SupabaseNotConfigured } from "@/components/auth/SupabaseNotConfigured";
 import { PageShell } from "@/components/layout/PageShell";
 import { ExerciseBrowser } from "@/components/learning/ExerciseBrowser";
+import { LearningStats } from "@/components/learning/LearningStats";
 import { ButtonLink } from "@/components/shared/Button";
+import { buildRecommendations, computeTopicMetrics, type AttemptInput } from "@/lib/learning/metrics";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { Exercise, Topic } from "@/lib/supabase/types";
@@ -69,18 +71,33 @@ export default async function AprendizadoPage() {
     );
   }
 
-  const [{ data: topics }, { data: exercises }] = await Promise.all([
+  // Tentativas: só o necessário para o motor (Learning Engine v1). O RLS
+  // limita ao próprio usuário; 200 cobre com folga as 20 consideradas por
+  // tópico no cálculo de domínio.
+  const [{ data: topics }, { data: exercises }, { data: attempts }] = await Promise.all([
     supabase!.from("topics").select("id, slug, title, description, position").order("position"),
     supabase!
       .from("exercises")
       .select("id, topic_id, difficulty, statement, statement_latex, choices, correct_index, explanation, position")
       .order("position"),
+    supabase!
+      .from("exercise_attempts")
+      .select("exercise_id, is_correct, created_at")
+      .order("created_at", { ascending: false })
+      .limit(200),
   ]);
+
+  const topicList = (topics ?? []) as Topic[];
+  const exerciseList = (exercises ?? []) as Exercise[];
+  const metrics = computeTopicMetrics(topicList, exerciseList, (attempts ?? []) as AttemptInput[]);
 
   return (
     <PageShell className="flex flex-col gap-10">
       <PageHeader />
-      <ExerciseBrowser topics={(topics ?? []) as Topic[]} exercises={(exercises ?? []) as Exercise[]} />
+      {topicList.length > 0 && (
+        <LearningStats metrics={metrics} recommendations={buildRecommendations(metrics)} />
+      )}
+      <ExerciseBrowser topics={topicList} exercises={exerciseList} />
     </PageShell>
   );
 }
