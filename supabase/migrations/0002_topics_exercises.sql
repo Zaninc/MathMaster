@@ -82,7 +82,7 @@ from (values
     '["5x", "4x", "6x", "x"]'::jsonb, 1,
     '3x + 2x - x = (3 + 2 - 1)x = 4x.', 1),
   ('algebra-basica', 'medio', 'Fatore completamente:', 'x^2 - 9',
-    '["(x-3)(x+3)", "(x-9)(x+1)", "(x-3)^2", "x(x-9)"]'::jsonb, 0,
+    '["(x−3)(x+3)", "(x−9)(x+1)", "(x−3)²", "x(x−9)"]'::jsonb, 0,
     'Diferença de quadrados: x² − 9 = x² − 3² = (x−3)(x+3).', 2),
   ('algebra-basica', 'dificil', 'Qual é o valor da expressão quando x = 2?', '\dfrac{x^3 - 8}{x - 2}',
     '["0", "12", "8", "indefinido"]'::jsonb, 1,
