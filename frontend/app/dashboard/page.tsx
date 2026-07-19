@@ -22,7 +22,8 @@ export const metadata: Metadata = {
 const SHORTCUTS = [
   { label: "Calculadora", href: "/calculadora", description: "Resolva expressões, equações e mais." },
   { label: "Gráficos", href: "/graficos", description: "Visualize funções no plano." },
-  { label: "Aprendizado", href: "/aprendizado", description: "Trilhas de estudo guiadas." },
+  { label: "Aprendizado", href: "/aprendizado", description: "Exercícios por tópico e dificuldade." },
+  { label: "Histórico", href: "/dashboard/historico", description: "Seus exercícios resolvidos recentemente." },
 ] as const;
 
 export default async function DashboardPage() {

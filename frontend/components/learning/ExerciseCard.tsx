@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/shared/Button";
 import { MathFormula } from "@/components/shared/MathFormula";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
 import type { Exercise, ExerciseDifficulty } from "@/lib/supabase/types";
 
@@ -25,13 +26,33 @@ interface ExerciseCardProps {
 
 /**
  * Um exercício de múltipla escolha com correção instantânea no cliente.
- * Nada é persistido (histórico/estatísticas estão fora do escopo da
- * V1.5.2) — o estado vive só neste componente e "Refazer" o zera.
+ * Desde a V1.5.3 cada resposta também vira uma linha em
+ * exercise_attempts (fire-and-forget: o feedback visual nunca espera
+ * nem depende do banco — se a gravação falhar, o exercício segue
+ * funcionando e o histórico apenas não registra aquela tentativa).
+ * "Refazer" + nova resposta = nova tentativa registrada.
  */
 export function ExerciseCard({ exercise }: ExerciseCardProps) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const answered = selectedIndex !== null;
   const isCorrect = selectedIndex === exercise.correct_index;
+
+  function recordAttempt(index: number) {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+    // is_correct não é enviado: o trigger do banco deriva do gabarito.
+    void supabase
+      .from("exercise_attempts")
+      .insert({ exercise_id: exercise.id, selected_index: index })
+      .then(({ error }) => {
+        if (error) console.warn("Tentativa não registrada no histórico:", error.message);
+      });
+  }
+
+  function handleAnswer(index: number) {
+    setSelectedIndex(index);
+    recordAttempt(index);
+  }
 
   return (
     <article className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-5">
@@ -61,7 +82,7 @@ export function ExerciseCard({ exercise }: ExerciseCardProps) {
               key={index}
               type="button"
               disabled={answered}
-              onClick={() => setSelectedIndex(index)}
+              onClick={() => handleAnswer(index)}
               aria-pressed={isSelected}
               className={cn(
                 "rounded-md border px-3 py-2 text-left text-sm transition-colors duration-(--motion-fast)",

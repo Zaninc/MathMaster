@@ -31,3 +31,17 @@ export interface Exercise {
   explanation: string | null;
   position: number;
 }
+
+/**
+ * Espelho de `exercise_attempts` (supabase/migrations/0003_exercise_attempts.sql).
+ * `is_correct` é derivado por trigger no banco — o cliente só envia
+ * `exercise_id` + `selected_index`.
+ */
+export interface ExerciseAttempt {
+  id: string;
+  user_id: string;
+  exercise_id: string;
+  selected_index: number;
+  is_correct: boolean;
+  created_at: string;
+}

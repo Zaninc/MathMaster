@@ -1,5 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const insertMock = vi.fn();
+const getSupabaseBrowserClientMock = vi.fn();
+vi.mock("@/lib/supabase/client", () => ({
+  getSupabaseBrowserClient: () => getSupabaseBrowserClientMock(),
+}));
 
 import type { Exercise } from "@/lib/supabase/types";
 
@@ -18,6 +24,14 @@ const EXERCISE: Exercise = {
 };
 
 describe("ExerciseCard", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // padrão: Supabase indisponível (unconfigured) — os testes de UI não
+    // dependem da gravação; os testes de histórico configuram o mock.
+    getSupabaseBrowserClientMock.mockReturnValue(null);
+    insertMock.mockReturnValue({ then: (cb: (r: { error: null }) => void) => cb({ error: null }) });
+  });
+
   it("renderiza enunciado, badge de dificuldade e as 4 alternativas", () => {
     render(<ExerciseCard exercise={EXERCISE} />);
 
@@ -56,5 +70,30 @@ describe("ExerciseCard", () => {
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "x = -3" })).toBeEnabled();
+  });
+
+  it("registra a tentativa no histórico ao responder (só exercise_id + selected_index)", async () => {
+    getSupabaseBrowserClientMock.mockReturnValue({
+      from: (table: string) => {
+        expect(table).toBe("exercise_attempts");
+        return { insert: insertMock };
+      },
+    });
+    render(<ExerciseCard exercise={EXERCISE} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "x = 3" }));
+
+    await waitFor(() => {
+      expect(insertMock).toHaveBeenCalledWith({ exercise_id: "ex-1", selected_index: 0 });
+    });
+  });
+
+  it("sem Supabase configurado, responder funciona e nada é gravado", () => {
+    render(<ExerciseCard exercise={EXERCISE} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "x = -3" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent("Resposta correta!");
+    expect(insertMock).not.toHaveBeenCalled();
   });
 });
