@@ -2,7 +2,7 @@
 
 Documentação do produto: [PRD.md](./PRD.md) · [ARCHITECTURE.md](./ARCHITECTURE.md) · [UI_UX.md](./UI_UX.md) · [MVP_SCOPE.md](./MVP_SCOPE.md)
 
-O backend (`backend/`) implementa o Math Engine completo do MVP Técnico (álgebra, equações, funções, trigonometria, logaritmos, geometria analítica, cálculo) com parser natural e hardening de segurança — ver `docs/SESSION_LOG_2026-07-13-sprint12-1.md` para o estado mais recente. O frontend (`frontend/`) é a interface real da Sprint Frontend V1 (Home, Calculadora, Gráficos, Geometria, Aprendizado, Ferramentas, Math Mentor) — ver `docs/SESSION_LOG_2026-07-13-frontend-v1.md`. A Sprint V1.5.1 adicionou autenticação opcional via Supabase (login, cadastro, sessão persistente, dashboard) — ver `docs/SESSION_LOG_2026-07-19-sprint-v1.5.1-auth.md`.
+O backend (`backend/`) implementa o Math Engine completo do MVP Técnico (álgebra, equações, funções, trigonometria, logaritmos, geometria analítica, cálculo) com parser natural e hardening de segurança — ver `docs/SESSION_LOG_2026-07-13-sprint12-1.md` para o estado mais recente. O frontend (`frontend/`) é a interface real da Sprint Frontend V1 (Home, Calculadora, Gráficos, Geometria, Aprendizado, Ferramentas, Math Mentor) — ver `docs/SESSION_LOG_2026-07-13-frontend-v1.md`. A Sprint V1.5.1 adicionou autenticação opcional via Supabase (login, cadastro, sessão persistente, dashboard) — ver `docs/SESSION_LOG_2026-07-19-sprint-v1.5.1-auth.md`. A Sprint V1.5.2 transformou a página Aprendizado no primeiro sistema real de exercícios (tópicos + múltipla escolha por dificuldade, exigindo login) — ver `docs/SESSION_LOG_2026-07-19-sprint-v1.5.2-exercicios.md`.
 
 ## Estrutura
 
