@@ -6,7 +6,9 @@
  * com rótulo PT-BR à parte (`FORMULA_CATEGORY_LABELS`). Etapa 3 expandiu
  * o catálogo (7→29 fórmulas) e adicionou o filtro por categoria em
  * FormulasReference.tsx — o slug de categoria criado na Etapa 2 é o que
- * torna esse filtro possível sem tocar nos dados.
+ * torna esse filtro possível sem tocar nos dados. Expansão seguinte
+ * acrescentou mais 17 fórmulas (29→46), sempre ao final do bloco da
+ * categoria correspondente — preserva a ordem visual das já existentes.
  */
 export type FormulaCategoryId = "algebra" | "geometria" | "trigonometria" | "calculo";
 
@@ -70,6 +72,36 @@ export const FORMULAS: FormulaEntry[] = [
     category: "algebra",
   },
   {
+    id: "cubo-soma",
+    title: "Cubo da soma",
+    latex: String.raw`(a+b)^3 = a^3 + 3a^2b + 3ab^2 + b^3`,
+    category: "algebra",
+  },
+  {
+    id: "cubo-diferenca",
+    title: "Cubo da diferença",
+    latex: String.raw`(a-b)^3 = a^3 - 3a^2b + 3ab^2 - b^3`,
+    category: "algebra",
+  },
+  {
+    id: "divisao-potencias",
+    title: "Divisão de potências",
+    latex: String.raw`\frac{a^m}{a^n} = a^{m-n}`,
+    category: "algebra",
+  },
+  {
+    id: "potencia-de-potencia",
+    title: "Potência de potência",
+    latex: String.raw`(a^m)^n = a^{mn}`,
+    category: "algebra",
+  },
+  {
+    id: "delta",
+    title: "Delta (discriminante)",
+    latex: String.raw`\Delta = b^2 - 4ac`,
+    category: "algebra",
+  },
+  {
     id: "teorema-pitagoras",
     title: "Teorema de Pitágoras",
     latex: String.raw`a^2 + b^2 = c^2`,
@@ -124,6 +156,30 @@ export const FORMULAS: FormulaEntry[] = [
     category: "geometria",
   },
   {
+    id: "area-losango",
+    title: "Área do losango",
+    latex: String.raw`A = \frac{D \cdot d}{2}`,
+    category: "geometria",
+  },
+  {
+    id: "area-hexagono-regular",
+    title: "Área do hexágono regular",
+    latex: String.raw`A = \frac{3\sqrt{3}}{2}l^2`,
+    category: "geometria",
+  },
+  {
+    id: "volume-cone",
+    title: "Volume do cone",
+    latex: String.raw`V = \frac{\pi r^2 h}{3}`,
+    category: "geometria",
+  },
+  {
+    id: "volume-piramide",
+    title: "Volume da pirâmide",
+    latex: String.raw`V = \frac{A_b \cdot h}{3}`,
+    category: "geometria",
+  },
+  {
     id: "relacao-fundamental-trigonometrica",
     title: "Relação fundamental",
     latex: String.raw`\sin^2(x) + \cos^2(x) = 1`,
@@ -157,6 +213,30 @@ export const FORMULAS: FormulaEntry[] = [
     id: "seno-soma",
     title: "Seno da soma",
     latex: String.raw`\sin(a+b)=\sin(a)\cos(b)+\cos(a)\sin(b)`,
+    category: "trigonometria",
+  },
+  {
+    id: "cosseno-soma",
+    title: "Cosseno da soma",
+    latex: String.raw`\cos(a+b)=\cos(a)\cos(b)-\sin(a)\sin(b)`,
+    category: "trigonometria",
+  },
+  {
+    id: "seno-diferenca",
+    title: "Seno da diferença",
+    latex: String.raw`\sin(a-b)=\sin(a)\cos(b)-\cos(a)\sin(b)`,
+    category: "trigonometria",
+  },
+  {
+    id: "conversao-graus",
+    title: "Conversão para graus",
+    latex: String.raw`\theta_{\mathrm{graus}}=\theta_{\mathrm{rad}}\frac{180}{\pi}`,
+    category: "trigonometria",
+  },
+  {
+    id: "secante",
+    title: "Definição da secante",
+    latex: String.raw`\sec(x)=\frac{1}{\cos(x)}`,
     category: "trigonometria",
   },
   {
@@ -199,6 +279,30 @@ export const FORMULAS: FormulaEntry[] = [
     id: "limite-fundamental",
     title: "Limite fundamental",
     latex: String.raw`\lim_{x\to0}\frac{\sin(x)}{x}=1`,
+    category: "calculo",
+  },
+  {
+    id: "derivada-exponencial",
+    title: "Derivada da exponencial",
+    latex: String.raw`\frac{d}{dx}\left(e^x\right) = e^x`,
+    category: "calculo",
+  },
+  {
+    id: "derivada-log-natural",
+    title: "Derivada do logaritmo natural",
+    latex: String.raw`\frac{d}{dx}\left(\ln(x)\right) = \frac{1}{x}`,
+    category: "calculo",
+  },
+  {
+    id: "integracao-por-partes",
+    title: "Integração por partes",
+    latex: String.raw`\int u\,dv = uv - \int v\,du`,
+    category: "calculo",
+  },
+  {
+    id: "derivada-tangente",
+    title: "Derivada da tangente",
+    latex: String.raw`\frac{d}{dx}\tan(x)=\sec^2(x)`,
     category: "calculo",
   },
 ];
