@@ -18,9 +18,10 @@ import {
   triangleArea,
   type Point,
 } from "@/lib/math/geometry";
+import type { Viewport } from "@/lib/math/viewport";
 
 import { CircleResultPanel } from "./CircleResultPanel";
-import { GeometryCanvas } from "./GeometryCanvas";
+import { GEOMETRY_VIEWPORT, GeometryCanvas } from "./GeometryCanvas";
 import { TriangleResultPanel } from "./TriangleResultPanel";
 import type { GeometryShape } from "./types";
 
@@ -138,6 +139,8 @@ export function GeometryWorkspace() {
   const [backendExpression, setBackendExpression] = useState("");
   const [backendResult, setBackendResult] = useState<string | null>(null);
   const [backendErrorMessage, setBackendErrorMessage] = useState<string | null>(null);
+
+  const [viewport, setViewport] = useState<Viewport>(GEOMETRY_VIEWPORT);
 
   function handleSelectShape(kind: ShapeKind) {
     setActiveKind(kind);
@@ -379,7 +382,7 @@ export function GeometryWorkspace() {
         </div>
 
         <div>
-          <GeometryCanvas shape={shape} />
+          <GeometryCanvas shape={shape} viewport={viewport} onViewportChange={setViewport} />
         </div>
       </div>
     </PageShell>

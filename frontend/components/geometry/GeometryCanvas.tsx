@@ -1,10 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
-
-import { useElementSize } from "@/hooks/useElementSize";
+import { CartesianViewport } from "@/components/shared/CartesianViewport";
 import { sampleEllipse, sampleHyperbolaBranch, sampleParabola } from "@/lib/math/geometry-render";
-import { buildGridValues, dataToPixelX, dataToPixelY, fitViewportToAspect, niceStep, type Viewport } from "@/lib/math/viewport";
+import { dataToPixelX, dataToPixelY, type Viewport } from "@/lib/math/viewport";
 
 import type { GeometryShape } from "./types";
 
@@ -22,90 +20,29 @@ function pointsToPath(points: { x: number; y: number }[], viewport: Viewport, wi
 
 interface GeometryCanvasProps {
   shape: GeometryShape | null;
-  viewport?: Viewport;
+  viewport: Viewport;
+  onViewportChange: (viewport: Viewport) => void;
 }
 
 /**
- * Renderer genérico, dirigido por um `GeometryShape` já calculado a
- * partir dos NÚMEROS que o usuário digitou (nunca da resposta em texto do
- * backend) — reaproveita a mesma grade/eixos de `lib/math/viewport.ts`
- * (Etapa 3).
- *
- * Hotfix de alinhamento: container medido via `useElementSize`
- * (`ResizeObserver`) em vez de `GEOMETRY_SIZE` fixo — `fitViewportToAspect`
- * expande o eixo que sobra para preencher o container real sem distorcer
- * (mesma técnica do `GraphCanvas`).
+ * Figuras geométricas sobre o motor compartilhado `CartesianViewport`
+ * (dimensões, grade, eixos, pan/zoom/reset — mesma base de `/graficos`,
+ * extraída nesta sprint). Este componente cuida só do que é específico
+ * de Geometria: desenhar o `GeometryShape` já calculado a partir dos
+ * NÚMEROS que o usuário digitou (nunca da resposta em texto do
+ * backend) — cálculos e desenhos de triângulo/círculo/reta/parábola/
+ * elipse/hipérbole intocados por esta sprint.
  */
-export function GeometryCanvas({ shape, viewport = GEOMETRY_VIEWPORT }: GeometryCanvasProps) {
-  const [containerRef, { width, height }] = useElementSize<HTMLDivElement>();
-  const measured = width > 0 && height > 0;
-  const renderViewport = useMemo(
-    () => (measured ? fitViewportToAspect(viewport, width, height) : viewport),
-    [viewport, width, height, measured]
-  );
-
-  const xStep = niceStep(renderViewport.xMax - renderViewport.xMin);
-  const yStep = niceStep(renderViewport.yMax - renderViewport.yMin);
-  const xGridValues = useMemo(
-    () => buildGridValues(renderViewport.xMin, renderViewport.xMax, xStep),
-    [renderViewport.xMin, renderViewport.xMax, xStep]
-  );
-  const yGridValues = useMemo(
-    () => buildGridValues(renderViewport.yMin, renderViewport.yMax, yStep),
-    [renderViewport.yMin, renderViewport.yMax, yStep]
-  );
-
+export function GeometryCanvas({ shape, viewport, onViewportChange }: GeometryCanvasProps) {
   return (
-    <div
-      ref={containerRef}
-      className="h-[clamp(520px,68vh,760px)] w-full overflow-hidden rounded-lg border border-border bg-surface"
+    <CartesianViewport
+      viewport={viewport}
+      onViewportChange={onViewportChange}
+      resetViewport={GEOMETRY_VIEWPORT}
+      ariaLabel={shape ? `Construção geométrica: ${shape.kind}` : "Nenhuma figura para desenhar ainda"}
     >
-      {measured && (
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          role="img"
-          aria-label={shape ? `Construção geométrica: ${shape.kind}` : "Nenhuma figura para desenhar ainda"}
-          className="h-full w-full"
-        >
-          {xGridValues.map((x) => (
-            <line
-              key={`grid-x-${x}`}
-              x1={dataToPixelX(x, renderViewport, width)}
-              x2={dataToPixelX(x, renderViewport, width)}
-              y1={0}
-              y2={height}
-              stroke="var(--border)"
-              strokeWidth={1}
-            />
-          ))}
-          {yGridValues.map((y) => (
-            <line
-              key={`grid-y-${y}`}
-              y1={dataToPixelY(y, renderViewport, height)}
-              y2={dataToPixelY(y, renderViewport, height)}
-              x1={0}
-              x2={width}
-              stroke="var(--border)"
-              strokeWidth={1}
-            />
-          ))}
-          <line
-            x1={dataToPixelX(0, renderViewport, width)}
-            x2={dataToPixelX(0, renderViewport, width)}
-            y1={0}
-            y2={height}
-            stroke="var(--text-muted)"
-            strokeWidth={1.5}
-          />
-          <line
-            y1={dataToPixelY(0, renderViewport, height)}
-            y2={dataToPixelY(0, renderViewport, height)}
-            x1={0}
-            x2={width}
-            stroke="var(--text-muted)"
-            strokeWidth={1.5}
-          />
-
+      {({ viewport: renderViewport, width, height }) => (
+        <>
           {shape?.kind === "triangle" && (
             <path
               d={pointsToPath(shape.points, renderViewport, width, height, true)}
@@ -187,8 +124,8 @@ export function GeometryCanvas({ shape, viewport = GEOMETRY_VIEWPORT }: Geometry
                 fill="var(--text-primary)"
               />
             )}
-        </svg>
+        </>
       )}
-    </div>
+    </CartesianViewport>
   );
 }
