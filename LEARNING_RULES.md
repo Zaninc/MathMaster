@@ -17,6 +17,7 @@ Todo exercício precisa dos campos abaixo, no schema **real** da tabela `exercis
 ```ts
 interface Exercise {
   id: string;
+  slug: string;                    // chave estável de sincronização (0004_exercises_slug.sql) — nunca o texto da pergunta
   topic_id: string;               // FK pra topics — sempre um tópico já existente
   difficulty: "facil" | "medio" | "dificil";
   statement: string;               // enunciado em texto simples/Unicode
@@ -79,6 +80,30 @@ Novos exercícios reutilizam, sem exceção:
 - as métricas atuais (domínio, confiança, standing).
 
 Duplicar componente ou cálculo para um exercício "especial" é proibido — se o exercício não cabe na estrutura atual, o problema é a estrutura (discutir antes de implementar), não criar uma exceção.
+
+## 8. Catálogo versionado e sincronização
+
+O Supabase continua sendo a fonte de verdade em **runtime** (é lá que o trigger `set_attempt_correctness` confere o gabarito, e é de lá que a Learning Engine lê) — mas nenhum exercício novo é cadastrado direto no painel. O fluxo obrigatório é:
+
+```text
+frontend/data/exercises/<topico>.ts (Git, fonte de autoria)
+                ↓
+npm run sync:exercises -- --dry-run   (valida, mostra o que mudaria, não escreve)
+                ↓
+npm run sync:exercises                (upsert por slug, nunca duplica)
+                ↓
+Supabase (runtime)
+```
+
+Regras:
+
+- **Todo exercício novo entra em `frontend/data/exercises/`**, tipado contra `ExerciseDraft` (`frontend/data/exercises/types.ts`) — nunca inserido via SQL manual ou painel do Supabase.
+- **A chave de sincronização é sempre `slug`**, nunca o texto da pergunta — precisa ser único no catálogo inteiro e nunca mudar depois de criado (mudar o slug de um exercício existente faz o sync tratá-lo como um exercício novo).
+- **Antes de qualquer escrita**, o script valida o catálogo inteiro (`npm run sync:exercises -- --dry-run` ou os testes de `frontend/scripts/sync-exercises/`) — um catálogo inválido nunca chega a tocar o banco.
+- **O script nunca apaga.** Um exercício que existe no Supabase mas não está mais no catálogo local é só reportado como divergência — remoção é decisão manual, fora deste fluxo.
+- **`SUPABASE_SERVICE_ROLE_KEY`** só existe em `frontend/.env.local` (nunca commitado) e só é usada por `scripts/sync-exercises/` — nunca em código que roda no navegador.
+
+Detalhes operacionais completos (comandos, variáveis de ambiente, checklist de produção): `frontend/scripts/sync-exercises/README.md`.
 
 ---
 

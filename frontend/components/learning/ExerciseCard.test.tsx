@@ -13,6 +13,7 @@ import { ExerciseCard } from "./ExerciseCard";
 
 const EXERCISE: Exercise = {
   id: "ex-1",
+  slug: "equacoes-primeiro-grau-teste",
   topic_id: "t-1",
   difficulty: "facil",
   statement: "Resolva a equação:",

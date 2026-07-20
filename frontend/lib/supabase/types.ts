@@ -22,6 +22,8 @@ export interface Topic {
 
 export interface Exercise {
   id: string;
+  /** Chave estável de sincronização (0004_exercises_slug.sql) — fonte de autoria em frontend/data/exercises/, nunca editada direto no painel. Ver LEARNING_RULES.md. */
+  slug: string;
   topic_id: string;
   difficulty: ExerciseDifficulty;
   statement: string;

@@ -13,6 +13,7 @@ const TOPICS: Topic[] = [
 function makeExercise(overrides: Partial<Exercise>): Exercise {
   return {
     id: "ex",
+    slug: "exercicio-teste",
     topic_id: "t-1",
     difficulty: "facil",
     statement: "Enunciado",
