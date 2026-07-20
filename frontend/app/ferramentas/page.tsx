@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 
 import { PageShell } from "@/components/layout/PageShell";
-import { FormulasReference } from "@/components/tools/FormulasReference";
 import { ToolCard } from "@/components/tools/ToolCard";
 import { TOOLS } from "@/data/tools";
 
 export const metadata: Metadata = {
   title: "Ferramentas",
-  description: "Histórico, fórmulas de referência e os recursos planejados para as próximas versões do MathMaster.",
+  description: "Histórico, biblioteca de fórmulas e os recursos planejados para as próximas versões do MathMaster.",
 };
 
 export default function FerramentasPage() {
@@ -26,8 +25,6 @@ export default function FerramentasPage() {
           <ToolCard key={tool.title} tool={tool} />
         ))}
       </div>
-
-      <FormulasReference />
     </PageShell>
   );
 }

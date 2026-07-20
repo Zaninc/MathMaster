@@ -23,7 +23,7 @@ export const TOOLS: Tool[] = [
     title: "Fórmulas",
     description: "Referência rápida das fórmulas mais usadas em álgebra, geometria, trigonometria e cálculo.",
     status: "live",
-    href: "#formulas",
+    href: "/formulas",
   },
   {
     title: "Simulados",
@@ -67,20 +67,4 @@ export const TOOLS: Tool[] = [
     status: "planned",
     version: "V1.5",
   },
-];
-
-export interface FormulaEntry {
-  category: string;
-  name: string;
-  formula: string;
-}
-
-export const FORMULAS: FormulaEntry[] = [
-  { category: "Álgebra", name: "Bhaskara", formula: "x = (-b ± √(b² - 4ac)) / 2a" },
-  { category: "Geometria", name: "Teorema de Pitágoras", formula: "a² + b² = c²" },
-  { category: "Geometria", name: "Área do círculo", formula: "A = πr²" },
-  { category: "Geometria", name: "Área do triângulo", formula: "A = (base × altura) / 2" },
-  { category: "Trigonometria", name: "Relação fundamental", formula: "sen²(x) + cos²(x) = 1" },
-  { category: "Cálculo", name: "Derivada da potência", formula: "d/dx(xⁿ) = n·xⁿ⁻¹" },
-  { category: "Cálculo", name: "Integral da potência", formula: "∫xⁿ dx = xⁿ⁺¹/(n+1) + C" },
 ];
