@@ -75,4 +75,12 @@ describe("ExerciseBrowser", () => {
 
     expect(screen.getByText(/rode a migração de exercícios/i)).toBeInTheDocument();
   });
+
+  it("com initialTopicId, abre direto no tópico indicado (deep-link do Dashboard)", () => {
+    render(<ExerciseBrowser topics={TOPICS} exercises={EXERCISES} initialTopicId="t-2" />);
+
+    expect(screen.getByText("Fácil de equações")).toBeInTheDocument();
+    expect(screen.queryByText("Fácil de álgebra")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Equações" })).toHaveAttribute("aria-pressed", "true");
+  });
 });

@@ -19,6 +19,8 @@ const DIFFICULTY_FILTERS: Array<{ value: ExerciseDifficulty | "todos"; label: st
 interface ExerciseBrowserProps {
   topics: Topic[];
   exercises: Exercise[];
+  /** Tópico pré-selecionado (ex.: vindo de /aprendizado?topico=slug via recomendação do Dashboard). */
+  initialTopicId?: string;
 }
 
 /**
@@ -26,8 +28,8 @@ interface ExerciseBrowserProps {
  * Server Component da página (já filtrados pelo RLS de usuário autenticado);
  * aqui é só seleção client-side, sem nova chamada ao Supabase.
  */
-export function ExerciseBrowser({ topics, exercises }: ExerciseBrowserProps) {
-  const [activeTopicId, setActiveTopicId] = useState<string | null>(topics[0]?.id ?? null);
+export function ExerciseBrowser({ topics, exercises, initialTopicId }: ExerciseBrowserProps) {
+  const [activeTopicId, setActiveTopicId] = useState<string | null>(initialTopicId ?? topics[0]?.id ?? null);
   const [difficulty, setDifficulty] = useState<ExerciseDifficulty | "todos">("todos");
 
   const visibleExercises = useMemo(() => {

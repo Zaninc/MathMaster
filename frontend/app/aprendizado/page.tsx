@@ -27,13 +27,21 @@ function PageHeader() {
   );
 }
 
+interface AprendizadoPageProps {
+  /** `?topico=slug` — deep-link vindo das recomendações do Dashboard (Sprint V1.5.5). */
+  searchParams: Promise<{ topico?: string | string[] }>;
+}
+
 /**
  * Sprint V1.5.2: a página de Aprendizado deixou de ser o preview da
  * Learning Engine (Frontend V1) e virou o sistema real de exercícios.
  * Requer login (RLS só libera leitura para usuários autenticados);
  * deslogado vê um convite, nunca um redirect — decisão da sprint.
  */
-export default async function AprendizadoPage() {
+export default async function AprendizadoPage({ searchParams }: AprendizadoPageProps) {
+  const { topico } = await searchParams;
+  const topicoSlug = Array.isArray(topico) ? topico[0] : topico;
+
   if (!isSupabaseConfigured()) {
     return (
       <PageShell className="flex flex-col gap-10">
@@ -90,6 +98,7 @@ export default async function AprendizadoPage() {
   const topicList = (topics ?? []) as Topic[];
   const exerciseList = (exercises ?? []) as Exercise[];
   const metrics = computeTopicMetrics(topicList, exerciseList, (attempts ?? []) as AttemptInput[]);
+  const initialTopicId = topicList.find((topic) => topic.slug === topicoSlug)?.id;
 
   return (
     <PageShell className="flex flex-col gap-10">
@@ -97,7 +106,7 @@ export default async function AprendizadoPage() {
       {topicList.length > 0 && (
         <LearningStats metrics={metrics} recommendations={buildRecommendations(metrics)} />
       )}
-      <ExerciseBrowser topics={topicList} exercises={exerciseList} />
+      <ExerciseBrowser topics={topicList} exercises={exerciseList} initialTopicId={initialTopicId} />
     </PageShell>
   );
 }
