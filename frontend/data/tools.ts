@@ -17,7 +17,7 @@ export const TOOLS: Tool[] = [
     title: "Histórico",
     description: "Reveja as expressões já resolvidas nesta instância e reutilize qualquer uma delas.",
     status: "live",
-    href: "/calculadora",
+    href: "/dashboard/historico",
   },
   {
     title: "Fórmulas",
