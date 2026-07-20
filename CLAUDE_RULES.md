@@ -2,7 +2,7 @@
 
 Este documento centraliza as regras de trabalho do projeto MathMaster para qualquer sessão do Claude (ou de outro agente) que implemente sprints, correções ou hardenings no repositório. Ele substitui a necessidade de repetir instruções a cada sprint: **este arquivo é a estrutura obrigatória de trabalho.**
 
-Documentação relacionada: [README.md](./README.md) · [ARCHITECTURE.md](./ARCHITECTURE.md) · [PRD.md](./PRD.md) · [UI_UX.md](./UI_UX.md) · [MVP_SCOPE.md](./MVP_SCOPE.md)
+Documentação relacionada: [README.md](./README.md) · [ARCHITECTURE.md](./ARCHITECTURE.md) · [PRD.md](./PRD.md) · [UI_UX.md](./UI_UX.md) · [MVP_SCOPE.md](./MVP_SCOPE.md) · [LEARNING_RULES.md](./LEARNING_RULES.md)
 
 ---
 
