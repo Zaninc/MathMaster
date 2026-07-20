@@ -15,6 +15,7 @@ import type { HistoryItem } from "@/lib/api/types";
 import { ApiError, friendlyMessage } from "@/lib/api/errors";
 import { insertAtCursor } from "@/lib/math/insert-at-cursor";
 
+import { ExampleButton } from "./ExampleButton";
 import { HistoryPanel } from "./HistoryPanel";
 import { ResultPanel, type ResultStatus } from "./ResultPanel";
 
@@ -189,15 +190,7 @@ export function CalculatorWorkspace() {
             <p className="mb-2 text-sm font-medium text-text-secondary">Exemplos</p>
             <div className="flex flex-wrap gap-2">
               {QUICK_EXAMPLES.map((example) => (
-                <button
-                  key={example.expression}
-                  type="button"
-                  onClick={() => fillExpression(example.expression)}
-                  aria-label={`Preencher exemplo: ${example.label}`}
-                  className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-text-secondary transition-colors duration-(--motion-fast) hover:border-border-hover hover:text-text-primary"
-                >
-                  {example.label}
-                </button>
+                <ExampleButton key={example.expression} example={example} onSelect={fillExpression} />
               ))}
             </div>
           </div>

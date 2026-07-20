@@ -197,6 +197,15 @@ describe("CalculatorWorkspace", () => {
     expect(screen.getByLabelText("Expressão matemática")).toHaveValue("2+2");
   });
 
+  it("preenche o campo com a expressão exata de um exemplo, mesmo exibido via KaTeX", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    render(<CalculatorWorkspace />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Preencher exemplo: d/dx(x² + 3x)" }));
+
+    expect(screen.getByLabelText("Expressão matemática")).toHaveValue("d/dx(x² + 3x)");
+  });
+
   it("oculta um item do histórico localmente ao clicar em Ocultar", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([
       { expression: "2+2", result: "4", timestamp: "2026-01-01T00:00:00Z" },
