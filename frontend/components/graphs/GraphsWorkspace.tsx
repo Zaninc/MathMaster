@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { PageShell } from "@/components/layout/PageShell";
+import { normalizeForPlot } from "@/lib/math/graph-normalize";
 import { compilePlotFunction, PlotExpressionError, type PlotFn } from "@/lib/math/plot-evaluator";
 import { DEFAULT_VIEWPORT, type Viewport } from "@/lib/math/viewport";
 
@@ -34,7 +35,10 @@ export function GraphsWorkspace() {
       await Promise.all(
         functions.map(async (fn) => {
           try {
-            const evaluate = await compilePlotFunction(fn.expression);
+            // Normalização acontece só aqui, na fronteira antes do avaliador —
+            // compilePlotFunction/plot-evaluator.ts nunca sabem que a entrada
+            // pode ter vindo em notação natural (x², sen(x), x(x+1)).
+            const evaluate = await compilePlotFunction(normalizeForPlot(fn.expression));
             nextCompiled.set(fn.id, evaluate);
           } catch (cause) {
             const message =

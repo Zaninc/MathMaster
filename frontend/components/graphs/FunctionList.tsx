@@ -1,12 +1,45 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 import { Button } from "@/components/shared/Button";
 import { FadeIn } from "@/components/shared/FadeIn";
+import { MathFormula } from "@/components/shared/MathFormula";
 import { GRAPH_EXAMPLES } from "@/data/graph-examples";
+import { plotExpressionToLatex } from "@/lib/math/graph-normalize";
 
 import type { PlotFunction } from "./types";
+
+/**
+ * Expressão de uma função na lista, via KaTeX — mesma infraestrutura de
+ * progressive enhancement do HistoryPanel (`HistoryEntry`): texto puro
+ * primeiro/fallback, promovido a KaTeX quando a conversão resolve.
+ * Componente próprio para o efeito rodar por item.
+ */
+function FunctionExpression({ expression }: { expression: string }) {
+  const [display, setDisplay] = useState<{ key: string; latex: string | null } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void plotExpressionToLatex(expression).then((latex) => {
+      if (!cancelled) setDisplay({ key: expression, latex });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [expression]);
+
+  // Comparação por "key" (não um setState síncrono de reset no efeito,
+  // mesmo padrão de hooks/useSolveLatex.ts) — enquanto a conversão da
+  // expressão ATUAL está pendente, um resultado antigo nunca é exibido.
+  const latex = display !== null && display.key === expression ? display.latex : null;
+
+  return latex !== null ? (
+    <MathFormula formula={latex} className="flex-1 truncate text-sm text-text-primary" />
+  ) : (
+    <code className="flex-1 truncate text-sm text-text-primary">{expression}</code>
+  );
+}
 
 interface FunctionListProps {
   functions: PlotFunction[];
@@ -30,7 +63,8 @@ export function FunctionList({ functions, errors, onAdd, onToggle, onRemove }: F
     <div className="flex flex-col gap-4">
       <form onSubmit={handleSubmit} className="flex flex-col gap-2">
         <label htmlFor="graph-function-input" className="text-sm font-medium text-text-secondary">
-          Adicionar função — sintaxe de plotagem (ex.: <code>x^2 - 4</code>, <code>sin(x)</code>)
+          Adicionar função — aceita notação natural (ex.: <code>x² - 4</code>, <code>sen(x)</code>) ou técnica
+          (ex.: <code>x^2 - 4</code>, <code>sin(x)</code>)
         </label>
         <div className="flex gap-2">
           <input
@@ -83,7 +117,7 @@ export function FunctionList({ functions, errors, onAdd, onToggle, onRemove }: F
                     className="h-3 w-3 shrink-0 rounded-full"
                     style={{ backgroundColor: fn.color }}
                   />
-                  <code className="flex-1 truncate text-sm text-text-primary">{fn.expression}</code>
+                  <FunctionExpression expression={fn.expression} />
                   <button
                     type="button"
                     onClick={() => onRemove(fn.id)}

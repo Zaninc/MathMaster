@@ -38,7 +38,8 @@ const ALLOWED_FUNCTIONS = new Set([
 ]);
 
 const ALLOWED_CONSTANTS = new Set(["pi", "e", "tau"]);
-const ALLOWED_VARIABLE = "x";
+/** Exportado para lib/math/graph-normalize.ts (fonte única da única variável livre permitida). */
+export const ALLOWED_VARIABLE = "x";
 
 const ALLOWED_OPERATOR_FNS = new Set([
   "add",
