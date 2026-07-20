@@ -8,6 +8,7 @@ import { MathInput } from "@/components/math-input/MathInput";
 import { MathKeyboard } from "@/components/math-input/MathKeyboard";
 import { MathPreview } from "@/components/math-input/MathPreview";
 import { Button } from "@/components/shared/Button";
+import { ExampleButton } from "@/components/shared/ExampleButton";
 import { QUICK_EXAMPLES } from "@/data/examples";
 import type { KeyboardKey } from "@/data/keyboard";
 import { apiClient } from "@/lib/api/client";
@@ -15,7 +16,6 @@ import type { HistoryItem } from "@/lib/api/types";
 import { ApiError, friendlyMessage } from "@/lib/api/errors";
 import { insertAtCursor } from "@/lib/math/insert-at-cursor";
 
-import { ExampleButton } from "./ExampleButton";
 import { HistoryPanel } from "./HistoryPanel";
 import { ResultPanel, type ResultStatus } from "./ResultPanel";
 

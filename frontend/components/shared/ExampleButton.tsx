@@ -10,11 +10,16 @@ interface ExampleButtonProps {
 }
 
 /**
- * Botão de exemplo da Calculadora, renderizado via KaTeX quando possível
- * — mesma infraestrutura de progressive enhancement do MathPreview/
- * HistoryPanel (`useInputLatex`/`MathFormula`): texto puro (`label`)
- * primeiro/fallback, promovido a KaTeX quando a conversão resolve.
- * `delayMs=0` porque o exemplo é estático (não há digitação a debouncer).
+ * Botão de exemplo rápido, renderizado via KaTeX quando possível — mesma
+ * infraestrutura de progressive enhancement do MathPreview/HistoryPanel
+ * (`useInputLatex`/`MathFormula`): texto puro (`label`) primeiro/fallback,
+ * promovido a KaTeX quando a conversão resolve. `delayMs=0` porque o
+ * exemplo é estático (não há digitação a debouncer).
+ *
+ * Compartilhado entre a Home (`QuickCalculator`) e a Calculadora
+ * (`CalculatorWorkspace`) — mesmo componente, mesma fonte de dados
+ * (`data/examples.ts`), para as duas telas nunca divergirem na
+ * aparência nem na expressão enviada.
  *
  * `example.expression` é o que vai pro clique (`onSelect`) — nunca passa
  * pela conversão LaTeX, que é só decoração visual do que já é exibido.

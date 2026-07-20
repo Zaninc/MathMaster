@@ -3,6 +3,7 @@
 import { FormEvent, useId, useState } from "react";
 
 import { Button } from "@/components/shared/Button";
+import { ExampleButton } from "@/components/shared/ExampleButton";
 import { QUICK_EXAMPLES, QUICK_SHORTCUTS } from "@/data/examples";
 import { apiClient } from "@/lib/api/client";
 import { ApiError, friendlyMessage } from "@/lib/api/errors";
@@ -110,15 +111,7 @@ export function QuickCalculator() {
           <p className="mb-2 text-sm font-medium text-text-secondary">Exemplos</p>
           <div className="flex flex-wrap gap-2">
             {QUICK_EXAMPLES.map((example) => (
-              <button
-                key={example.expression}
-                type="button"
-                onClick={() => fillExample(example.expression)}
-                aria-label={`Preencher exemplo: ${example.label}`}
-                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-text-secondary transition-colors hover:border-border-hover hover:text-text-primary"
-              >
-                {example.label}
-              </button>
+              <ExampleButton key={example.expression} example={example} onSelect={fillExample} />
             ))}
           </div>
         </div>
