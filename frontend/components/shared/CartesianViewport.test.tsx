@@ -145,6 +145,53 @@ describe("CartesianViewport", () => {
     expect(latest.xMax - latest.xMin).toBeLessThan(DEFAULT_VIEWPORT.xMax - DEFAULT_VIEWPORT.xMin);
   });
 
+  it("registra o listener de wheel nativamente com { passive: false } — onWheel do React não bloquearia o scroll", () => {
+    const { container } = render(<Harness />);
+    measure();
+    const svg = container.querySelector("svg")!;
+
+    const addSpy = vi.spyOn(svg, "addEventListener");
+    // Força o efeito a rodar de novo (mudança de viewport via zoom) pra capturar a chamada real de addEventListener.
+    fireEvent.click(screen.getByRole("button", { name: "Aumentar zoom" }));
+
+    const wheelCall = addSpy.mock.calls.find(([type]) => type === "wheel");
+    expect(wheelCall).toBeDefined();
+    expect(wheelCall?.[2]).toEqual({ passive: false });
+  });
+
+  it("remove o listener de wheel no cleanup (unmount)", () => {
+    const { container, unmount } = render(<Harness />);
+    measure();
+    const svg = container.querySelector("svg")!;
+    const removeSpy = vi.spyOn(svg, "removeEventListener");
+
+    unmount();
+
+    expect(removeSpy).toHaveBeenCalledWith("wheel", expect.any(Function));
+  });
+
+  it("scroll fora do gráfico (ex. no body) não aciona o zoom nem é interceptado", () => {
+    let latest: Viewport = DEFAULT_VIEWPORT;
+    render(
+      <CartesianViewport
+        viewport={DEFAULT_VIEWPORT}
+        onViewportChange={(v) => (latest = v)}
+        resetViewport={DEFAULT_VIEWPORT}
+        ariaLabel="Plano de teste"
+      >
+        {() => null}
+      </CartesianViewport>
+    );
+    measure();
+
+    const wheelEvent = new WheelEvent("wheel", { deltaY: -100, bubbles: true, cancelable: true });
+    const preventDefaultSpy = vi.spyOn(wheelEvent, "preventDefault");
+    fireEvent(document.body, wheelEvent);
+
+    expect(preventDefaultSpy).not.toHaveBeenCalled();
+    expect(latest).toEqual(DEFAULT_VIEWPORT);
+  });
+
   it("arrastar (pointer down + move) desloca o viewport (pan)", () => {
     let latest: Viewport = DEFAULT_VIEWPORT;
     const { container } = render(

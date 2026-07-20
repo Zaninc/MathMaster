@@ -1,6 +1,6 @@
 "use client";
 
-import { PointerEvent as ReactPointerEvent, ReactNode, useMemo, useRef, WheelEvent as ReactWheelEvent } from "react";
+import { PointerEvent as ReactPointerEvent, ReactNode, useEffect, useMemo, useRef } from "react";
 
 import { useElementSize } from "@/hooks/useElementSize";
 import {
@@ -123,10 +123,28 @@ export function CartesianViewport({
     onPointerLeave?.();
   }
 
-  function handleWheel(event: ReactWheelEvent<SVGSVGElement>) {
-    event.preventDefault();
-    onViewportChange(zoomViewport(viewport, event.deltaY > 0 ? 1.1 : 0.9));
-  }
+  /**
+   * `onWheel` do React NÃO impede o scroll da página aqui: React registra
+   * o listener nativo de `wheel` como `passive: true` por padrão (mesma
+   * otimização de performance do próprio browser para touch/wheel),
+   * então `event.preventDefault()` dentro de um handler sintético é
+   * ignorado silenciosamente — o gráfico daria zoom E a página rolaria
+   * junto. Fix: listener nativo próprio com `{ passive: false }`,
+   * anexado só no `<svg>` (nunca na página) e removido no cleanup —
+   * scroll fora do gráfico continua 100% normal.
+   */
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    function handleWheel(event: WheelEvent) {
+      event.preventDefault();
+      onViewportChange(zoomViewport(viewport, event.deltaY > 0 ? 1.1 : 0.9));
+    }
+
+    svg.addEventListener("wheel", handleWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", handleWheel);
+  }, [viewport, onViewportChange, measured]);
 
   return (
     <div
@@ -144,7 +162,6 @@ export function CartesianViewport({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerLeave}
-          onWheel={handleWheel}
         >
           {xGridValues.map((x) => (
             <line
