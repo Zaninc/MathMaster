@@ -1,7 +1,8 @@
-import { act, fireEvent, render } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Viewport } from "@/lib/math/viewport";
+import { dataToPixelX, dataToPixelY, type Viewport } from "@/lib/math/viewport";
 
 import { GEOMETRY_VIEWPORT, GeometryCanvas } from "./GeometryCanvas";
 import type { GeometryShape } from "./types";
@@ -97,5 +98,70 @@ describe("GeometryCanvas", () => {
 
     fireEvent.click(getByRole("button", { name: "Redefinir câmera" }));
     expect(latest).toEqual(GEOMETRY_VIEWPORT);
+  });
+
+  it("mostra os rótulos de marcação da figura ativa (círculo: Centro + raio)", () => {
+    render(<GeometryCanvas shape={CIRCLE} viewport={GEOMETRY_VIEWPORT} onViewportChange={vi.fn()} />);
+    measure();
+
+    expect(screen.getByText("Centro")).toBeInTheDocument();
+    expect(screen.getByText("r = 5")).toBeInTheDocument();
+  });
+
+  it("nenhuma figura deixa de ser desenhada com marcações ligadas (triângulo mantém o path + ganha A/B/C)", () => {
+    const triangle: GeometryShape = {
+      kind: "triangle",
+      points: [{ x: 0, y: 0 }, { x: 8, y: 0 }, { x: 0, y: 5 }],
+    };
+    const { container } = render(
+      <GeometryCanvas shape={triangle} viewport={GEOMETRY_VIEWPORT} onViewportChange={vi.fn()} />
+    );
+    measure();
+
+    expect(container.querySelector("path[fill='var(--accent)']")).not.toBeNull();
+    expect(screen.getByText("A")).toBeInTheDocument();
+    expect(screen.getByText("B")).toBeInTheDocument();
+    expect(screen.getByText("C")).toBeInTheDocument();
+  });
+
+  function Harness({ shape }: { shape: GeometryShape }) {
+    const [viewport, setViewport] = useState<Viewport>(GEOMETRY_VIEWPORT);
+    return <GeometryCanvas shape={shape} viewport={viewport} onViewportChange={setViewport} />;
+  }
+
+  it("a marcação do centro continua alinhada com a figura depois de zoom e de reset", () => {
+    const { container, getByRole } = render(<Harness shape={CIRCLE} />);
+    measure();
+
+    fireEvent.click(getByRole("button", { name: "Aumentar zoom" }));
+
+    let dot = container.querySelector("circle[fill='var(--text-primary)']")!;
+    let shapeCircle = container.querySelector("circle[fill='var(--accent)']")!;
+    expect(dot.getAttribute("cx")).toBe(shapeCircle.getAttribute("cx"));
+    expect(dot.getAttribute("cy")).toBe(shapeCircle.getAttribute("cy"));
+
+    fireEvent.click(getByRole("button", { name: "Redefinir câmera" }));
+
+    dot = container.querySelector("circle[fill='var(--text-primary)']")!;
+    shapeCircle = container.querySelector("circle[fill='var(--accent)']")!;
+    expect(Number(dot.getAttribute("cx"))).toBeCloseTo(dataToPixelX(0, GEOMETRY_VIEWPORT, 800));
+    expect(Number(dot.getAttribute("cy"))).toBeCloseTo(dataToPixelY(0, GEOMETRY_VIEWPORT, 800));
+    expect(dot.getAttribute("cx")).toBe(shapeCircle.getAttribute("cx"));
+  });
+
+  it("mudar as coordenadas da figura move as marcações junto", () => {
+    const { container, rerender } = render(
+      <GeometryCanvas shape={CIRCLE} viewport={GEOMETRY_VIEWPORT} onViewportChange={vi.fn()} />
+    );
+    measure();
+
+    const originalCx = container.querySelector("circle[fill='var(--text-primary)']")?.getAttribute("cx");
+
+    const moved: GeometryShape = { kind: "circle", center: { x: 5, y: 5 }, radius: 5 };
+    rerender(<GeometryCanvas shape={moved} viewport={GEOMETRY_VIEWPORT} onViewportChange={vi.fn()} />);
+
+    const newCx = container.querySelector("circle[fill='var(--text-primary)']")?.getAttribute("cx");
+    expect(newCx).not.toBe(originalCx);
+    expect(Number(newCx)).toBeCloseTo(dataToPixelX(5, GEOMETRY_VIEWPORT, 800));
   });
 });
