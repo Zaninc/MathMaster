@@ -1,29 +1,24 @@
-import { FORMULAS } from "@/data/formulas";
+import { FORMULA_CATEGORY_LABELS, FORMULAS } from "@/data/formulas";
+
+import { FormulaCategory } from "./FormulaCategory";
 
 /**
- * Grade de fórmulas agrupadas por categoria. Puro e sem estado — o
- * título/descrição da página ficam em app/formulas/page.tsx (Etapa 1 da
- * separação da Biblioteca de Fórmulas); este componente só existe pra
- * crescer nas próximas etapas (KaTeX, filtros, busca) sem levar
- * cabeçalho de página junto.
+ * Biblioteca de Fórmulas — Etapa 2: agrupa por categoria (ordem = 1ª
+ * aparição em FORMULAS, preservando a ordem da Etapa 1) e delega a
+ * FormulaCategory/FormulaCard. Puro e sem estado — título/descrição da
+ * página ficam em app/formulas/page.tsx.
  */
 export function FormulasReference() {
   const categories = Array.from(new Set(FORMULAS.map((formula) => formula.category)));
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="flex flex-col gap-10">
       {categories.map((category) => (
-        <div key={category} className="rounded-lg border border-border bg-surface p-4">
-          <h2 className="mb-2 text-sm font-semibold text-text-secondary">{category}</h2>
-          <dl className="flex flex-col gap-2">
-            {FORMULAS.filter((formula) => formula.category === category).map((formula) => (
-              <div key={formula.name}>
-                <dt className="text-xs text-text-muted">{formula.name}</dt>
-                <dd className="font-mono text-sm text-text-primary">{formula.formula}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
+        <FormulaCategory
+          key={category}
+          label={FORMULA_CATEGORY_LABELS[category]}
+          formulas={FORMULAS.filter((formula) => formula.category === category)}
+        />
       ))}
     </div>
   );
