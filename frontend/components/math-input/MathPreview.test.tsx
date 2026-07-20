@@ -16,6 +16,18 @@ describe("MathPreview", () => {
     expect(screen.getByText("Pré-visualização")).toBeInTheDocument();
   });
 
+  it("envolve o KaTeX num container com scroll horizontal próprio, nunca invade o histórico ao lado", async () => {
+    const { container } = render(<MathPreview value="derivative(limit(sin(x)/x, x, 0), x)" />);
+
+    await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull(), { timeout: 2000 });
+
+    const wrapper = container.querySelector(".katex")?.closest("span.overflow-x-auto");
+    expect(wrapper).not.toBeNull();
+    expect(wrapper).toHaveClass("block", "max-w-full", "overflow-x-auto", "overflow-y-hidden");
+    // o próprio <p> nunca deve exceder a largura do container pai.
+    expect(container.querySelector("p[aria-hidden='true']")).toHaveClass("max-w-full");
+  });
+
   it("mostra o texto puro imediatamente e promove a KaTeX após o debounce", async () => {
     const { container } = render(<MathPreview value="sqrt(x+1)" />);
 
@@ -55,22 +67,29 @@ describe("MathPreview", () => {
     ).toBe(true);
   });
 
-  it("mantém o fallback textual sem erro para entrada incompleta", async () => {
+  it("entrada incompleta promove a KaTeX via Tier 2 (nunca fica presa em texto cru)", async () => {
     const { container } = render(<MathPreview value="(x+1)/(x-" />);
 
     expect(screen.getByText("(x+1)/(x-")).toBeInTheDocument();
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    expect(container.querySelector(".katex")).toBeNull();
-    expect(screen.getByText("(x+1)/(x-")).toBeInTheDocument();
+    await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull(), {
+      timeout: 2000,
+    });
   });
 
-  it("template visual vazio (√()) fica em texto — nunca expõe o nome interno (sqrt) em KaTeX", async () => {
+  it("template visual vazio (√()) promove a KaTeX como radical vazio, nunca expõe o nome interno (sqrt) como texto", async () => {
     const { container } = render(<MathPreview value="√()" />);
 
-    expect(screen.getByText("√()")).toBeInTheDocument();
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    expect(container.querySelector(".katex")).toBeNull();
-    expect(screen.getByText("√()")).toBeInTheDocument();
+    await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull(), {
+      timeout: 2000,
+    });
+    // O nome interno "sqrt" nunca aparece como TEXTO VISÍVEL (a única
+    // ocorrência é dentro da <annotation> MathML oculta, lida por leitor
+    // de tela) — o radical vazio é desenhado como glifo, não como palavra.
+    expect(container.querySelector(".katex-html")?.textContent).not.toContain("sqrt");
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    expect(annotations.some((latex) => latex?.includes("\\sqrt{}"))).toBe(true);
   });
 
   it("publica em data-latex-source o texto exato que originou o KaTeX", async () => {
@@ -126,12 +145,46 @@ describe("MathPreview", () => {
     ).toBe(true);
   });
 
-  it("preserva o tratamento cosmético de ** no fallback", async () => {
+  it("mostra o tratamento cosmético de ** antes do debounce, depois promove a KaTeX com o expoente correto", async () => {
     const { container } = render(<MathPreview value="x**2 +" />);
 
     expect(container.querySelector("sup")).not.toBeNull();
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    expect(container.querySelector(".katex")).toBeNull();
-    expect(container.querySelector("sup")).not.toBeNull();
+    await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull(), {
+      timeout: 2000,
+    });
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    expect(annotations.some((latex) => latex?.replace(/\s/g, "").includes("^{2}"))).toBe(true);
+  });
+
+  it("clique sequencial em vários botões continua atualizando a pré-visualização via KaTeX a cada passo", async () => {
+    const { container, rerender } = render(<MathPreview value="" />);
+    expect(screen.getByText("Pré-visualização")).toBeInTheDocument();
+
+    rerender(<MathPreview value="π" />);
+    await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull(), { timeout: 2000 });
+
+    rerender(<MathPreview value="π≠" />);
+    await waitFor(
+      () => {
+        const annotations = Array.from(container.querySelectorAll("annotation")).map(
+          (node) => node.textContent
+        );
+        expect(annotations.some((latex) => latex?.includes("\\neq"))).toBe(true);
+      },
+      { timeout: 2000 }
+    );
+
+    rerender(<MathPreview value="π≠∫" />);
+    await waitFor(
+      () => {
+        const annotations = Array.from(container.querySelectorAll("annotation")).map(
+          (node) => node.textContent
+        );
+        expect(annotations.some((latex) => latex?.includes("\\int"))).toBe(true);
+      },
+      { timeout: 2000 }
+    );
   });
 });

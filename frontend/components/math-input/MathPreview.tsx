@@ -70,9 +70,26 @@ export function MathPreview({ value }: MathPreviewProps) {
     <p
       aria-hidden="true"
       data-latex-source={latex !== null && source !== null ? source : undefined}
-      className="min-h-8 break-words text-lg text-text-primary"
+      className="min-h-8 max-w-full break-words text-lg text-text-primary"
     >
-      {latex !== null ? <MathFormula formula={latex} /> : renderSegments(value)}
+      {latex !== null ? (
+        // Fórmulas muito largas ou profundamente aninhadas (frações
+        // aninhadas, integrais com limites, funções compostas) não devem
+        // nunca vazar pro histórico ao lado (grid `lg:grid-cols-[minmax(0,
+        // 1fr)_minmax(280px,340px)]`): scroll horizontal PRÓPRIO deste
+        // wrapper, nunca reduz fonte nem quebra a fórmula no meio — mesmo
+        // padrão que `MathFormula` já usa em `displayMode` (ResultPanel/
+        // HistoryPanel, mesmo painel lateral). `display:block` porque um
+        // `<span>` (elemento inline) ignora `overflow`; `overflow-y-hidden`
+        // só corta o que MESMO ASSIM sobrar de altura — a caixa cresce
+        // livremente pra acomodar frações/radicais altos, não há
+        // `max-height` fixo aqui.
+        <span className="block max-w-full overflow-x-auto overflow-y-hidden py-0.5 align-middle [&_.katex-display]:my-0">
+          <MathFormula formula={latex} />
+        </span>
+      ) : (
+        renderSegments(value)
+      )}
     </p>
   );
 }

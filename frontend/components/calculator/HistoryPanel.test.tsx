@@ -41,8 +41,8 @@ describe("HistoryPanel", () => {
     expect(annotations.some((latex) => latex?.includes("\\sqrt"))).toBe(true);
   });
 
-  it("mantém texto puro para itens não conversíveis", async () => {
-    render(
+  it("promove a expressão de geometria a KaTeX via Tier 2, mas mantém o resultado sem forma reconhecida como texto puro", async () => {
+    const { container } = render(
       <HistoryPanel
         items={[
           item(
@@ -57,8 +57,11 @@ describe("HistoryPanel", () => {
       />
     );
 
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(screen.getByText("relacao_retas([(0,0),(1,0)],[(0,0),(0,1)])")).toBeInTheDocument();
+    // A EXPRESSÃO (entrada do usuário) agora passa pelo mesmo pipeline
+    // tolerante do preview — nunca mais fica presa em texto cru.
+    await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull());
+    // O RESULTADO (rótulo vindo do backend, "Perpendiculares ⊥") continua
+    // sem forma reconhecida em `resultToLatex` — comportamento intocado.
     expect(screen.getByText("Relação entre as retas: Perpendiculares ⊥")).toBeInTheDocument();
   });
 

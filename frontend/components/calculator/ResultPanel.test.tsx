@@ -32,7 +32,7 @@ describe("ResultPanel", () => {
     expect(annotations.some((latex) => latex?.includes("x_{1}"))).toBe(true);
   });
 
-  it("mantém o texto puro quando o resultado não é conversível (fallback total)", async () => {
+  it("promove a expressão a KaTeX via Tier 2, mas mantém o resultado sem forma reconhecida como texto puro", async () => {
     const { container } = render(
       <ResultPanel
         status="success"
@@ -44,9 +44,11 @@ describe("ResultPanel", () => {
       />
     );
 
-    expect(screen.getByText("Relação entre as retas: Perpendiculares ⊥")).toBeInTheDocument();
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(container.querySelector(".katex")).toBeNull();
+    // A EXPRESSÃO (entrada do usuário) agora passa pelo mesmo pipeline
+    // tolerante do preview/histórico — nunca mais fica presa em texto cru.
+    await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull());
+    // O RESULTADO (rótulo vindo do backend, "Perpendiculares ⊥") continua
+    // sem forma reconhecida em `resultToLatex` — comportamento intocado.
     expect(screen.getByText("Relação entre as retas: Perpendiculares ⊥")).toBeInTheDocument();
   });
 

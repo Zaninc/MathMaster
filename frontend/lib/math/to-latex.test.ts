@@ -1,6 +1,19 @@
+import katex from "katex";
 import { describe, expect, it } from "vitest";
 
-import { expressionToLatex, inputToLatex, resultToLatex, valueToLatex } from "./to-latex";
+import {
+  expressionToLatex,
+  inputToLatex,
+  previewLatex,
+  resultToLatex,
+  safeExpressionLatex,
+  valueToLatex,
+} from "./to-latex";
+
+/** A pré-visualização real usa `throwOnError:false`; aqui usamos `true` de propósito — qualquer caso que lance aqui exporia o glifo de erro vermelho em produção. */
+function assertRendersSafely(latex: string, label: string): void {
+  expect(() => katex.renderToString(latex, { throwOnError: true, strict: "ignore" }), label).not.toThrow();
+}
 
 /**
  * O espaçamento fino do `toTex` do mathjs ("~", espaços) é detalhe de
@@ -220,5 +233,167 @@ describe("inputToLatex (echo da expressão digitada)", () => {
   it("falha fechado para sintaxe de geometria (tuplas)", async () => {
     expect(await inputToLatex("circunferencia((0,0),5)")).toBeNull();
     expect(await inputToLatex("distancia((0,0),(3,4))")).toBeNull();
+  });
+});
+
+/**
+ * Tier 2 — pipeline tolerante da pré-visualização (Sprint KaTeX Fase 6).
+ * Ao contrário de `expressionToLatex`/`inputToLatex` (Tier 1, fail-closed:
+ * `null` para qualquer coisa não 100% reconhecida), `safeExpressionLatex`
+ * NUNCA devolve null para entrada não vazia e o resultado é sempre
+ * verificado contra o KaTeX real com `throwOnError:true` — mais rígido do
+ * que a produção (`throwOnError:false`), então qualquer caso que passasse
+ * aqui só por "não lançar por acidente" já teria sido pego.
+ */
+describe("safeExpressionLatex (Tier 2 — nunca falha)", () => {
+  it("símbolo isolado", () => {
+    const latex = safeExpressionLatex("π");
+    expect(latex).toBe("\\pi");
+    assertRendersSafely(latex, "π");
+  });
+
+  it("vários símbolos consecutivos sem estrutura matemática — todos viram comando LaTeX", () => {
+    const latex = safeExpressionLatex("π ≠ ∫ e ∞ → ≤ ≥");
+    const normalized = latex.replace(/\s+/g, " ").trim();
+    expect(normalized).toContain("\\pi");
+    expect(normalized).toContain("\\neq");
+    expect(normalized).toContain("\\int");
+    expect(normalized).toContain("\\infty");
+    expect(normalized).toContain("\\to");
+    expect(normalized).toContain("\\le");
+    expect(normalized).toContain("\\ge");
+    // ordem preservada, "e" solto continua literal (não é comando).
+    expect(normalized.indexOf("\\pi")).toBeLessThan(normalized.indexOf("\\neq"));
+    expect(normalized.indexOf("\\neq")).toBeLessThan(normalized.indexOf("\\int"));
+    expect(normalized).toMatch(/\be\b/);
+    assertRendersSafely(latex, "π ≠ ∫ e ∞ → ≤ ≥");
+  });
+
+  it("potência", () => {
+    const latex = safeExpressionLatex("x^2");
+    expect(latex.replace(/\s+/g, "")).toContain("^{2}");
+    assertRendersSafely(latex, "x^2");
+  });
+
+  it("raiz — com parênteses e em forma solta", () => {
+    expect(safeExpressionLatex("sqrt(x)")).toBe("\\sqrt{x}");
+    expect(safeExpressionLatex("√(x)")).toBe("\\sqrt{x}");
+    expect(safeExpressionLatex("√x")).toBe("\\sqrt{x}");
+    for (const input of ["sqrt(x)", "√(x)", "√x"]) assertRendersSafely(safeExpressionLatex(input), input);
+  });
+
+  it("log e ln aninhados", () => {
+    const latex = safeExpressionLatex("log(ln(x))");
+    expect(latex).toBe("\\log\\left(\\ln\\left(x\\right)\\right)");
+    assertRendersSafely(latex, "log(ln(x))");
+  });
+
+  it("derivada", () => {
+    const latex = safeExpressionLatex("derivative(x^2, x)");
+    expect(latex).toContain("\\frac{d}{dx}");
+    assertRendersSafely(latex, "derivative(x^2, x)");
+  });
+
+  it("integral", () => {
+    const latex = safeExpressionLatex("integral(x^2, x)");
+    expect(latex).toContain("\\int");
+    expect(latex).toContain("\\,dx");
+    assertRendersSafely(latex, "integral(x^2, x)");
+  });
+
+  it("limite", () => {
+    const latex = safeExpressionLatex("limit(sin(x)/x, x, 0)");
+    expect(latex).toContain("\\lim_{x \\to 0}");
+    expect(latex).toContain("\\sin");
+    assertRendersSafely(latex, "limit(sin(x)/x, x, 0)");
+  });
+
+  it("derivada contendo limite (aninhamento de cálculo)", () => {
+    const latex = safeExpressionLatex("derivative(limit(sin(x)/x, x, 0), x)");
+    expect(latex).toContain("\\frac{d}{dx}");
+    expect(latex).toContain("\\lim_{x \\to 0}");
+    assertRendersSafely(latex, "derivative(limit(sin(x)/x, x, 0), x)");
+  });
+
+  it("integral contendo função", () => {
+    const latex = safeExpressionLatex("integral(log(x), x)");
+    expect(latex).toContain("\\int");
+    expect(latex).toContain("\\log\\left(x\\right)");
+    assertRendersSafely(latex, "integral(log(x), x)");
+  });
+
+  it("funções aninhadas (múltiplos níveis)", () => {
+    const latex = safeExpressionLatex("f(log(ln(log(e^x))))");
+    expect(latex).toContain("f\\left(");
+    expect(latex).toContain("\\log\\left(\\ln\\left(\\log\\left(");
+    assertRendersSafely(latex, "f(log(ln(log(e^x))))");
+  });
+
+  it("parênteses aninhados", () => {
+    const latex = safeExpressionLatex("((()))");
+    assertRendersSafely(latex, "((()))");
+    expect(latex).toContain("\\left(");
+  });
+
+  it("expressão incompleta — nunca lança, nunca fica vazia, nunca usa \\left/\\right desbalanceado", () => {
+    for (const input of ["log(", "ln()", "integral(", "x^", "sqrt(", "√(", "∛(", "d/dx(", "lim x→"]) {
+      const latex = safeExpressionLatex(input);
+      expect(latex.length, input).toBeGreaterThan(0);
+      assertRendersSafely(latex, input);
+    }
+  });
+
+  it("múltiplos símbolos/carets soltos não crasham nem geram 'double superscript'", () => {
+    for (const input of ["^^^", "√√√", "≤≥≠→∞π∫Σ×÷−∪∈", ")))", "((("]) {
+      assertRendersSafely(safeExpressionLatex(input), input);
+    }
+  });
+
+  it("expressões geométricas — chamada desconhecida vira \\operatorname seguro", () => {
+    const latex = safeExpressionLatex("circunferencia((0,0),5)");
+    expect(latex).toContain("\\operatorname{circunferencia}");
+    assertRendersSafely(latex, "circunferencia((0,0),5)");
+  });
+
+  it("nunca devolve string vazia para entrada não vazia", () => {
+    for (const input of ["x", "1", "(", ")", "_", "%", "&", "#"]) {
+      expect(safeExpressionLatex(input).length, input).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("previewLatex (pipeline único da pré-visualização e do histórico)", () => {
+  it("usa o Tier 1 quando a expressão é totalmente reconhecida (fração real, não texto com '/')", async () => {
+    const latex = await previewLatex("(x+1)/(x-1)");
+    expect(latex).not.toBeNull();
+    expect(latex).toContain("\\frac");
+  });
+
+  it("cai pro Tier 2 quando o Tier 1 falha, sem nunca devolver null para símbolos/estruturas", async () => {
+    const cases = [
+      "π ≠ ∫ e ∞ → ≤ ≥",
+      "d/dx((lim x→0 ∞) dx)",
+      "derivative(limit(sin(x)/x, x, 0), x)",
+      "circunferencia((0,0),5)",
+      "log(",
+      "x^",
+    ];
+    for (const input of cases) {
+      const latex = await previewLatex(input);
+      expect(latex, input).not.toBeNull();
+      assertRendersSafely(latex as string, input);
+    }
+  });
+
+  it("preserva a exceção de palavra pura sem matemática (rótulo continua texto)", async () => {
+    expect(await previewLatex("crescente")).toBeNull();
+    expect(await previewLatex("")).toBeNull();
+    expect(await previewLatex("   ")).toBeNull();
+  });
+
+  it("continua reconhecendo a sintaxe técnica de cálculo do produto (derivada/integral/limite)", async () => {
+    expect(normalized(await previewLatex("derivada(x**2, x)"))).toContain("\\frac{d}{dx}");
+    expect(normalized(await previewLatex("integral(x**2, x, 0, 1)"))).toContain("\\int_{0}^{1}");
+    expect(normalized(await previewLatex("limite(sen(x)/x, x, 0)"))).toContain("\\operatorname{sen}");
   });
 });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { inputToLatex, resultToLatex, type ResultSegment } from "@/lib/math/to-latex";
+import { previewLatex, resultToLatex, type ResultSegment } from "@/lib/math/to-latex";
 
 export interface SolveLatex {
   /** LaTeX do echo da expressão, ou null (exibir texto puro). */
@@ -30,7 +30,7 @@ async function convert(expression: string, result: string): Promise<SolveLatex> 
   if (cached !== undefined) return cached;
 
   const [expressionLatex, segments] = await Promise.all([
-    inputToLatex(expression),
+    previewLatex(expression),
     resultToLatex(result),
   ]);
   const value: SolveLatex = { expressionLatex, segments };
@@ -63,7 +63,7 @@ const inputCache = new Map<string, string | null>();
 
 async function convertInput(text: string): Promise<string | null> {
   if (inputCache.has(text)) return inputCache.get(text) ?? null;
-  const latex = await inputToLatex(text);
+  const latex = await previewLatex(text);
   if (inputCache.size >= CACHE_LIMIT) {
     const oldest = inputCache.keys().next().value;
     if (oldest !== undefined) inputCache.delete(oldest);

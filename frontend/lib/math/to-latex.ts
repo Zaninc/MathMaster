@@ -463,3 +463,451 @@ export async function inputToLatex(text: string): Promise<string | null> {
 
   return expressionToLatex(trimmed);
 }
+
+/* =====================================================================
+ * TIER 2 — pré-visualização tolerante (Sprint KaTeX Fase 6)
+ *
+ * O pipeline acima (`inputToLatex`/`expressionToLatex`) é fail-closed por
+ * design: só devolve LaTeX quando a expressão INTEIRA é reconhecida com
+ * fidelidade total (o mathjs consegue fazer parse dela). Isso é correto
+ * para o eco de uma expressão JÁ RESOLVIDA pelo backend (sempre
+ * bem-formada), mas é a causa raiz do bug da pré-visualização: enquanto o
+ * usuário digita, a entrada quase sempre está incompleta ou é uma
+ * combinação solta de símbolos ("π ≠ ∫ e ∞ → ≤ ≥") — nada disso é uma
+ * expressão mathjs válida, então o Tier 1 devolve `null` para a entrada
+ * INTEIRA e a pré-visualização caía para texto bruto.
+ *
+ * `safeExpressionLatex` é o pipeline de segurança: NUNCA lança, NUNCA
+ * devolve vazio para entrada não vazia, sempre devolve algo que o KaTeX
+ * consegue desenhar. Em vez de exigir uma árvore sintática completa, faz
+ * conversão estrutural recursiva (mesmo balanceamento de parênteses de
+ * `findMatchingParen`/`splitTopLevel` acima) com substituição de símbolo
+ * como fallback final por caractere — nunca "tudo ou nada". `previewLatex`
+ * é A ÚNICA função que consumidores de apresentação (preview, histórico)
+ * devem chamar: tenta o Tier 1 (fidelidade máxima) primeiro, cai pro
+ * Tier 2 (nunca falha) depois.
+ * ===================================================================== */
+
+/** Símbolos isolados sem estrutura ao redor -> comando LaTeX equivalente. */
+const PREVIEW_SYMBOL_LATEX: Record<string, string> = {
+  "π": "\\pi",
+  "∞": "\\infty",
+  "→": "\\to",
+  "≠": "\\neq",
+  "≤": "\\le",
+  "≥": "\\ge",
+  "∫": "\\int",
+  "Σ": "\\sum",
+  "×": "\\times",
+  "÷": "\\div",
+  "−": "-",
+  "∪": "\\cup",
+  "∈": "\\in",
+  "ℝ": "\\mathbb{R}",
+  "ℤ": "\\mathbb{Z}",
+  "ℕ": "\\mathbb{N}",
+  "ℚ": "\\mathbb{Q}",
+  "ℂ": "\\mathbb{C}",
+};
+
+/** Funções conhecidas com UM argumento — usadas tanto completas ("nome(arg)") quanto vazias ("nome()", digitação incompleta). */
+const PREVIEW_UNARY_LATEX: Record<string, (arg: string) => string> = {
+  sqrt: (a) => `\\sqrt{${a}}`,
+  cbrt: (a) => `\\sqrt[3]{${a}}`,
+  log: (a) => `\\log\\left(${a}\\right)`,
+  ln: (a) => `\\ln\\left(${a}\\right)`,
+  sen: (a) => `\\operatorname{sen}\\left(${a}\\right)`,
+  sin: (a) => `\\sin\\left(${a}\\right)`,
+  cos: (a) => `\\cos\\left(${a}\\right)`,
+  tg: (a) => `\\operatorname{tg}\\left(${a}\\right)`,
+  tan: (a) => `\\tan\\left(${a}\\right)`,
+  sec: (a) => `\\sec\\left(${a}\\right)`,
+  exp: (a) => `e^{${a}}`,
+};
+
+/** Nome da função conhecida -> comando LaTeX "cru" (sem argumento), para o caso de chamada incompleta ("log(" ainda sem fechar). */
+const PREVIEW_COMMAND_WORD: Record<string, string> = {
+  sqrt: "\\sqrt",
+  cbrt: "\\sqrt[3]",
+  log: "\\log",
+  ln: "\\ln",
+  sen: "\\operatorname{sen}",
+  sin: "\\sin",
+  cos: "\\cos",
+  tg: "\\operatorname{tg}",
+  tan: "\\tan",
+  sec: "\\sec",
+};
+
+/**
+ * Apelidos aceitos em `renderCall` para os wrappers de cálculo — os nomes
+ * PT-BR (`derivada`/`limite`) são a sintaxe técnica real do backend
+ * (`natural_notation.py`); os nomes em inglês (`derivative`/`limit`) não
+ * são aceitos por ele, mas ganham a MESMA notação bonita aqui porque isto
+ * é só apresentação (o texto enviado ao backend nunca passa por aqui) —
+ * sem isso, digitar `derivative(...)` cairia no `\operatorname{}` genérico
+ * em vez de `d/dx`. `somatorio`/`sum` seguem o mesmo espírito: o backend
+ * não resolve somatórios ainda, mas a pré-visualização não precisa saber
+ * disso para desenhar o símbolo corretamente.
+ */
+const DERIVATIVE_NAMES = new Set(["derivada", "derivative"]);
+const LIMIT_NAMES = new Set(["limite", "limit"]);
+const SUM_NAMES = new Set(["somatorio", "somatório", "sum"]);
+
+const PREVIEW_IDENTIFIER = /^[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*/;
+const PREVIEW_SUPERSCRIPT_RUN = /^[⁰¹²³⁴⁵⁶⁷⁸⁹⁻ⁿ]+/;
+const PREVIEW_SUBSCRIPT_RUN = /^[₀₁₂₃₄₅₆₇₈₉₋]+/;
+
+/** Escapa os caracteres LaTeX especiais realisticamente alcançáveis em texto solto (ex. identificador "ponto_medio"). */
+function escapeLatexText(text: string): string {
+  return text.replace(/[_%#&]/g, (ch) => `\\${ch}`);
+}
+
+/** "nome(argsText)" já reconhecido e balanceado -> LaTeX. Nunca lança. */
+function renderCall(name: string, argsText: string): string {
+  const rawArgs = splitTopLevel(argsText, ",").map((part) => part.trim());
+  const args = rawArgs.map((part) => convertFragment(part));
+
+  if (args.length === 1 && name in PREVIEW_UNARY_LATEX) {
+    return PREVIEW_UNARY_LATEX[name](args[0]);
+  }
+  if (DERIVATIVE_NAMES.has(name) && args.length === 2) {
+    return `\\frac{d}{d${rawArgs[1]}}\\left(${args[0]}\\right)`;
+  }
+  if (name === "integral" && args.length === 2) {
+    return `\\int ${args[0]}\\,d${rawArgs[1]}`;
+  }
+  if (name === "integral" && args.length === 4) {
+    return `\\int_{${args[2]}}^{${args[3]}} ${args[0]}\\,d${rawArgs[1]}`;
+  }
+  if (LIMIT_NAMES.has(name) && args.length === 3) {
+    return `\\lim_{${rawArgs[1]} \\to ${args[2]}} ${args[0]}`;
+  }
+  if (SUM_NAMES.has(name) && args.length === 4) {
+    return `\\sum_{${rawArgs[1]}=${args[2]}}^{${args[3]}} ${args[0]}`;
+  }
+
+  const label = name.length < 3 ? escapeLatexText(name) : `\\operatorname{${escapeLatexText(name)}}`;
+  return `${label}\\left(${args.join(", ")}\\right)`;
+}
+
+/** Tenta casar uma chamada "nome(...)" a partir de `pos` — não precisa ocupar o resto do texto (usado pelo flatScan). */
+function matchCallAt(text: string, pos: number): { latex: string; end: number } | null {
+  const idMatch = text.slice(pos).match(PREVIEW_IDENTIFIER);
+  if (!idMatch) return null;
+  let after = pos + idMatch[0].length;
+  while (text[after] === " ") after += 1;
+  if (text[after] !== "(") return null;
+  const close = findMatchingParen(text, after);
+  if (close === null) return null;
+  return { latex: renderCall(idMatch[0], text.slice(after + 1, close)), end: close + 1 };
+}
+
+function tryWholeDerivative(text: string): string | null {
+  const match = text.match(DERIVATIVE_INPUT);
+  if (!match) return null;
+  const openIndex = match[0].length - 1;
+  const close = findMatchingParen(text, openIndex);
+  if (close === null || close !== text.length - 1) return null;
+  const inner = text.slice(openIndex + 1, close);
+  return `\\frac{d}{d${match[1]}}\\left(${convertFragment(inner)}\\right)`;
+}
+
+function tryWholeIntegral(text: string): string | null {
+  const asciiBounded = text.match(INTEGRAL_ASCII_BOUNDS);
+  const unicodeBounded = asciiBounded ? null : text.match(INTEGRAL_UNICODE_BOUNDS);
+  const bounded = asciiBounded ?? unicodeBounded;
+  if (bounded) {
+    let lower: string;
+    let upper: string;
+    if (unicodeBounded) {
+      lower = translateRun(bounded[1], SUBSCRIPT_TO_ASCII) ?? convertFragment(bounded[1]);
+      upper = translateRun(bounded[2], SUPERSCRIPT_TO_ASCII) ?? convertFragment(bounded[2]);
+    } else {
+      lower = convertFragment(bounded[1]);
+      upper = convertFragment(bounded[2]);
+    }
+    const body = convertFragment(stripOuterParens(bounded[3]));
+    return `\\int_{${lower}}^{${upper}} ${body}\\,d${bounded[4]}`;
+  }
+  const indefinite = text.match(INTEGRAL_INDEFINITE);
+  if (indefinite) {
+    const body = convertFragment(stripOuterParens(indefinite[1]));
+    return `\\int ${body}\\,d${indefinite[2]}`;
+  }
+  return null;
+}
+
+function tryWholeLimit(text: string): string | null {
+  const match = text.match(LIMIT_INPUT);
+  if (!match) return null;
+  const point = convertFragment(match[2]);
+  const body = convertFragment(match[3]);
+  return `\\lim_{${match[1]} \\to ${point}} ${body}`;
+}
+
+function tryWholeCall(text: string): string | null {
+  const call = matchCallAt(text, 0);
+  return call && call.end === text.length ? call.latex : null;
+}
+
+function tryWholeGroup(text: string): string | null {
+  if (!text.startsWith("(")) return null;
+  const close = findMatchingParen(text, 0);
+  if (close === null || close !== text.length - 1) return null;
+  return `\\left(${convertFragment(text.slice(1, close))}\\right)`;
+}
+
+/**
+ * Varredura caractere a caractere — usada quando o fragmento inteiro não
+ * é nenhuma forma reconhecida acima (vários símbolos soltos, uma chamada
+ * NO MEIO de mais texto, entrada incompleta). Nunca lança: qualquer
+ * caractere sem regra específica vira texto literal (escapado). Junta as
+ * peças com espaço — sempre seguro em modo matemático (KaTeX/TeX ignoram
+ * espaço de origem para leiaute) e evita comandos multi-letra colando com
+ * o texto seguinte (`\pi` + "x" sem separador seria lido como um único
+ * comando inválido).
+ */
+/**
+ * O KaTeX permite só UM sobrescrito/subscrito por átomo — "^{}^{}" (dois
+ * seguidos, sem base entre eles) é "Double superscript", erro de parse.
+ * Isso acontece quando não há um átomo de verdade logo antes (início da
+ * string, ou a peça anterior é ela mesma um sobrescrito/subscrito vazio,
+ * ex. "^^^" digitado cru) — nesses casos cada "^"/"_" ganha sua PRÓPRIA
+ * base invisível ("{}"), virando um átomo independente em vez de tentar
+ * se anexar a um sobrescrito anterior.
+ */
+function needsEmptyBase(pieces: string[]): boolean {
+  const last = pieces[pieces.length - 1];
+  return last === undefined || /^(\{\})?[\^_]\{/.test(last);
+}
+
+function pushSup(pieces: string[], content: string): void {
+  pieces.push(`${needsEmptyBase(pieces) ? "{}" : ""}^{${content}}`);
+}
+
+function pushSub(pieces: string[], content: string): void {
+  pieces.push(`${needsEmptyBase(pieces) ? "{}" : ""}_{${content}}`);
+}
+
+function flatScan(text: string): string {
+  const pieces: string[] = [];
+  let plain = "";
+  const flush = () => {
+    if (plain !== "") {
+      pieces.push(escapeLatexText(plain));
+      plain = "";
+    }
+  };
+
+  let i = 0;
+  while (i < text.length) {
+    const rest = text.slice(i);
+
+    const call = matchCallAt(text, i);
+    if (call) {
+      flush();
+      pieces.push(call.latex);
+      i = call.end;
+      continue;
+    }
+
+    const idMatch = rest.match(PREVIEW_IDENTIFIER);
+    if (idMatch) {
+      let after = i + idMatch[0].length;
+      while (text[after] === " ") after += 1;
+      if (text[after] === "(") {
+        // "(" sem fechamento correspondente -- chamada incompleta em
+        // digitação (ex. "log("): mostra o comando conhecido (ou o nome
+        // literal) + "(" e segue escaneando o resto como texto solto, sem
+        // usar `\left`/`\right` desbalanceado (nunca gera erro de
+        // delimitador no KaTeX).
+        flush();
+        pieces.push((PREVIEW_COMMAND_WORD[idMatch[0]] ?? escapeLatexText(idMatch[0])) + "(");
+        i = after + 1;
+        continue;
+      }
+      plain += idMatch[0];
+      i += idMatch[0].length;
+      continue;
+    }
+
+    if (text[i] === "(") {
+      const close = findMatchingParen(text, i);
+      if (close !== null) {
+        flush();
+        pieces.push(`\\left(${convertFragment(text.slice(i + 1, close))}\\right)`);
+        i = close + 1;
+        continue;
+      }
+      plain += "(";
+      i += 1;
+      continue;
+    }
+
+    if (text[i] === "√" || text[i] === "∛") {
+      const isCube = text[i] === "∛";
+      let j = i + 1;
+      while (text[j] === " ") j += 1;
+      if (text[j] === "(") {
+        const close = findMatchingParen(text, j);
+        if (close !== null) {
+          flush();
+          const inner = convertFragment(text.slice(j + 1, close));
+          pieces.push(isCube ? `\\sqrt[3]{${inner}}` : `\\sqrt{${inner}}`);
+          i = close + 1;
+          continue;
+        }
+        // "(" sem fechamento -- radical vazio, "(" segue para o próximo
+        // laço ser tratado como texto solto.
+        flush();
+        pieces.push(isCube ? "\\sqrt[3]{}" : "\\sqrt{}");
+        i = j;
+        continue;
+      }
+      const radicand = rest.match(/^[√∛]\s*([A-Za-z0-9.]+)/);
+      flush();
+      if (radicand) {
+        pieces.push(isCube ? `\\sqrt[3]{${radicand[1]}}` : `\\sqrt{${radicand[1]}}`);
+        i += radicand[0].length;
+      } else {
+        pieces.push(isCube ? "\\sqrt[3]{}" : "\\sqrt{}");
+        i += 1;
+      }
+      continue;
+    }
+
+    const supMatch = rest.match(PREVIEW_SUPERSCRIPT_RUN);
+    if (supMatch) {
+      flush();
+      if (supMatch[0] === "ⁿ") {
+        pushSup(pieces, "n");
+      } else {
+        const digits = translateRun(supMatch[0], SUPERSCRIPT_TO_ASCII);
+        if (digits === null) pieces.push(escapeLatexText(supMatch[0]));
+        else pushSup(pieces, digits);
+      }
+      i += supMatch[0].length;
+      continue;
+    }
+
+    const subMatch = rest.match(PREVIEW_SUBSCRIPT_RUN);
+    if (subMatch) {
+      flush();
+      const digits = translateRun(subMatch[0], SUBSCRIPT_TO_ASCII);
+      if (digits === null) pieces.push(escapeLatexText(subMatch[0]));
+      else pushSub(pieces, digits);
+      i += subMatch[0].length;
+      continue;
+    }
+
+    if (text[i] === "^") {
+      let j = i + 1;
+      while (text[j] === " ") j += 1;
+      if (text[j] === "(") {
+        const close = findMatchingParen(text, j);
+        if (close !== null) {
+          flush();
+          pushSup(pieces, convertFragment(text.slice(j + 1, close)));
+          i = close + 1;
+          continue;
+        }
+      }
+      // "[^\^]" na segunda alternativa exclui "^" do fallback de um único
+      // caractere -- "^^^" gerando "^{^}" faria o KaTeX exigir grupo de
+      // novo para o "^" agora DENTRO das chaves (chaves não "citam" o
+      // caractere, ele continua ativo) e lançar o mesmo erro de nível 2.
+      const token = text.slice(j).match(/^[A-Za-z0-9]+|^[^^]/);
+      if (token) {
+        flush();
+        pushSup(pieces, escapeLatexText(token[0]));
+        i = j + token[0].length;
+        continue;
+      }
+      // "^" no fim da entrada (ainda digitando, nada para elevar) -- grupo
+      // vazio: sintaticamente válido no KaTeX ("x^{}"), nunca lança o
+      // "Expected group after '^'" que um "^" solto causaria.
+      flush();
+      pushSup(pieces, "");
+      i += 1;
+      continue;
+    }
+
+    const symbol = PREVIEW_SYMBOL_LATEX[text[i]];
+    if (symbol !== undefined) {
+      flush();
+      pieces.push(symbol);
+      i += 1;
+      continue;
+    }
+
+    plain += text[i];
+    i += 1;
+  }
+
+  flush();
+  return pieces.join(" ");
+}
+
+/** Ponto único de recursão do Tier 2 — tenta as formas estruturais inteiras primeiro, cai pro flatScan por último. */
+function convertFragment(raw: string): string {
+  const text = raw.trim();
+  if (text === "") return "";
+  return (
+    tryWholeDerivative(text) ??
+    tryWholeIntegral(text) ??
+    tryWholeLimit(text) ??
+    tryWholeCall(text) ??
+    tryWholeGroup(text) ??
+    flatScan(text)
+  );
+}
+
+/**
+ * Pré-processamento puramente textual: as variantes ASCII dos mesmos
+ * operadores (`<=`, `>=`, `!=`, `->`, `**`) viram os equivalentes Unicode
+ * já tratados por `flatScan`/`PREVIEW_SYMBOL_LATEX` — um único caminho de
+ * conversão em vez de duplicar a tabela em ASCII e Unicode.
+ */
+function normalizeAsciiOperators(text: string): string {
+  return text
+    .replace(/<=/g, "≤")
+    .replace(/>=/g, "≥")
+    .replace(/!=/g, "≠")
+    .replace(/->/g, "→")
+    .replace(/\*\*/g, "^");
+}
+
+/**
+ * Tier 2 — SEMPRE devolve uma string pronta para `MathFormula` (nunca
+ * lança, nunca devolve vazio para entrada não vazia). Ver o comentário da
+ * seção acima para o porquê deste pipeline existir.
+ */
+export function safeExpressionLatex(text: string): string {
+  try {
+    return convertFragment(normalizeAsciiOperators(text));
+  } catch {
+    // Rede de segurança final -- nenhuma função acima deveria lançar, mas
+    // o contrato "nunca quebra" não pode depender disso continuar
+    // verdadeiro para sempre.
+    return escapeLatexText(text.trim());
+  }
+}
+
+/**
+ * A ÚNICA função que consumidores de apresentação (pré-visualização,
+ * histórico) devem chamar (Sprint KaTeX Fase 6): tenta o Tier 1
+ * (`inputToLatex`, fidelidade máxima -- frações, precedência etc. via
+ * mathjs) e cai pro Tier 2 (`safeExpressionLatex`, nunca falha) quando o
+ * Tier 1 não reconhece a entrada inteira. `null` só nos dois casos em que
+ * o texto puro já é a melhor exibição possível: vazio ou uma palavra pura
+ * ("crescente") -- mesma exceção que o Tier 1 já aplicava, preservada
+ * para não regredir esses rótulos para itálico com espaçamento de
+ * multiplicação implícita do KaTeX.
+ */
+export async function previewLatex(text: string): Promise<string | null> {
+  const trimmed = text.trim();
+  if (trimmed === "" || BARE_WORD.test(trimmed)) return null;
+  const precise = await inputToLatex(trimmed);
+  return precise ?? safeExpressionLatex(trimmed);
+}
