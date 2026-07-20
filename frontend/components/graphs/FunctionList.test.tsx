@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { plotExpressionToLatex } from "@/lib/math/graph-normalize";
@@ -83,8 +83,53 @@ describe("FunctionList", () => {
     expect(onAdd).toHaveBeenCalledWith("x² - 4");
   });
 
-  it("botões de exemplo continuam mostrando o rótulo da categoria (não mudam nesta tarefa)", () => {
+  it("botões de exemplo simples continuam um clique = uma função (Linear, Quadrática, Racional)", () => {
     render(<FunctionList functions={[]} errors={new Map()} onAdd={vi.fn()} onToggle={vi.fn()} onRemove={vi.fn()} />);
     expect(screen.getByRole("button", { name: /adicionar exemplo linear/i })).toHaveTextContent("Linear");
+    expect(screen.getByRole("button", { name: /adicionar exemplo quadrática/i })).toHaveTextContent("Quadrática");
+    expect(screen.getByRole("button", { name: /adicionar exemplo racional/i })).toHaveTextContent("Racional");
+  });
+
+  describe("categorias com múltiplas funções (menu expansível)", () => {
+    it("mostra os botões de categoria fechados por padrão, sem painel visível", () => {
+      render(<FunctionList functions={[]} errors={new Map()} onAdd={vi.fn()} onToggle={vi.fn()} onRemove={vi.fn()} />);
+
+      const toggle = screen.getByRole("button", { name: /ver funções de trigonométrica/i });
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      expect(toggle).toHaveAttribute("aria-haspopup", "true");
+      expect(screen.queryByRole("group")).not.toBeInTheDocument();
+    });
+
+    it("abre o painel ao clicar e lista as sub-funções da categoria", () => {
+      render(<FunctionList functions={[]} errors={new Map()} onAdd={vi.fn()} onToggle={vi.fn()} onRemove={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /ver funções de trigonométrica/i }));
+
+      const panel = screen.getByRole("group", { name: /funções de trigonométrica/i });
+      expect(within(panel).getByRole("button", { name: /— sen\(x\):/i })).toBeInTheDocument();
+      expect(within(panel).getByRole("button", { name: /cotg\(x\)/i })).toBeInTheDocument();
+      // "— sec(x):" (com o travessão) — "sec(x)" sozinho é substring literal de "cossec(x)".
+      expect(within(panel).getByRole("button", { name: /— sec\(x\):/i })).toBeInTheDocument();
+      expect(within(panel).getByRole("button", { name: /cossec\(x\)/i })).toBeInTheDocument();
+    });
+
+    it("chama onAdd com a expressão técnica correta ao clicar numa sub-função", () => {
+      const onAdd = vi.fn();
+      render(<FunctionList functions={[]} errors={new Map()} onAdd={onAdd} onToggle={vi.fn()} onRemove={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /ver funções de trigonométrica/i }));
+      const panel = screen.getByRole("group", { name: /funções de trigonométrica/i });
+      fireEvent.click(within(panel).getByRole("button", { name: /cotg\(x\)/i }));
+
+      expect(onAdd).toHaveBeenCalledWith("cot(x)");
+    });
+
+    it("todas as categorias expansíveis da biblioteca aparecem", () => {
+      render(<FunctionList functions={[]} errors={new Map()} onAdd={vi.fn()} onToggle={vi.fn()} onRemove={vi.fn()} />);
+
+      for (const label of ["Polinomial", "Exponencial", "Logarítmica", "Trigonométrica", "Especiais", "Interessantes"]) {
+        expect(screen.getByRole("button", { name: new RegExp(`ver funções de ${label}`, "i") })).toBeInTheDocument();
+      }
+    });
   });
 });

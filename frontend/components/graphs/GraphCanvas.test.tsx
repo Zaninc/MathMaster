@@ -1,6 +1,7 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { compilePlotFunction } from "@/lib/math/plot-evaluator";
 import { DEFAULT_VIEWPORT, type Viewport } from "@/lib/math/viewport";
 
 import { GraphCanvas } from "./GraphCanvas";
@@ -80,6 +81,45 @@ describe("GraphCanvas", () => {
         onViewportChange={(v) => (latest = v)}
       />
     );
+
+    fireEvent.click(getByRole("button", { name: "Aumentar zoom" }));
+    expect(latest.xMax - latest.xMin).toBeLessThan(DEFAULT_VIEWPORT.xMax - DEFAULT_VIEWPORT.xMin);
+  });
+
+  it.each(["cot(x)", "sec(x)", "csc(x)"])(
+    "desenha um path real pra %s (novas funções trigonométricas, compiladas de verdade)",
+    async (expression) => {
+      const evaluate = await compilePlotFunction(expression);
+      const compiled = new Map([["fn-1", evaluate]]);
+      const { container } = render(
+        <GraphCanvas
+          functions={[{ ...IDENTITY, expression }]}
+          compiled={compiled}
+          viewport={DEFAULT_VIEWPORT}
+          onViewportChange={vi.fn()}
+        />
+      );
+      measure();
+
+      const path = container.querySelector("path");
+      expect(path).not.toBeNull();
+      expect(path?.getAttribute("d")).not.toBe("");
+    }
+  );
+
+  it("continua funcionando com zoom depois de desenhar uma função nova (cot(x))", async () => {
+    const evaluate = await compilePlotFunction("cot(x)");
+    const compiled = new Map([["fn-1", evaluate]]);
+    let latest: Viewport = DEFAULT_VIEWPORT;
+    const { getByRole } = render(
+      <GraphCanvas
+        functions={[{ ...IDENTITY, expression: "cot(x)" }]}
+        compiled={compiled}
+        viewport={DEFAULT_VIEWPORT}
+        onViewportChange={(v) => (latest = v)}
+      />
+    );
+    measure();
 
     fireEvent.click(getByRole("button", { name: "Aumentar zoom" }));
     expect(latest.xMax - latest.xMin).toBeLessThan(DEFAULT_VIEWPORT.xMax - DEFAULT_VIEWPORT.xMin);

@@ -5,7 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Button } from "@/components/shared/Button";
 import { FadeIn } from "@/components/shared/FadeIn";
 import { MathFormula } from "@/components/shared/MathFormula";
-import { GRAPH_EXAMPLES } from "@/data/graph-examples";
+import { GRAPH_EXAMPLE_GROUPS, GRAPH_EXAMPLES } from "@/data/graph-examples";
 import { plotExpressionToLatex } from "@/lib/math/graph-normalize";
 
 import type { PlotFunction } from "./types";
@@ -51,6 +51,9 @@ interface FunctionListProps {
 
 export function FunctionList({ functions, errors, onAdd, onToggle, onRemove }: FunctionListProps) {
   const [draft, setDraft] = useState("");
+  // Só um grupo aberto por vez — evita empilhar vários painéis e poluir a
+  // tela (mesmo espírito do MathKeyboard: uma categoria ativa, um painel).
+  const [openGroupId, setOpenGroupId] = useState<string | null>(null);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,6 +61,12 @@ export function FunctionList({ functions, errors, onAdd, onToggle, onRemove }: F
     onAdd(draft.trim());
     setDraft("");
   }
+
+  function handleToggleGroup(id: string) {
+    setOpenGroupId((current) => (current === id ? null : id));
+  }
+
+  const openGroup = GRAPH_EXAMPLE_GROUPS.find((group) => group.id === openGroupId) ?? null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -81,18 +90,62 @@ export function FunctionList({ functions, errors, onAdd, onToggle, onRemove }: F
         </div>
       </form>
 
-      <div className="flex flex-wrap gap-2">
-        {GRAPH_EXAMPLES.map((example) => (
-          <button
-            key={example.label}
-            type="button"
-            onClick={() => onAdd(example.expression)}
-            aria-label={`Adicionar exemplo ${example.label}: ${example.expression}`}
-            className="rounded-md border border-border bg-surface px-2.5 py-1 text-xs text-text-secondary transition-colors duration-(--motion-fast) hover:border-border-hover hover:text-text-primary"
-          >
-            {example.label}
-          </button>
-        ))}
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap gap-2">
+          {GRAPH_EXAMPLES.map((example) => (
+            <button
+              key={example.label}
+              type="button"
+              onClick={() => onAdd(example.expression)}
+              aria-label={`Adicionar exemplo ${example.label}: ${example.expression}`}
+              className="rounded-md border border-border bg-surface px-2.5 py-1 text-xs text-text-secondary transition-colors duration-(--motion-fast) hover:border-border-hover hover:text-text-primary"
+            >
+              {example.label}
+            </button>
+          ))}
+          {GRAPH_EXAMPLE_GROUPS.map((group) => {
+            const isOpen = group.id === openGroupId;
+            return (
+              <button
+                key={group.id}
+                type="button"
+                aria-expanded={isOpen}
+                aria-haspopup="true"
+                aria-controls={`graph-example-group-${group.id}`}
+                aria-label={`Ver funções de ${group.label}`}
+                onClick={() => handleToggleGroup(group.id)}
+                className={`flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors duration-(--motion-fast) ${
+                  isOpen
+                    ? "border-accent bg-accent/10 text-text-primary"
+                    : "border-border bg-surface text-text-secondary hover:border-border-hover hover:text-text-primary"
+                }`}
+              >
+                {group.label}
+                <span aria-hidden="true" className="text-[0.65rem]">
+                  {isOpen ? "▲" : "▼"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {openGroup && (
+          <div id={`graph-example-group-${openGroup.id}`} role="group" aria-label={`Funções de ${openGroup.label}`}>
+            <FadeIn className="flex flex-wrap gap-2 rounded-md border border-border bg-surface p-2">
+              {openGroup.items.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => onAdd(item.expression)}
+                  aria-label={`Adicionar exemplo ${openGroup.label} — ${item.label}: ${item.expression}`}
+                  className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-text-secondary transition-colors duration-(--motion-fast) hover:border-border-hover hover:text-text-primary"
+                >
+                  {item.label}
+                </button>
+              ))}
+            </FadeIn>
+          </div>
+        )}
       </div>
 
       <ul className="flex flex-col gap-2">

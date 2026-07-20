@@ -14,6 +14,10 @@ describe("normalizeForPlot", () => {
     expect(normalizeForPlot("tg(x)")).toBe("tan(x)");
   });
 
+  it("traduz ln para log (o log nativo do mathjs já é natural)", () => {
+    expect(normalizeForPlot("ln(x)")).toBe("log(x)");
+  });
+
   it("insere * entre identificador e ( quando não é uma função conhecida", () => {
     expect(normalizeForPlot("x(x+1)")).toBe("x*(x+1)");
   });
@@ -62,6 +66,12 @@ describe("normalizeForPlot + compilePlotFunction (integração real)", () => {
     const natural = await compilePlotFunction(normalizeForPlot("sen(x)"));
     const technical = await compilePlotFunction("sin(x)");
     expect(natural(0)).toBeCloseTo(technical(0));
+  });
+
+  it("ln(x) e log(x) (mathjs, natural) produzem o mesmo resultado", async () => {
+    const natural = await compilePlotFunction(normalizeForPlot("ln(x)"));
+    const technical = await compilePlotFunction("log(x)");
+    expect(natural(Math.E)).toBeCloseTo(technical(Math.E));
   });
 
   it("x(x+1) e x*(x+1) produzem o mesmo resultado", async () => {

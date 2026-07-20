@@ -22,6 +22,36 @@ describe("compilePlotFunction — expressões válidas", () => {
     const fn = await compilePlotFunction("1/x");
     expect(Number.isNaN(fn(0))).toBe(true);
   });
+
+  it("avalia cot/sec/csc (funções trigonométricas recíprocas)", async () => {
+    const cot = await compilePlotFunction("cot(x)");
+    const sec = await compilePlotFunction("sec(x)");
+    const csc = await compilePlotFunction("csc(x)");
+    expect(cot(Math.PI / 4)).toBeCloseTo(1);
+    expect(sec(0)).toBeCloseTo(1);
+    expect(csc(Math.PI / 2)).toBeCloseTo(1);
+  });
+
+  it("cot(x) retorna NaN próximo da assíntota, em vez de lançar", async () => {
+    const fn = await compilePlotFunction("cot(x)");
+    expect(Number.isFinite(fn(0))).toBe(false);
+  });
+
+  it("avalia log com base explícita (log_a) e log10", async () => {
+    const logBase2 = await compilePlotFunction("log(x, 2)");
+    const log10 = await compilePlotFunction("log10(x)");
+    expect(logBase2(8)).toBeCloseTo(3);
+    expect(log10(100)).toBeCloseTo(2);
+  });
+
+  it("avalia os novos modelos prontos (exponenciais, especiais, sigmoide)", async () => {
+    const gaussian = await compilePlotFunction("e^(-x^2)");
+    const sigmoid = await compilePlotFunction("1/(1 + e^(-x))");
+    const sqrt = await compilePlotFunction("sqrt(x)");
+    expect(gaussian(0)).toBeCloseTo(1);
+    expect(sigmoid(0)).toBeCloseTo(0.5);
+    expect(sqrt(9)).toBeCloseTo(3);
+  });
 });
 
 describe("compilePlotFunction — bloqueado por whitelist", () => {

@@ -15,9 +15,11 @@ import { ALLOWED_VARIABLE } from "./plot-evaluator";
  *
  * 1. Superescritos Unicode (`x²`) — o mathjs não os reconhece, dá erro
  *    de sintaxe puro.
- * 2. `sen`/`tg` (PT-BR) — o mathjs os trata como FunctionNode de nome
- *    desconhecido; a whitelist de `plot-evaluator.ts` rejeitaria com
- *    "Função não permitida: sen".
+ * 2. `sen`/`tg` (PT-BR) e `ln` — o mathjs os trata como FunctionNode de
+ *    nome desconhecido; a whitelist de `plot-evaluator.ts` rejeitaria com
+ *    "Função não permitida: sen"/"ln". `ln` vira `log` porque o `log`
+ *    NATIVO do mathjs já É o logaritmo natural (não base 10) — mapear
+ *    `ln` pra ele é uma tradução literal, não uma reinterpretação.
  * 3. A variável `x` (a ÚNICA livre permitida) imediatamente seguida de
  *    `(` (`x(x+1)`) — o mathjs interpreta isso como CHAMADA de função
  *    "x", não multiplicação (ambíguo por construção da linguagem dele).
@@ -36,6 +38,7 @@ import { ALLOWED_VARIABLE } from "./plot-evaluator";
 const FUNCTION_NAME_TRANSLATIONS: Record<string, string> = {
   sen: "sin",
   tg: "tan",
+  ln: "log",
 };
 
 const SUPERSCRIPT_DIGITS: Record<string, string> = {
@@ -51,7 +54,7 @@ const SUPERSCRIPT_DIGITS: Record<string, string> = {
   "⁹": "9",
 };
 
-const FUNCTION_NAME_PATTERN = /\b(sen|tg)\(/g;
+const FUNCTION_NAME_PATTERN = /\b(sen|tg|ln)\(/g;
 const SUPERSCRIPT_RUN = /[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g;
 const VARIABLE_BEFORE_PAREN = new RegExp(`\\b${ALLOWED_VARIABLE}\\(`, "g");
 
