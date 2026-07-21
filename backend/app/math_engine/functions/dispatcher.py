@@ -208,7 +208,12 @@ def solve_function_text(expression: str) -> str:
         campos.append(f"Imagem: {image_for(kind)}")
 
     raizes = compute_roots(expr, symbol, kind)
-    if raizes:
+    if raizes is None:
+        # MODULAR com conjunto solução infinito (periódico, ex. |sin(x)|)
+        # ou sem forma fechada (ex. |x+sin(x)|) — ver solve_modular_roots().
+        # Nunca "nenhuma": isso seria falso nos dois casos.
+        campos.append("Raízes: não é possível listar individualmente (conjunto infinito ou sem forma fechada)")
+    elif raizes:
         rotulo = "Raiz" if len(raizes) == 1 else "Raízes"
         campos.append(f"{rotulo}: " + ", ".join(f"{symbol} = {raiz}" for raiz in raizes))
     else:

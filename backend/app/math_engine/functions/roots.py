@@ -7,7 +7,7 @@ from .modular import solve_modular_roots
 from .rational import denominator_roots
 
 
-def compute_roots(expr: Expr, symbol: Symbol, kind: str) -> list:
+def compute_roots(expr: Expr, symbol: Symbol, kind: str) -> list | None:
     if kind == LOGARITMICA:
         # log_b(x) = 0 <=> x = 1, para qualquer base > 0, != 1 — vale tanto
         # para log(x) (base 10) quanto ln(x) (base e), as duas únicas bases

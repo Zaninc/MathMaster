@@ -46,3 +46,33 @@ def test_unicode_pipe_input_matches_ascii() -> None:
     # Notação real que o usuário digita (unicode ², −) produz o mesmo
     # resultado que a forma ASCII equivalente.
     assert solve_expression("f(2)=|x²−4|") == solve_expression("f(2)=|x^2-4|")
+
+
+# --- Regressão: módulo de função trigonométrica travava/quebrava ---------
+#
+# `f(x)=|sin(x)|`/`f(x)=|cos(x)|` tinham raiz em conjunto infinito e
+# periódico — `compute_roots` tentava `list()` sobre isso e travava pra
+# sempre (nunca retornava). `f(x)=|x+sin(x)|` caía num `ConditionSet` (sem
+# forma fechada) e `list()` levantava `TypeError` não tratado. Ver
+# `functions/modular.py:solve_modular_roots` e
+# `tests/math_engine/test_modular_roots.py` para os testes unitários da
+# função em si.
+_ROOTS_UNAVAILABLE = "Raízes: não é possível listar individualmente (conjunto infinito ou sem forma fechada)"
+
+
+@pytest.mark.parametrize(
+    "expression, y_intercept",
+    [
+        ("f(x)=|sen(x)|", "(0, 0)"),
+        ("f(x)=|cos(x)|", "(0, 1)"),
+        ("f(x)=Abs(sen(x))", "(0, 0)"),
+        ("f(x)=|x+sen(x)|", "(0, 0)"),
+    ],
+)
+def test_trig_modular_function_definition_no_longer_hangs_or_crashes(
+    expression: str, y_intercept: str
+) -> None:
+    assert solve_expression(expression) == (
+        f"Tipo: função modular; Domínio: ℝ; {_ROOTS_UNAVAILABLE}; "
+        f"Intercepto em y: {y_intercept}"
+    )
