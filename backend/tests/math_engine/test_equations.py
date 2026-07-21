@@ -35,3 +35,31 @@ def test_degenerate_zero_coefficient_equation_raises() -> None:
     # aqui como o comportamento real observado, não assumido.
     with pytest.raises(ExpressionError):
         _solve("0*x=5")
+
+
+# --- Regressão: equações com parâmetro livre continuam fora de escopo ---
+#
+# Cálculo (derivada/integral/limite) já nomeia a variável ativa
+# explicitamente na sintaxe, então parâmetros livres (a, b, c...) já são
+# aceitos como constantes lá. Equações não têm essa declaração explícita —
+# "a*x + b = 0" tem 3 símbolos livres e não há como saber qual é "a
+# incógnita" sem inventar uma convenção nova. Decisão explícita: manter a
+# rejeição atual aqui, não expandir a sintaxe de equações nesta sprint.
+
+
+def test_equation_with_free_parameters_still_requires_single_unknown() -> None:
+    with pytest.raises(ExpressionError, match="única incógnita"):
+        _solve("a*x + b = 0")
+
+
+def test_quadratic_equation_with_free_parameters_still_requires_single_unknown() -> None:
+    with pytest.raises(ExpressionError, match="única incógnita"):
+        _solve("a*x**2 + b*x + c = 0")
+
+
+def test_solve_wrapper_syntax_is_not_valid_and_fails_cleanly() -> None:
+    # "solve(...)" não é uma forma reconhecida por nenhum dispatcher do
+    # MathMaster (equações são digitadas diretamente, ex. "a*x+b=0", sem
+    # wrapper) — confirma que isso falha de forma limpa, nunca crasha.
+    with pytest.raises(ExpressionError):
+        _solve("solve(a*x + b = 0, x)")

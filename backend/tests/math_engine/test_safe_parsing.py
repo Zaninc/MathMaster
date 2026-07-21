@@ -7,11 +7,12 @@ arquivo testa `safe_parse_expr` isoladamente, não afeta `/solve`).
 from __future__ import annotations
 
 import pytest
+from sympy import Symbol
 from sympy.core.expr import Expr
 
 from app.math_engine import safe_parsing
 from app.math_engine.errors import ExpressionError
-from app.math_engine.safe_parsing import safe_parse_expr
+from app.math_engine.safe_parsing import extract_safe_symbols, safe_parse_expr
 
 
 # --- Builtins reais do Python nunca são alcançáveis ---------------------
@@ -231,3 +232,68 @@ def test_cbrt_of_negative_literal_returns_real_root() -> None:
 def test_cbrt_of_symbolic_argument_stays_symbolic() -> None:
     result = safe_parse_expr("cbrt(x)")
     assert str(result) == "x**(1/3)"
+
+
+# --- Correção do "^" (potência, nunca XOR) -------------------------------
+#
+# Bug pré-existente: "^" nunca foi convertido para "**" em lugar nenhum do
+# pipeline. Para símbolos isso já rejeitava com um erro genérico; para dois
+# números, o SymPy resolvia "^" como XOR lógico bit a bit e devolvia uma
+# resposta matematicamente ERRADA sem lançar nada ("2^3" == "1", não "8") —
+# mais grave que uma rejeição limpa. Ver `_convert_caret_power`.
+
+
+def test_caret_converts_to_power_between_numbers() -> None:
+    assert safe_parse_expr("2^3") == 8
+
+
+def test_caret_never_silently_resolves_as_xor() -> None:
+    assert safe_parse_expr("2^3") != 1
+
+
+def test_caret_converts_to_power_with_symbol() -> None:
+    x = Symbol("x")
+    assert safe_parse_expr("x^2", local_dict={"x": x}) == x**2
+
+
+def test_caret_is_idempotent_alongside_existing_double_star() -> None:
+    x = Symbol("x")
+    caret = safe_parse_expr("x^2 + 1", local_dict={"x": x})
+    double_star = safe_parse_expr("x**2 + 1", local_dict={"x": x})
+    assert caret == double_star
+
+
+# --- extract_safe_symbols -------------------------------------------------
+
+
+def test_extract_safe_symbols_finds_single_letter_free_parameters() -> None:
+    names = extract_safe_symbols("a*x**2 + b*x + c", exclude={"x"})
+    assert set(names) == {"a", "b", "c"}
+
+
+def test_extract_safe_symbols_excludes_the_active_variable() -> None:
+    names = extract_safe_symbols("A**(1/x)", exclude={"x"})
+    assert set(names) == {"A"}
+    assert "x" not in names
+
+
+def test_extract_safe_symbols_returns_real_sympy_symbols() -> None:
+    names = extract_safe_symbols("A**(1/x)", exclude={"x"})
+    assert names["A"] == Symbol("A")
+
+
+@pytest.mark.parametrize("known_name", ["sin", "cos", "log", "ln", "pi", "E", "I", "oo", "sqrt"])
+def test_extract_safe_symbols_never_overrides_known_functions_or_constants(known_name: str) -> None:
+    names = extract_safe_symbols(f"{known_name}(x) + {known_name}", exclude={"x"})
+    assert known_name not in names
+
+
+def test_extract_safe_symbols_ignores_multiletter_identifiers() -> None:
+    # Nomes com 2+ letras não fazem parte deste mecanismo — continuam
+    # rejeitados por `_reject_ambiguous_identifiers` dentro de
+    # `safe_parse_expr`, nunca "adivinhados" como parâmetro aqui.
+    assert extract_safe_symbols("foo + bar", exclude=set()) == {}
+
+
+def test_extract_safe_symbols_empty_for_expression_without_free_parameters() -> None:
+    assert extract_safe_symbols("x**2 + 1", exclude={"x"}) == {}

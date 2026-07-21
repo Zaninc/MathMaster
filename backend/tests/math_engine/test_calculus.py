@@ -138,3 +138,108 @@ def test_derivative_without_parentheses_falls_through_to_clean_rejection() -> No
     # de 2 letras não reconhecido, já rejeitado pelo safe_parsing existente.
     with pytest.raises(ExpressionError, match=r"[Nn]ão reconhecido|[Nn]ão foi possível"):
         _solve("d/dx x**2")
+
+
+# --- Parâmetros livres (A, a, b, c, k...) tratados como constantes -------
+#
+# A variável ativa de cada operação já vem nomeada explicitamente na
+# sintaxe (`derivada(expr, var)`, `limite(expr, var, ponto)`) — qualquer
+# outra letra solta na expressão é um parâmetro, nunca uma segunda
+# incógnita. Ver `safe_parsing.extract_safe_symbols`.
+
+
+def test_power_with_free_base_parameter_stays_symbolic() -> None:
+    assert _solve("A^(1/x)") == "A**(1/x)"
+
+
+def test_derivative_of_quadratic_with_free_coefficients() -> None:
+    assert _solve("derivada(a*x^2 + b*x + c, x)") == "Derivada: 2a*x + b"
+
+
+def test_derivative_of_ax2_matches_expected_coefficient_form() -> None:
+    assert _solve("derivada(a*x**2, x)") == "Derivada: 2a*x"
+
+
+def test_indefinite_integral_with_free_coefficient() -> None:
+    assert _solve("integral(k*x, x)") == "Integral: k*x²/2 + C"
+
+
+def test_indefinite_integral_of_k_sin_x() -> None:
+    assert _solve("integral(k*sin(x), x)") == "Integral: -k*cos(x) + C"
+
+
+def test_limit_at_infinity_of_free_base_to_the_reciprocal_of_x() -> None:
+    # lim x->oo A^(1/x): SymPy devolve 1 independente de A ser marcado
+    # positive=True, negative=True ou sem assumption nenhuma (verificado
+    # empiricamente) — é o resultado matematicamente correto e geral pra
+    # qualquer A != 0 (lim_{w->0} z**w == 1 pra qualquer z fixo não-nulo,
+    # continuidade da potência complexa fora do ponto de ramificação).
+    # A == 0 é o único caso degenerado (0**w -> 0 pra w>0 real), e não é
+    # tratado aqui pela mesma razão que o resto do motor não aponta
+    # domínio (ex. 1/x não avisa "exceto x=0"): decisão consistente com o
+    # padrão já estabelecido no restante do código, não um caso especial
+    # novo inventado pra esta expressão.
+    assert _solve("lim x->oo A^(1/x)") == "Limite: 1"
+    assert _solve("limite(A**(1/x), x, oo)") == "Limite: 1"
+
+
+def test_limit_natural_notation_with_unicode_infinity_and_caret() -> None:
+    assert _solve("lim x→∞ A^(1/x)") == "Limite: 1"
+
+
+def test_free_parameter_never_shadows_eulers_number() -> None:
+    # "E" é o único ponto de sobreposição real: E é constante de Euler
+    # (single-letter) E TAMBÉM passaria no critério "uma letra" de
+    # extract_safe_symbols se não fosse explicitamente excluído. Confirma
+    # que a derivada de E**x continua reconhecendo E como Euler (dá
+    # exp(x)), nunca cria um símbolo livre "E" genérico.
+    assert _solve("derivada(E**x, x)") == "Derivada: exp(x)"
+
+
+def test_free_parameter_never_shadows_pi() -> None:
+    assert _solve("derivada(pi*x, x)") == "Derivada: π"
+
+
+def test_caret_power_regression_matches_double_star_syntax() -> None:
+    assert _solve("derivada(a*x^2 + b*x + c, x)") == _solve("derivada(a*x**2 + b*x + c, x)")
+
+
+# --- Segurança: extração de parâmetros livres nunca abre brecha nova ----
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "derivada(__import__('os').system('dir'), x)",
+        "derivada(os.system(1), x)",
+        "derivada(foo.bar, x)",
+        "derivada(x__class__, x)",
+        "derivada(().__class__.__bases__, x)",
+    ],
+)
+def test_free_symbol_extraction_never_bypasses_security_layers(expression: str) -> None:
+    with pytest.raises(ExpressionError):
+        _solve(expression)
+
+
+def test_free_symbol_extraction_rejects_reserved_multiletter_name() -> None:
+    # "tau" é um nome reservado conhecido pelo parser (constante de
+    # trigonometria) mas fora do vocabulário de cálculo — continua
+    # rejeitado como identificador ambíguo, nunca virando parâmetro.
+    with pytest.raises(ExpressionError):
+        _solve("derivada(tau*x, x)")
+
+
+def test_free_symbol_extraction_rejects_long_suspicious_identifier() -> None:
+    with pytest.raises(ExpressionError):
+        _solve("derivada(umidentificadorlongoesuspeitoparadetectar*x, x)")
+
+
+@pytest.mark.parametrize("known_name", ["sin", "log", "pi", "E", "I", "oo"])
+def test_free_symbol_extraction_never_overrides_known_names(known_name: str) -> None:
+    # Tentar usar um nome de função/constante conhecida (chamada ou não)
+    # nunca faz esse nome virar um parâmetro livre genérico — continua
+    # significando a função/constante real do SymPy.
+    from app.math_engine.safe_parsing import extract_safe_symbols
+
+    assert known_name not in extract_safe_symbols(f"{known_name}(x) + {known_name}", exclude={"x"})

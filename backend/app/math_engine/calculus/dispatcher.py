@@ -38,7 +38,7 @@ from sympy.parsing.sympy_parser import (
 
 from ..errors import ExpressionError
 from ..log_convention import LOCAL_DICT as _LOG_LOCAL_DICT
-from ..safe_parsing import safe_parse_expr
+from ..safe_parsing import extract_safe_symbols, safe_parse_expr
 from .derivatives import compute_derivative
 from .integrals import compute_definite_integral, compute_indefinite_integral
 from .limits import compute_limit
@@ -90,7 +90,14 @@ def _parse_variable(text: str) -> Symbol:
 
 
 def _parse_fragment(text: str, symbol: Symbol):
-    local_dict = {symbol.name: symbol, **_LOG_LOCAL_DICT}
+    # Parâmetros livres (ex. o "A" de "A^(1/x)", ou "a"/"b"/"c" de
+    # "a*x**2 + b*x + c") são descobertos explicitamente aqui, nunca
+    # deixados para o fallback implícito do SymPy — `symbol` (a variável
+    # ativa desta operação) e os nomes já conhecidos por `_LOG_LOCAL_DICT`
+    # são excluídos, então nunca ganham uma segunda entrada nem são
+    # tratados como parâmetro.
+    extra_symbols = extract_safe_symbols(text, exclude={symbol.name, *_LOG_LOCAL_DICT})
+    local_dict = {symbol.name: symbol, **_LOG_LOCAL_DICT, **extra_symbols}
     try:
         return safe_parse_expr(text, transformations=_TRANSFORMATIONS, local_dict=local_dict)
     except Exception as exc:

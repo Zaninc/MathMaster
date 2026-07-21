@@ -41,6 +41,20 @@ Este módulo fecha essa brecha em quatro camadas independentes:
    não fechado, além de aplicar `settings.max_expression_nesting_depth` —
    protege contra expressões desenhadas para estourar o limite de
    recursão do Python.
+
+Expansão de parâmetros livres (ex. `A^(1/x)`, `a*x**2 + b*x + c`): a única
+letra já era aceita como símbolo livre desde a camada [2] acima
+(`_reject_ambiguous_identifiers` isenta `len(name) == 1` de qualquer
+whitelist) — o que faltava era (a) `^` nunca ter sido convertido para `**`
+em lugar nenhum do pipeline (ver `_convert_caret_power` abaixo — bug
+pré-existente e mais sério do que um erro de parse: `2^3` hoje devolve `1`
+silenciosamente, porque o SymPy interpreta `^` como XOR lógico, não
+potência) e (b) essa aceitação de símbolo livre ser um efeito colateral
+implícito do `auto_symbol` do SymPy, nunca uma função própria, testável e
+reutilizável pelos dispatchers. `extract_safe_symbols` (fim do arquivo)
+resolve o item (b): dado um texto, devolve só os símbolos de uma letra que
+NÃO são função/constante conhecida, prontos para entrar no `local_dict` —
+sem duplicar esta lógica em cada dispatcher de domínio.
 """
 from __future__ import annotations
 
@@ -170,6 +184,29 @@ _KNOWN_IDENTIFIER_NAMES = frozenset(_ALLOWED_FUNCTIONS) | frozenset(_ALLOWED_CON
 _IDENTIFIER_PATTERN = re.compile(r"[a-zA-Z_]\w*")
 
 
+def _convert_caret_power(text: str) -> str:
+    """"^" -> "**" (potência). Único ponto do pipeline que faz essa troca —
+    deliberadamente NÃO em `parser/normalize.py` (Sprint Parser, roda antes
+    do roteamento de domínio): `calculus/natural_notation.py` usa "^" com
+    outro significado em "∫_a^b expr dx" (separador de limites de
+    integração, ex. `∫_0^1 x**2 dx`), e esse "^" é consumido/removido do
+    texto ANTES de qualquer fragmento chegar aqui (o resultado da reescrita
+    é `integral(x**2, x, 0, 1)` — sem "^" nenhum). Por construção, todo "^"
+    que sobra até este ponto do pipeline é potência, nunca separador de
+    limites — ver `tests/math_engine/test_calculus_natural_notation.py`
+    para a prova de que os dois nunca colidem.
+
+    Sem esta conversão, "^" cai no operador Python real (`eval` interno do
+    parser): para símbolos, `TypeError` genérico (rejeitado como "não foi
+    possível interpretar"); para dois números, o SymPy resolve como XOR
+    lógico bit a bit e devolve uma resposta matemática ERRADA sem lançar
+    nada (`2^3` -> `1`, não `8`) — bug mais sério que uma rejeição limpa,
+    por isso corrigido aqui, no único lugar por onde todo texto de usuário
+    passa antes do `eval` real do SymPy.
+    """
+    return text.replace("^", "**")
+
+
 def _reject_forbidden_content(text: str) -> None:
     for token in _FORBIDDEN_SUBSTRINGS:
         if token in text:
@@ -242,6 +279,7 @@ def safe_parse_expr(text: str, *, local_dict: dict | None = None, transformation
     `_reject_ambiguous_identifiers`); ou falhe o parse por qualquer outro
     motivo.
     """
+    text = _convert_caret_power(text)
     _reject_forbidden_content(text)
     _validate_delimiters(text)
     _reject_ambiguous_identifiers(text, local_dict)
@@ -261,3 +299,37 @@ def safe_parse_expr(text: str, *, local_dict: dict | None = None, transformation
         raise
     except Exception as exc:
         raise ExpressionError(f"Não foi possível interpretar a expressão: {text}") from exc
+
+
+def extract_safe_symbols(expression: str, *, exclude: set[str] | None = None) -> dict[str, Symbol]:
+    """Ponto único para descobrir parâmetros livres válidos de uma expressão
+    ANTES do parse — ex. o `A` de "A^(1/x)" ou o `a`/`b`/`c` de
+    "a*x**2 + b*x + c". Dispatchers de domínio chamam isto para montar seu
+    `local_dict` de forma explícita, em vez de depender do fallback
+    implícito `auto_symbol` do SymPy (que cria um símbolo pra QUALQUER nome
+    desconhecido, sem essa função nenhum lugar centraliza/documenta/testa
+    qual conjunto é considerado seguro).
+
+    Regra: só identificadores de UMA letra (mesmo critério de
+    `_reject_ambiguous_identifiers` — a única forma de nome livre já
+    aceita sem whitelist neste parser). Exclui automaticamente qualquer
+    nome de função/constante conhecida (`_KNOWN_IDENTIFIER_NAMES` — inclui
+    "E"/"I", então `E`/`I` como Euler/imaginário NUNCA são sobrescritos por
+    um parâmetro livre) e qualquer nome em `exclude` (tipicamente a
+    variável ativa da operação — ex. o "x" de `derivada(a*x**2, x)`, que
+    tem seu próprio Symbol já criado pelo chamador e não deve ganhar uma
+    segunda entrada aqui).
+
+    Não repete nenhuma validação de segurança (`__`, caracteres,
+    delimitadores) — isso continua 100% em `safe_parse_expr`, chamado logo
+    em seguida pelo mesmo dispatcher com o `local_dict` resultante. Esta
+    função só decide NOMES a tratar como parâmetro; nunca valida ou
+    executa nada.
+    """
+    excluded = _KNOWN_IDENTIFIER_NAMES | (exclude or set())
+    names = {
+        match.group()
+        for match in _IDENTIFIER_PATTERN.finditer(expression)
+        if len(match.group()) == 1 and match.group() not in excluded
+    }
+    return {name: Symbol(name) for name in names}
