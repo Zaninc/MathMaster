@@ -1,5 +1,6 @@
 interface VisualTile {
   title: string;
+  description: string;
   icon: React.ReactNode;
 }
 
@@ -16,7 +17,8 @@ const ICON_PROPS = {
 
 const TILES: VisualTile[] = [
   {
-    title: "Gráfico cartesiano",
+    title: "Funções",
+    description: "Visualização interativa de funções matemáticas: gráficos polinomiais, trigonométricos, exponenciais e logarítmicos.",
     icon: (
       <svg {...ICON_PROPS}>
         <path d="M8 8v48h48" />
@@ -25,38 +27,39 @@ const TILES: VisualTile[] = [
     ),
   },
   {
-    title: "Triângulo",
+    title: "Geometria",
+    description: "Construções geométricas no plano cartesiano: triângulos, retas e medições dinâmicas.",
     icon: (
       <svg {...ICON_PROPS}>
-        <path d="M32 10 L54 50 L10 50 Z" />
+        <path d="M14 50 L50 50 L32 14 Z" />
+        <path d="M32 50 V14" strokeDasharray="2 3" stroke="var(--accent)" />
+        <path d="M28 50 v-4 h4" stroke="var(--accent)" />
       </svg>
     ),
   },
   {
-    title: "Círculo",
+    title: "Cônicas",
+    description: "Circunferências, parábolas, elipses e hipérboles — exploração visual e propriedades matemáticas.",
     icon: (
       <svg {...ICON_PROPS}>
-        <circle cx="32" cy="32" r="22" />
-        <path d="M32 32 L32 10" strokeDasharray="2 3" />
+        <ellipse cx="32" cy="24" rx="20" ry="10" />
+        <path d="M14 50c6-14 30-14 36 0" stroke="var(--accent)" />
       </svg>
     ),
   },
   {
-    title: "Curva quadrática",
+    title: "Exploração visual",
+    description: "Ferramentas para compreender conceitos matemáticos de forma intuitiva.",
     icon: (
       <svg {...ICON_PROPS}>
-        <path d="M8 44h48" stroke="var(--border)" />
-        <path d="M8 12c8 20 16 20 24 20s16 0 24-20" stroke="var(--accent)" />
+        <circle cx="28" cy="28" r="16" />
+        <path d="M40 40 L54 54" />
+        <path d="M20 30c3-8 6-8 8-3s5 5 8-3" stroke="var(--accent)" />
       </svg>
     ),
   },
 ];
 
-/**
- * Tira ilustrativa, deliberadamente estática (o motor real de Gráficos e
- * Geometria chega nas Etapas 3/4) — a legenda deixa isso explícito para
- * não sugerir uma interatividade que ainda não existe.
- */
 export function VisualizationPreview() {
   return (
     <section className="border-b border-border py-16">
@@ -69,12 +72,15 @@ export function VisualizationPreview() {
               className="flex flex-col items-center gap-3 rounded-lg border border-border bg-surface p-6 text-text-secondary"
             >
               {tile.icon}
-              <span className="text-center text-sm text-text-secondary">{tile.title}</span>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-center text-sm font-medium text-text-primary">{tile.title}</span>
+                <span className="text-center text-xs text-text-muted">{tile.description}</span>
+              </div>
             </div>
           ))}
         </div>
         <p className="mt-4 text-sm text-text-muted">
-          Prévia visual — os gráficos e figuras interativos chegam nas próximas etapas.
+          Matemática visual — experimente funções e figuras geométricas de forma interativa.
         </p>
       </div>
     </section>
