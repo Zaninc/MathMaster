@@ -74,6 +74,13 @@ from app.math_engine.parser.normalize import normalize_expression
         # --- entradas sem nada a normalizar ---
         ("2+2", "2+2"),
         ("x**2 + 2*x + 1", "x**2 + 2*x + 1"),
+        # --- módulo/valor absoluto ---
+        ("|x|", "Abs(x)"),
+        ("|x-5|", "Abs(x-5)"),
+        ("|x-1|+|x+2|", "Abs(x-1)+Abs(x+2)"),
+        ("|x|²", "Abs(x)**2"),
+        ("|x²-9|", "Abs(x**2-9)"),
+        ("Abs(x)", "Abs(x)"),  # já normalizado, intocado
     ],
 )
 def test_normalize_expression(expression: str, expected: str) -> None:
@@ -90,6 +97,7 @@ def test_normalize_expression(expression: str, expected: str) -> None:
         "sen(x)", "tg(x)", "raiz(x)", "raiz(x+1)",
         "sen²(x)", "sen²(x+1)", "sin(x)²", "cos²(x)",
         "sensor(x)", "x2", "2+2", "",
+        "|x|", "|x-5|", "|x-1|+|x+2|", "|x|²", "|x²-9|", "Abs(x)",
     ],
 )
 def test_normalize_expression_is_idempotent(expression: str) -> None:

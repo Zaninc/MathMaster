@@ -59,6 +59,13 @@ _CBRT_ATOM = re.compile(r"∛\s*([A-Za-z0-9_]+)")
 _ALIAS_MAP = {"sen": "sin", "tg": "tan", "raiz": "sqrt"}
 _ALIAS_PATTERN = re.compile(r"\b(sen|tg|raiz)\s*\(")
 
+# Módulo/valor absoluto: "|expr|" -> "Abs(expr)". `Abs` já é totalmente
+# suportado (whitelist de `safe_parsing.py`, classificação MODULAR em
+# `functions/classification.py`, equações em `equations/dispatcher.py`) —
+# o único gap real é léxico, então basta reescrever aqui, antes do
+# roteamento de domínio, exatamente como √/∛ já fazem.
+_ABS_PATTERN = re.compile(r"\|([^|]+)\|")
+
 
 def _convert_superscript_run(run: str) -> str | None:
     """Converte um run de dígitos sobrescritos (com "⁻" opcional na frente)
@@ -170,20 +177,33 @@ def _apply_aliases(text: str) -> str:
     return _ALIAS_PATTERN.sub(lambda m: _ALIAS_MAP[m.group(1)] + "(", text)
 
 
+def _rewrite_absolute_value(text: str) -> str:
+    """"|x-5|" -> "Abs(x-5)"; "|x-1|+|x+2|" -> "Abs(x-1)+Abs(x+2)". Pareamento
+    sequencial e não-aninhado: cada "|" abre, o PRÓXIMO "|" fecha (`[^|]+`
+    nunca cruza um par para o seguinte) — cobre o uso real de módulo, que é
+    sempre linear. Módulo aninhado ("||x|-1|") não é gerado por este regex;
+    se o usuário digitar isso, o "|" restante é rejeitado mais adiante pela
+    whitelist de caracteres de `safe_parsing.py`, nunca "adivinhado" aqui —
+    mesmo princípio de todo outro rewrite deste módulo."""
+    return _ABS_PATTERN.sub(r"Abs(\1)", text)
+
+
 def normalize_expression(text: str) -> str:
     """Ponto único de entrada da Sprint Parser — compõe, nesta ordem exata:
 
     1. sen²(x) -> sen(x)**2               (antes da troca de alias, preserva o nome)
     2. π -> pi; ∞ -> oo; ×÷−≤≥≠ -> ascii   (para que √π/superscripts em cima de pi funcionem)
-    3. √/∛ atômico ou entre parênteses -> sqrt(...)/cbrt(...)
-    4. x²/(x+1)²/2⁻³ -> **2/**2/**-3       (genérico, cobre inclusive sqrt(x)² e sen(x)²)
-    5. sen/tg/raiz -> sin/tan/sqrt          (por último, forma de chamada apenas)
+    3. |expr| -> Abs(expr)                 (módulo — antes de superscripts, para que "|x|²" vire "Abs(x)**2")
+    4. √/∛ atômico ou entre parênteses -> sqrt(...)/cbrt(...)
+    5. x²/(x+1)²/2⁻³ -> **2/**2/**-3       (genérico, cobre inclusive sqrt(x)² e sen(x)²)
+    6. sen/tg/raiz -> sin/tan/sqrt          (por último, forma de chamada apenas)
 
     Puramente textual: não importa nada de `safe_parsing`/SymPy, não faz
     parsing, não decide domínio. Idempotente — ver test_normalize.py.
     """
     text = _rewrite_function_power(text)
     text = _replace_unicode_constants_and_operators(text)
+    text = _rewrite_absolute_value(text)
     text = _rewrite_roots(text)
     text = _rewrite_superscript_atoms(text)
     text = _apply_aliases(text)
