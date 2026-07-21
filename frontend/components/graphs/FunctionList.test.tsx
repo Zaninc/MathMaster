@@ -132,4 +132,120 @@ describe("FunctionList", () => {
       }
     });
   });
+
+  describe("rótulos em KaTeX (refinamento visual)", () => {
+    it("todos os itens de todas as categorias exibem markup KaTeX (nenhum texto solto)", () => {
+      render(<FunctionList functions={[]} errors={new Map()} onAdd={vi.fn()} onToggle={vi.fn()} onRemove={vi.fn()} />);
+
+      const groupLabels = ["Polinomial", "Exponencial", "Logarítmica", "Trigonométrica", "Especiais", "Interessantes"];
+      for (const groupLabel of groupLabels) {
+        fireEvent.click(screen.getByRole("button", { name: new RegExp(`ver funções de ${groupLabel}`, "i") }));
+        const panel = screen.getByRole("group", { name: new RegExp(`funções de ${groupLabel}`, "i") });
+        const buttons = within(panel).getAllByRole("button");
+        expect(buttons.length).toBeGreaterThan(0);
+        for (const button of buttons) {
+          expect(button.querySelector(".katex")).not.toBeNull();
+        }
+        // fecha antes de abrir a próxima (só um painel por vez).
+        fireEvent.click(screen.getByRole("button", { name: new RegExp(`ver funções de ${groupLabel}`, "i") }));
+      }
+    });
+
+    it("o texto acessível (aria-label) continua disponível e correto mesmo com o rótulo em KaTeX", () => {
+      render(<FunctionList functions={[]} errors={new Map()} onAdd={vi.fn()} onToggle={vi.fn()} onRemove={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /ver funções de logarítmica/i }));
+      const panel = screen.getByRole("group", { name: /funções de logarítmica/i });
+
+      const logA = within(panel).getByRole("button", { name: /logarítmica — logₐ\(x\): log\(x, 2\)/i });
+      expect(logA).toBeInTheDocument();
+      // o conteúdo visual (KaTeX) fica aria-hidden — o nome acessível vem só do aria-label.
+      expect(logA.querySelector("[aria-hidden='true']")).not.toBeNull();
+    });
+
+    it("clicar num item com rótulo KaTeX ainda insere a expressão técnica correta, não o LaTeX", () => {
+      const onAdd = vi.fn();
+      render(<FunctionList functions={[]} errors={new Map()} onAdd={onAdd} onToggle={vi.fn()} onRemove={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /ver funções de interessantes/i }));
+      const panel = screen.getByRole("group", { name: /funções de interessantes/i });
+      fireEvent.click(within(panel).getByRole("button", { name: /sigmoide/i }));
+
+      expect(onAdd).toHaveBeenCalledWith("1/(1 + e^(-x))");
+      expect(onAdd).not.toHaveBeenCalledWith(expect.stringContaining("\\frac"));
+    });
+
+    it("o rótulo mais longo (a·sen(bx+c)+d) renderiza em KaTeX crescendo naturalmente, sem scroll interno", () => {
+      render(<FunctionList functions={[]} errors={new Map()} onAdd={vi.fn()} onToggle={vi.fn()} onRemove={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /ver funções de trigonométrica/i }));
+      const panel = screen.getByRole("group", { name: /funções de trigonométrica/i });
+      const button = within(panel).getByRole("button", { name: /trigonométrica — a·sen\(bx\+c\)\+d/i });
+
+      expect(button.querySelector(".katex")).not.toBeNull();
+      const wrapper = button.querySelector(".katex")?.parentElement;
+      expect(wrapper).not.toBeNull();
+      expect(wrapper).toHaveClass("w-max", "max-w-none", "overflow-visible", "whitespace-nowrap");
+    });
+
+    it("nenhum rótulo de nenhuma categoria usa overflow-x-auto/overflow-y-auto (nunca cria scrollbar interna)", () => {
+      render(<FunctionList functions={[]} errors={new Map()} onAdd={vi.fn()} onToggle={vi.fn()} onRemove={vi.fn()} />);
+
+      const groupLabels = ["Polinomial", "Exponencial", "Logarítmica", "Trigonométrica", "Especiais", "Interessantes"];
+      for (const groupLabel of groupLabels) {
+        fireEvent.click(screen.getByRole("button", { name: new RegExp(`ver funções de ${groupLabel}`, "i") }));
+        const panel = screen.getByRole("group", { name: new RegExp(`funções de ${groupLabel}`, "i") });
+        for (const button of within(panel).getAllByRole("button")) {
+          const wrapper = button.querySelector(".katex")?.parentElement;
+          expect(wrapper).not.toBeNull();
+          expect(wrapper).not.toHaveClass("overflow-x-auto");
+          expect(wrapper).not.toHaveClass("overflow-y-auto");
+          expect(wrapper).not.toHaveClass("max-w-full");
+        }
+        fireEvent.click(screen.getByRole("button", { name: new RegExp(`ver funções de ${groupLabel}`, "i") }));
+      }
+    });
+
+    it("o container dos itens do grupo continua com flex-wrap (permite quebrar linha)", () => {
+      render(<FunctionList functions={[]} errors={new Map()} onAdd={vi.fn()} onToggle={vi.fn()} onRemove={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /ver funções de trigonométrica/i }));
+      const panel = screen.getByRole("group", { name: /funções de trigonométrica/i });
+      expect(panel.firstElementChild).toHaveClass("flex-wrap");
+    });
+
+    it("exemplos simples (Linear, Quadrática, Racional) continuam em texto puro — não têm labelLatex", () => {
+      render(<FunctionList functions={[]} errors={new Map()} onAdd={vi.fn()} onToggle={vi.fn()} onRemove={vi.fn()} />);
+
+      const linear = screen.getByRole("button", { name: /adicionar exemplo linear/i });
+      expect(linear.querySelector(".katex")).toBeNull();
+      expect(linear).toHaveTextContent("Linear");
+    });
+
+    it("todos os itens dos menus expansíveis têm a mesma altura/largura mínima e centralização (ajuste uniforme)", () => {
+      render(<FunctionList functions={[]} errors={new Map()} onAdd={vi.fn()} onToggle={vi.fn()} onRemove={vi.fn()} />);
+
+      const groupLabels = ["Polinomial", "Exponencial", "Logarítmica", "Trigonométrica", "Especiais", "Interessantes"];
+      for (const groupLabel of groupLabels) {
+        fireEvent.click(screen.getByRole("button", { name: new RegExp(`ver funções de ${groupLabel}`, "i") }));
+        const panel = screen.getByRole("group", { name: new RegExp(`funções de ${groupLabel}`, "i") });
+        for (const button of within(panel).getAllByRole("button")) {
+          expect(button).toHaveClass("min-h-8", "min-w-14", "inline-flex", "items-center", "justify-center");
+        }
+        fireEvent.click(screen.getByRole("button", { name: new RegExp(`ver funções de ${groupLabel}`, "i") }));
+      }
+    });
+
+    it("os botões de categoria e os exemplos simples NÃO ganham o ajuste de tamanho (escopo só dos itens de menu)", () => {
+      render(<FunctionList functions={[]} errors={new Map()} onAdd={vi.fn()} onToggle={vi.fn()} onRemove={vi.fn()} />);
+
+      const categoryToggle = screen.getByRole("button", { name: /ver funções de trigonométrica/i });
+      expect(categoryToggle).not.toHaveClass("min-h-8");
+      expect(categoryToggle).not.toHaveClass("min-w-14");
+
+      const linear = screen.getByRole("button", { name: /adicionar exemplo linear/i });
+      expect(linear).not.toHaveClass("min-h-8");
+      expect(linear).not.toHaveClass("min-w-14");
+    });
+  });
 });

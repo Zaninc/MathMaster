@@ -5,10 +5,39 @@ import { FormEvent, useEffect, useState } from "react";
 import { Button } from "@/components/shared/Button";
 import { FadeIn } from "@/components/shared/FadeIn";
 import { MathFormula } from "@/components/shared/MathFormula";
-import { GRAPH_EXAMPLE_GROUPS, GRAPH_EXAMPLES } from "@/data/graph-examples";
+import { GRAPH_EXAMPLE_GROUPS, GRAPH_EXAMPLES, type GraphExample } from "@/data/graph-examples";
 import { plotExpressionToLatex } from "@/lib/math/graph-normalize";
 
 import type { PlotFunction } from "./types";
+
+/**
+ * Rótulo visual de um exemplo — mesmo padrão de `MathKeyboard` (`key.latex`
+ * opcional, `aria-hidden`, nome acessível vindo do `aria-label` do botão
+ * pai, nunca daqui): quando `labelLatex` existe, promove a KaTeX; senão,
+ * cai no texto puro de `label` (fallback idêntico ao comportamento atual).
+ *
+ * NUNCA usar `overflow-x-auto`/`max-w-full` aqui (era o padrão da
+ * pré-visualização grande da Calculadora — errado para um botão pequeno):
+ * `overflow-x` diferente de `visible` faz o navegador computar `overflow-y`
+ * também como não-visible, criando as duas barrinhas de rolagem; e
+ * `max-w-full` recorta o conteúdo contra a largura do botão bem quando as
+ * fontes do KaTeX ainda estão carregando, causando o scrollbar
+ * aparecer/sumir durante o layout shift do troca de fonte. Aqui o botão
+ * deve simplesmente crescer para caber a fórmula — a fileira `flex-wrap`
+ * do container é quem decide se o item quebra linha, nunca o próprio item
+ * rolando por dentro.
+ */
+function ExampleLabel({ example }: { example: GraphExample }) {
+  if (example.labelLatex === undefined) return <>{example.label}</>;
+  return (
+    <span aria-hidden="true">
+      <MathFormula
+        formula={example.labelLatex}
+        className="inline-block w-max max-w-none shrink-0 overflow-visible whitespace-nowrap align-middle"
+      />
+    </span>
+  );
+}
 
 /**
  * Expressão de uma função na lista, via KaTeX — mesma infraestrutura de
@@ -100,7 +129,7 @@ export function FunctionList({ functions, errors, onAdd, onToggle, onRemove }: F
               aria-label={`Adicionar exemplo ${example.label}: ${example.expression}`}
               className="rounded-md border border-border bg-surface px-2.5 py-1 text-xs text-text-secondary transition-colors duration-(--motion-fast) hover:border-border-hover hover:text-text-primary"
             >
-              {example.label}
+              <ExampleLabel example={example} />
             </button>
           ))}
           {GRAPH_EXAMPLE_GROUPS.map((group) => {
@@ -138,9 +167,9 @@ export function FunctionList({ functions, errors, onAdd, onToggle, onRemove }: F
                   type="button"
                   onClick={() => onAdd(item.expression)}
                   aria-label={`Adicionar exemplo ${openGroup.label} — ${item.label}: ${item.expression}`}
-                  className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-text-secondary transition-colors duration-(--motion-fast) hover:border-border-hover hover:text-text-primary"
+                  className="inline-flex min-h-8 min-w-14 items-center justify-center rounded-md border border-border bg-background px-3 py-1.5 text-xs text-text-secondary transition-colors duration-(--motion-fast) hover:border-border-hover hover:text-text-primary"
                 >
-                  {item.label}
+                  <ExampleLabel example={item} />
                 </button>
               ))}
             </FadeIn>
