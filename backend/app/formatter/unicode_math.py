@@ -37,6 +37,7 @@ _TAU_PATTERN = re.compile(r"\btau\b")
 _OO_PATTERN = re.compile(r"\boo\b")
 
 _IMAGINARY_UNIT_PATTERN = re.compile(r"\bI\b")
+_EULERS_NUMBER_PATTERN = re.compile(r"\bE\b")
 
 # Sprint Formatter Fix — implicit-multiplication cleanup. Only removes "*"
 # when it is unambiguous: a numeric coefficient directly touching a symbol,
@@ -213,6 +214,23 @@ def replace_imaginary_unit(text: str) -> str:
     deliberately preserved by merge_coefficient_products() (see its
     pattern's comment) rather than collapsed to "2i"."""
     return _IMAGINARY_UNIT_PATTERN.sub("i", text)
+
+
+def replace_eulers_number(text: str) -> str:
+    """E -> e (presentation only). Same reasoning and same safety guarantee
+    as replace_imaginary_unit() above: "E" is never a user-chosen free
+    parameter in this system's output — math_engine.safe_parsing.
+    extract_safe_symbols() explicitly excludes it (alongside pi/I/oo) from
+    ever being created as a free symbol, so a bare "E" can only ever be
+    SymPy's Euler's-number singleton. Word boundaries mean this never
+    touches "E" inside a longer token — "exp(2)", "Equação", "1E5" — only a
+    standalone "E". MUST run after merge_coefficient_products() (like
+    replace_imaginary_unit): that function's ambiguity guard checks for the
+    reserved uppercase "E" token to keep "2*E" as "2*E" instead of
+    collapsing to "2E" — converting to lowercase first would remove the
+    guard's anchor and let the merge fire, changing that already-decided
+    presentation choice for imaginary/Euler coefficients."""
+    return _EULERS_NUMBER_PATTERN.sub("e", text)
 
 
 def replace_geometry_relations(text: str) -> str:

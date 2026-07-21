@@ -18,6 +18,7 @@ from .unicode_math import (
     render_sqrt,
     replace_comparisons,
     replace_constants,
+    replace_eulers_number,
     replace_geometry_relations,
     replace_imaginary_unit,
     superscript_exponents,
@@ -42,12 +43,14 @@ def render_math(text: str) -> str:
         rendered = superscript_exponents(rendered)
         # merge_coefficient_products MUST run after replace_constants (it
         # relies on "pi" already being "π" to merge "2*π" -> "2π") and
-        # BEFORE replace_imaginary_unit (its ambiguity guard checks for the
-        # reserved uppercase "I" token, before it becomes lowercase "i").
+        # BEFORE replace_imaginary_unit/replace_eulers_number (their
+        # ambiguity guards check for the reserved uppercase "I"/"E" tokens,
+        # before they become lowercase "i"/"e").
         rendered = merge_coefficient_products(rendered)
         rendered = merge_parenthesized_products(rendered)
         rendered = replace_comparisons(rendered)
         rendered = replace_imaginary_unit(rendered)
+        rendered = replace_eulers_number(rendered)
         rendered = replace_geometry_relations(rendered)
         return rendered
     except Exception:

@@ -204,6 +204,39 @@ def test_caret_power_regression_matches_double_star_syntax() -> None:
     assert _solve("derivada(a*x^2 + b*x + c, x)") == _solve("derivada(a*x**2 + b*x + c, x)")
 
 
+# --- Hotfix de apresentação: constante de Euler renderizada como "e" ----
+#
+# Puramente cosmético (ver formatter/unicode_math.py:replace_eulers_number)
+# — o resultado matemático (sympy.E) nunca muda, só como ele é impresso.
+
+
+def test_famous_limit_definition_of_e_renders_lowercase() -> None:
+    assert _solve("lim x->oo (1+1/x)^x") == "Limite: e"
+
+
+def test_famous_limit_definition_of_e_natural_notation_renders_lowercase() -> None:
+    assert _solve("lim x→∞ (1+1/x)^x") == "Limite: e"
+
+
+def test_exp_of_one_renders_lowercase_e() -> None:
+    assert _solve("exp(1)") == "Tipo: avaliação numérica; Resultado: e"
+
+
+def test_free_base_power_limit_with_eulers_number_still_works() -> None:
+    # Confirma que o hotfix de apresentação não afeta o cálculo em si:
+    # E^(1/x) com x->oo é o mesmo caso de A^(1/x) com A positivo,
+    # continua dando 1 (não deve virar "e" — não há "E" isolado no
+    # resultado "1").
+    assert _solve("lim x->oo E^(1/x)") == "Limite: 1"
+    assert _solve("limite(E**(1/x), x, oo)") == "Limite: 1"
+
+
+def test_pi_i_oo_presentation_unaffected_by_eulers_number_fix() -> None:
+    assert _solve("pi") == "π"
+    assert _solve("I") == "i"
+    assert _solve("oo") == "∞"
+
+
 # --- Segurança: extração de parâmetros livres nunca abre brecha nova ----
 
 

@@ -13,6 +13,7 @@ from app.formatter.unicode_math import (
     merge_coefficient_products,
     merge_parenthesized_products,
     render_sqrt,
+    replace_eulers_number,
 )
 
 
@@ -126,3 +127,55 @@ def test_render_math_converts_pi_before_unicode_superscript(
     text: str, expected: str
 ) -> None:
     assert render_math(text) == expected
+
+
+# --- Hotfix de apresentação: constante de Euler (sympy.E) -> "e" ---------
+#
+# "E" nunca é um parâmetro livre do usuário na saída do math_engine
+# (math_engine.safe_parsing.extract_safe_symbols exclui "E" explicitamente,
+# junto de pi/I/oo, de qualquer criação de símbolo livre) — então um "E"
+# isolado só pode significar a constante de Euler. Mesma garantia e mesmo
+# padrão já usados por replace_imaginary_unit() (I -> i).
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("E", "e"),
+        ("E**2", "e**2"),
+        ("1 + E", "1 + e"),
+        ("sin(E)", "sin(e)"),
+    ],
+)
+def test_replace_eulers_number_converts_bare_token(text: str, expected: str) -> None:
+    assert replace_eulers_number(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "exp(2)",  # "exp" não contém um "E" isolado (minúsculo, sem boundary)
+        "Equação",  # "E" seguido de "q" — sem boundary de fechamento
+        "1E5",  # "E" colado a um dígito — sem boundary de abertura
+        "x + y",  # nenhum "E" no texto
+    ],
+)
+def test_replace_eulers_number_never_touches_non_standalone_e(text: str) -> None:
+    assert replace_eulers_number(text) == text
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("Limite: E", "Limite: e"),
+        ("2*E", "2*e"),  # "*" preservado (mesma convenção de "2*I" -> "2*i")
+        ("E**(1/x)", "e**(1/x)"),  # E como base de potência simbólica
+        ("exp(2)", "exp(2)"),  # "exp(" nunca tem um "E" isolado — nunca tocado
+    ],
+)
+def test_render_math_converts_eulers_number_via_full_pipeline(text: str, expected: str) -> None:
+    assert render_math(text) == expected
+
+
+def test_render_math_still_preserves_pi_i_oo_alongside_e() -> None:
+    assert render_math("E + pi + I + oo") == "e + π + i + ∞"
