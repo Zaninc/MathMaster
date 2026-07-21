@@ -97,12 +97,12 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(byLabel.get("∛")?.cursorOffset).toBe(2);
   });
 
-  it("xⁿ insere apenas ^n, sem parênteses automáticos e sem envolver seleção (mesmo padrão de x²/x³)", () => {
+  it("xⁿ insere apenas o glifo sobrescrito ⁿ, sem parênteses automáticos e sem envolver seleção (mesmo padrão de x²/x³)", () => {
     const power = KEYBOARD_CATEGORIES.flatMap((category) => category.keys).find(
       (key) => key.label === "xⁿ"
     );
-    expect(power?.insert).toBe("^n");
-    expect(power?.cursorOffset).toBe(2);
+    expect(power?.insert).toBe("ⁿ");
+    expect(power?.cursorOffset).toBe(1);
     expect(power?.selection).toBeUndefined();
   });
 

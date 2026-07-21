@@ -39,11 +39,12 @@ export interface KeyboardCategory {
  * Regra central: o usuário enxerga no campo praticamente o mesmo símbolo
  * que clicou. Quase toda tecla gera texto na MESMA sintaxe que o backend
  * já aceita (Unicode nativo via Sprint Parser/Sprint 12.1, ou sintaxe
- * técnica de geometria/cálculo). A ÚNICA exceção é o marcador visual
- * "eˣ(" (exponencial), não digitável em teclado físico, traduzido para
- * "exp(" por `lib/math/backend-normalize.ts` exclusivamente na fronteira
- * de envio (`apiClient.solve()`). Todas as strings abaixo foram validadas
- * contra o backend real (mesma disciplina da Etapa 1).
+ * técnica de geometria/cálculo). As DUAS únicas exceções são os
+ * marcadores visuais "ⁿ" (xⁿ) e "eˣ(" (exponencial), não digitáveis em
+ * teclado físico, traduzidos para "**n"/"exp(" por
+ * `lib/math/backend-normalize.ts` exclusivamente na fronteira de envio
+ * (`apiClient.solve()`). Todas as strings abaixo foram validadas contra o
+ * backend real (mesma disciplina da Etapa 1).
  */
 export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
   {
@@ -54,14 +55,15 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
       { label: "x²", insert: "²", cursorOffset: 1, ariaLabel: "Inserir expoente 2", latex: "x^2" },
       { label: "x³", insert: "³", cursorOffset: 1, ariaLabel: "Inserir expoente 3", latex: "x^3" },
       {
-        // Mesmo padrão de x²/x³: insere só o expoente na posição do
-        // cursor, sem parênteses automáticos e sem envolver seleção. "^"
-        // já é convertido para potência (**) pelo backend (ver
-        // `safe_parsing.py:_convert_caret_power`) — nenhuma tradução extra
-        // precisa acontecer na fronteira de envio, ao contrário do "eˣ(".
+        // Mesmo padrão VISUAL de x²/x³: insere só o expoente na posição do
+        // cursor, sem parênteses automáticos e sem envolver seleção — o
+        // campo mostra o glifo sobrescrito "ⁿ" (U+207F, não digitável em
+        // teclado físico) diretamente, igual a "²"/"³". Só na fronteira de
+        // envio (`normalizeForBackend`) "ⁿ" vira "**n"; internamente
+        // continua sendo tratado como potência normalmente.
         label: "xⁿ",
-        insert: "^n",
-        cursorOffset: 2,
+        insert: "ⁿ",
+        cursorOffset: 1,
         ariaLabel: "Inserir expoente n",
         latex: "x^n",
       },

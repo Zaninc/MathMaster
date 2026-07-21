@@ -113,14 +113,14 @@ describe("CalculatorWorkspace", () => {
     ).toBe(true);
   });
 
-  it("xⁿ insere apenas ^n na posição do cursor, sem parênteses automáticos (mesmo padrão de x²/x³)", () => {
+  it("xⁿ insere apenas o glifo sobrescrito ⁿ na posição do cursor, sem parênteses automáticos (mesmo padrão de x²/x³)", () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     render(<CalculatorWorkspace />);
     const input = screen.getByLabelText<HTMLInputElement>("Expressão matemática");
 
     fireEvent.click(screen.getByRole("button", { name: "Inserir expoente n" }));
-    expect(input).toHaveValue("^n");
-    expect(input.selectionStart).toBe(2);
+    expect(input).toHaveValue("ⁿ");
+    expect(input.selectionStart).toBe(1);
   });
 
   it("xⁿ com seleção substitui o texto selecionado normalmente, sem envolver em parênteses", () => {
@@ -132,8 +132,8 @@ describe("CalculatorWorkspace", () => {
     input.setSelectionRange(0, 1);
     fireEvent.click(screen.getByRole("button", { name: "Inserir expoente n" }));
 
-    expect(input).toHaveValue("^n");
-    expect(input.selectionStart).toBe(2);
+    expect(input).toHaveValue("ⁿ");
+    expect(input.selectionStart).toBe(1);
   });
 
   it("eˣ insere o template visual eˣ() com cursor no parêntese; preview mostra e elevado", async () => {
