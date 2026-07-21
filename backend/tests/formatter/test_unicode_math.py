@@ -12,6 +12,7 @@ from app.formatter.renderer import render_math
 from app.formatter.unicode_math import (
     merge_coefficient_products,
     merge_parenthesized_products,
+    render_abs,
     render_sqrt,
     replace_eulers_number,
 )
@@ -47,6 +48,52 @@ def test_render_sqrt_leaves_text_without_sqrt_untouched() -> None:
     assert render_sqrt("x + 1") == "x + 1"
 
 
+# --- Módulo/valor absoluto: Abs(...) -> |...| (camada de apresentação) ---
+#
+# Só cosmético: `sympy.Abs` continua sendo a representação interna em todo
+# o pipeline (math_engine, parser); só o TEXTO final de exibição muda.
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("Abs(x)", "|x|"),
+        ("Abs(x - 5)", "|x - 5|"),
+        ("Abs(x**2 - 9)", "|x**2 - 9|"),
+        ("Abs(sin(x) + cos(x))", "|sin(x) + cos(x)|"),
+        ("Abs(x - 1) + Abs(x + 2)", "|x - 1| + |x + 2|"),
+        ("3*Abs(x)", "3*|x|"),  # merge_coefficient_products() roda depois
+    ],
+)
+def test_render_abs_wraps_argument_in_pipes(text: str, expected: str) -> None:
+    assert render_abs(text) == expected
+
+
+def test_render_abs_handles_nested_different_arguments() -> None:
+    # "Abs(Abs(x))" com o MESMO argumento nunca chega aqui de verdade — o
+    # SymPy já colapsa |{|y|}| = |y| durante o simplify. Argumentos
+    # DIFERENTES, no entanto, permanecem aninhados na string de saída e
+    # precisam da recursão (renderiza de dentro pra fora).
+    assert render_abs("Abs(x - Abs(y))") == "|x - |y||"
+
+
+def test_render_abs_leaves_text_without_abs_untouched() -> None:
+    assert render_abs("x + 1") == "x + 1"
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("Abs(x)", "|x|"),
+        ("Abs(x**2 - 9)", "|x² - 9|"),  # superscript_exponents() roda depois
+        ("3*Abs(x)", "3|x|"),  # merge_coefficient_products() reconhece "|"
+        ("Abs(x - Abs(y))", "|x - |y||"),
+    ],
+)
+def test_render_math_converts_abs_via_full_pipeline(text: str, expected: str) -> None:
+    assert render_math(text) == expected
+
+
 @pytest.mark.parametrize(
     "text, expected",
     [
@@ -56,6 +103,8 @@ def test_render_sqrt_leaves_text_without_sqrt_untouched() -> None:
         ("3*√(x + 1)", "3√(x + 1)"),
         ("5*x", "5x"),
         ("-2*x", "-2x"),
+        ("3*|x|", "3|x|"),
+        ("2*|x - 1|", "2|x - 1|"),
     ],
 )
 def test_merge_coefficient_products_collapses_unambiguous_cases(

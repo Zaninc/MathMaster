@@ -32,6 +32,8 @@ _POSITIVE_EXPONENT_PATTERN = re.compile(r"\*\*(\d+)\b")
 _SQRT_ATOM_PATTERN = re.compile(r"^-?\d+$|^[a-zA-Z_]\w*$")
 _SQRT_PREFIX_PATTERN = re.compile(r"sqrt\(")
 
+_ABS_PREFIX_PATTERN = re.compile(r"Abs\(")
+
 _PI_PATTERN = re.compile(r"\bpi\b")
 _TAU_PATTERN = re.compile(r"\btau\b")
 _OO_PATTERN = re.compile(r"\boo\b")
@@ -41,7 +43,8 @@ _EULERS_NUMBER_PATTERN = re.compile(r"\bE\b")
 
 # Sprint Formatter Fix — implicit-multiplication cleanup. Only removes "*"
 # when it is unambiguous: a numeric coefficient directly touching a symbol,
-# a named constant, or a √. Two lookaheads guard against ambiguity:
+# a named constant, a √, or a | (módulo — ver render_abs()). Two lookaheads
+# guard against ambiguity:
 #   - "(?!I\b)" / "(?!E\b)": "I"/"E" are reserved (never a user variable,
 #     see replace_imaginary_unit()'s docstring) but this module deliberately
 #     keeps their product notation as-is ("2*I", "2*E") rather than
@@ -50,9 +53,13 @@ _EULERS_NUMBER_PATTERN = re.compile(r"\bE\b")
 #   - "(?!\w*\()": never collapse into a function call — "2*sin(x)" must
 #     stay "2*sin(x)", not become "2sin(x)".
 # Symbol×symbol products (e.g. "pi*k") are deliberately NOT covered: only
-# a numeric coefficient triggers the merge, so "π*k" stays "π*k".
+# a numeric coefficient triggers the merge, so "π*k" stays "π*k". "|" is
+# treated like "√" (a delimiter, not a word-like function name) rather than
+# under the function-call guard: "3*|x|" reads naturally as "3|x|", same
+# convention as "3*√x" -> "3√x". MUST run after render_abs() so "Abs(x)"
+# has already become "|x|" by the time this pattern looks for "|".
 _COEFFICIENT_PRODUCT_PATTERN = re.compile(
-    r"(?<=\d)\*(?!I\b)(?!E\b)(?=(?:[^\W\d_](?!\w*\()|√))"
+    r"(?<=\d)\*(?!I\b)(?!E\b)(?=(?:[^\W\d_](?!\w*\()|√|\|))"
 )
 
 # Function-call identifier immediately before a "(" — used by
@@ -135,6 +142,57 @@ def render_sqrt(text: str) -> str:
             result.append(f"√{inner}")
         else:
             result.append(f"√({inner})")
+        i = j
+
+    return "".join(result)
+
+
+def render_abs(text: str) -> str:
+    """Abs(x) -> |x|; Abs(x**2 - 9) -> |x**2 - 9| (superscript_exponents()
+    runs afterwards, so exponents here are still "**" — no different from
+    how render_sqrt() hands compound arguments onward). Argument extracted
+    via balanced-parenthesis counting (same technique as render_sqrt()),
+    since it can nest.
+
+    Nested "Abs(...)" inside the argument is rendered recursively BEFORE
+    wrapping, so "Abs(x - Abs(y))" becomes "|x - |y||", not
+    "|x - Abs(y)|" — traditional nested-modulus notation. In practice
+    SymPy already collapses "Abs(Abs(y))" to "Abs(y)" during simplify
+    (|.|.| = |.|), so same-argument nesting never reaches here doubled;
+    the recursion only matters for DIFFERENT nested arguments.
+
+    Only cosmetic: never touches math_engine, never re-derives a result.
+    Purely presentation, same as √ — the internal representation stays
+    `sympy.Abs` throughout."""
+    result: list[str] = []
+    i = 0
+    length = len(text)
+    while i < length:
+        match = _ABS_PREFIX_PATTERN.match(text, i)
+        if match is None:
+            result.append(text[i])
+            i += 1
+            continue
+
+        start = match.end()
+        depth = 1
+        j = start
+        while j < length and depth > 0:
+            if text[j] == "(":
+                depth += 1
+            elif text[j] == ")":
+                depth -= 1
+            j += 1
+
+        if depth != 0:
+            # Unbalanced parens (should not happen for well-formed
+            # math_engine output) — leave the rest of the string untouched
+            # rather than risk mangling it.
+            result.append(text[i:])
+            break
+
+        inner = text[start : j - 1]
+        result.append(f"|{render_abs(inner)}|")
         i = j
 
     return "".join(result)

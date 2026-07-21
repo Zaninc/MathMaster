@@ -15,6 +15,7 @@ from __future__ import annotations
 from .unicode_math import (
     merge_coefficient_products,
     merge_parenthesized_products,
+    render_abs,
     render_sqrt,
     replace_comparisons,
     replace_constants,
@@ -33,6 +34,13 @@ def render_math(text: str) -> str:
         # docstring) so sqrt(pi)/sqrt(tau) resolve to √π/√τ instead of
         # being stranded as sqrt(π)/sqrt(τ).
         rendered = render_sqrt(text)
+        # render_abs has no ordering dependency on render_sqrt (disjoint
+        # patterns, "Abs(" vs "sqrt(") — placed right after it so both
+        # delimiter-style conversions happen before replace_constants/
+        # superscript_exponents/merge_coefficient_products, which all need
+        # to see the FINAL "|...|" shape (see merge_coefficient_products'
+        # pattern comment in unicode_math.py).
+        rendered = render_abs(rendered)
         # replace_constants MUST run before superscript_exponents: Python's
         # \w (and therefore \b) treats superscript digits ("²", "³", ...) as
         # word characters, so "pi**2" -> "pi²" would leave "pi" with no
