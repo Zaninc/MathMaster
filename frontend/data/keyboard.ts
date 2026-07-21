@@ -19,10 +19,12 @@ export interface KeyboardKey {
   /**
    * Comportamento alternativo quando há texto SELECIONADO no input: a
    * seleção é preservada e envolvida (`before` + seleção + `after` — ex.
-   * selecionar "x" e clicar em xⁿ → "(x)ⁿ"), com o cursor posicionado a
-   * `cursorFromEnd` caracteres do fim do texto inserido. Sem este campo,
-   * a seleção é substituída por `insert` (comportamento padrão de
-   * qualquer input de texto).
+   * uma tecla de raiz poderia envolver "x" selecionado em "√(x)"), com o
+   * cursor posicionado a `cursorFromEnd` caracteres do fim do texto
+   * inserido. Sem este campo, a seleção é substituída por `insert`
+   * (comportamento padrão de qualquer input de texto) — nenhuma tecla usa
+   * este campo hoje (xⁿ usava, removido para ficar igual a x²/x³), mas a
+   * capacidade continua disponível para uma tecla futura que precise.
    */
   selection?: { before: string; after: string; cursorFromEnd: number };
 }
@@ -37,12 +39,11 @@ export interface KeyboardCategory {
  * Regra central: o usuário enxerga no campo praticamente o mesmo símbolo
  * que clicou. Quase toda tecla gera texto na MESMA sintaxe que o backend
  * já aceita (Unicode nativo via Sprint Parser/Sprint 12.1, ou sintaxe
- * técnica de geometria/cálculo). As DUAS únicas exceções são os
- * marcadores visuais "ⁿ" (xⁿ) e "eˣ(" (exponencial), não digitáveis em
- * teclado físico, traduzidos para "**n"/"exp(" por
- * `lib/math/backend-normalize.ts` exclusivamente na fronteira de envio
- * (`apiClient.solve()`). Todas as strings abaixo foram validadas contra o
- * backend real (mesma disciplina da Etapa 1).
+ * técnica de geometria/cálculo). A ÚNICA exceção é o marcador visual
+ * "eˣ(" (exponencial), não digitável em teclado físico, traduzido para
+ * "exp(" por `lib/math/backend-normalize.ts` exclusivamente na fronteira
+ * de envio (`apiClient.solve()`). Todas as strings abaixo foram validadas
+ * contra o backend real (mesma disciplina da Etapa 1).
  */
 export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
   {
@@ -53,17 +54,16 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
       { label: "x²", insert: "²", cursorOffset: 1, ariaLabel: "Inserir expoente 2", latex: "x^2" },
       { label: "x³", insert: "³", cursorOffset: 1, ariaLabel: "Inserir expoente 3", latex: "x^3" },
       {
+        // Mesmo padrão de x²/x³: insere só o expoente na posição do
+        // cursor, sem parênteses automáticos e sem envolver seleção. "^"
+        // já é convertido para potência (**) pelo backend (ver
+        // `safe_parsing.py:_convert_caret_power`) — nenhuma tradução extra
+        // precisa acontecer na fronteira de envio, ao contrário do "eˣ(".
         label: "xⁿ",
-        // Regra central: o input mostra o que o botão promete. "ⁿ"
-        // (U+207F, não digitável em teclado físico) é o marcador oficial
-        // do template — `normalizeForBackend` o traduz para "**n" só na
-        // fronteira de envio. Nunca "**" cru (entrada inutilizável). Com
-        // seleção, a base é preservada e envolvida: "x" -> "(x)ⁿ".
-        insert: "()ⁿ",
-        cursorOffset: 1,
-        ariaLabel: "Inserir potência",
+        insert: "^n",
+        cursorOffset: 2,
+        ariaLabel: "Inserir expoente n",
         latex: "x^n",
-        selection: { before: "(", after: ")ⁿ", cursorFromEnd: 0 },
       },
       { label: "a/b", insert: "()/()", cursorOffset: 1, ariaLabel: "Inserir fração", latex: "\\dfrac{a}{b}" },
       // Raízes em Unicode visual — o usuário enxerga no campo o mesmo

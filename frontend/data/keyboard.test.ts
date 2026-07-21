@@ -97,13 +97,13 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(byLabel.get("∛")?.cursorOffset).toBe(2);
   });
 
-  it("xⁿ insere o template visual ()ⁿ, nunca '**', e envolve a seleção como base", () => {
+  it("xⁿ insere apenas ^n, sem parênteses automáticos e sem envolver seleção (mesmo padrão de x²/x³)", () => {
     const power = KEYBOARD_CATEGORIES.flatMap((category) => category.keys).find(
       (key) => key.label === "xⁿ"
     );
-    expect(power?.insert).toBe("()ⁿ");
-    expect(power?.cursorOffset).toBe(1);
-    expect(power?.selection).toEqual({ before: "(", after: ")ⁿ", cursorFromEnd: 0 });
+    expect(power?.insert).toBe("^n");
+    expect(power?.cursorOffset).toBe(2);
+    expect(power?.selection).toBeUndefined();
   });
 
   it("nenhuma tecla insere um operador cru sem operandos", () => {
