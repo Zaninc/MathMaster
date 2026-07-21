@@ -1,11 +1,15 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { FORMULAS } from "@/data/formulas";
 
 import { FormulasReference } from "./FormulasReference";
 
 describe("FormulasReference", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   it("cerca de 25 fórmulas no catálogo (Etapa 3)", () => {
     expect(FORMULAS.length).toBeGreaterThanOrEqual(25);
   });
@@ -58,5 +62,56 @@ describe("FormulasReference", () => {
     fireEvent.click(within(filterGroup).getByRole("button", { name: "Todas" }));
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     expect(headings).toEqual(["Álgebra", "Geometria", "Trigonometria", "Cálculo"]);
+  });
+
+  it("a busca filtra em tempo real por nome, categoria e símbolo", () => {
+    render(<FormulasReference />);
+    const searchBox = screen.getByRole("searchbox", { name: "Pesquisar fórmula" });
+
+    fireEvent.change(searchBox, { target: { value: "delta" } });
+    expect(screen.getByRole("heading", { level: 3, name: "Delta (discriminante)" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 3, name: "Fórmula de Bhaskara" })).not.toBeInTheDocument();
+
+    fireEvent.change(searchBox, { target: { value: "pitagoras" } });
+    expect(screen.getByRole("heading", { level: 3, name: "Teorema de Pitágoras" })).toBeInTheDocument();
+  });
+
+  it("mostra estado vazio quando a busca não encontra nada", () => {
+    render(<FormulasReference />);
+    fireEvent.change(screen.getByRole("searchbox", { name: "Pesquisar fórmula" }), {
+      target: { value: "xablauzzz123" },
+    });
+
+    expect(screen.getByText("Nenhuma fórmula encontrada.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2 })).not.toBeInTheDocument();
+  });
+
+  it("favoritar um card atualiza o contador de 'Favoritas' e persiste no localStorage", async () => {
+    render(<FormulasReference />);
+    const filterGroup = screen.getByRole("group", { name: "Filtro de categoria" });
+    expect(within(filterGroup).getByRole("button", { name: "⭐ Favoritas (0)" })).toBeInTheDocument();
+
+    const bhaskaraCard = screen.getByRole("heading", { name: "Fórmula de Bhaskara" }).closest("article")!;
+    fireEvent.click(within(bhaskaraCard).getByRole("button", { name: "Adicionar aos favoritos" }));
+
+    await waitFor(() =>
+      expect(within(filterGroup).getByRole("button", { name: "⭐ Favoritas (1)" })).toBeInTheDocument()
+    );
+    expect(JSON.parse(window.localStorage.getItem("mathmaster.formulas.favorites") ?? "[]")).toEqual(["bhaskara"]);
+  });
+
+  it("o filtro 'Favoritas' mostra só as fórmulas favoritadas", async () => {
+    window.localStorage.setItem("mathmaster.formulas.favorites", JSON.stringify(["bhaskara"]));
+    render(<FormulasReference />);
+
+    const filterGroup = screen.getByRole("group", { name: "Filtro de categoria" });
+    await waitFor(() =>
+      expect(within(filterGroup).getByRole("button", { name: "⭐ Favoritas (1)" })).toBeInTheDocument()
+    );
+
+    fireEvent.click(within(filterGroup).getByRole("button", { name: "⭐ Favoritas (1)" }));
+
+    expect(screen.getByRole("heading", { level: 3, name: "Fórmula de Bhaskara" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 3, name: "Delta (discriminante)" })).not.toBeInTheDocument();
   });
 });

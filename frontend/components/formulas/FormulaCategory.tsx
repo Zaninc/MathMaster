@@ -5,6 +5,8 @@ import { FormulaCard } from "./FormulaCard";
 interface FormulaCategoryProps {
   label: string;
   formulas: FormulaEntry[];
+  isFavorite: (id: string) => boolean;
+  onToggleFavorite: (id: string) => void;
 }
 
 /**
@@ -13,13 +15,18 @@ interface FormulaCategoryProps {
  * colunas conforme o espaço — mesmo padrão de grid usado no resto do
  * projeto, ex. TOOLS em /ferramentas).
  */
-export function FormulaCategory({ label, formulas }: FormulaCategoryProps) {
+export function FormulaCategory({ label, formulas, isFavorite, onToggleFavorite }: FormulaCategoryProps) {
   return (
     <section aria-label={label} className="flex flex-col gap-4">
       <h2 className="text-lg font-semibold text-text-primary">{label}</h2>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {formulas.map((formula) => (
-          <FormulaCard key={formula.id} formula={formula} />
+          <FormulaCard
+            key={formula.id}
+            formula={formula}
+            isFavorite={isFavorite(formula.id)}
+            onToggleFavorite={onToggleFavorite}
+          />
         ))}
       </div>
     </section>
