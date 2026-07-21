@@ -1,6 +1,6 @@
 import re
 
-from sympy import Symbol
+from sympy import Symbol, simplify
 from sympy.parsing.sympy_parser import (
     implicit_multiplication_application,
     standard_transformations,
@@ -8,7 +8,7 @@ from sympy.parsing.sympy_parser import (
 
 from ..errors import ExpressionError
 from ..log_convention import LOCAL_DICT as _LOG_LOCAL_DICT
-from ..safe_parsing import safe_parse_expr
+from ..safe_parsing import extract_safe_symbols, safe_parse_expr
 from .classification import EXPONENCIAL, LOGARITMICA, QUADRATICA, classify_function, label_for
 from .domain import compute_domain
 from .evaluate import evaluate_function
@@ -20,7 +20,14 @@ from .vertex import compute_vertex
 _TRANSFORMATIONS = standard_transformations + (implicit_multiplication_application,)
 
 _SPLIT_PATTERN = re.compile(r"[;\n]+")
-_DEFINITION_PATTERN = re.compile(r"^\s*([a-zA-Z_]\w*)\s*\(\s*([a-zA-Z_]\w*)\s*\)\s*=\s*(.+)$")
+
+# Grupo 2 aceita tanto o nome de uma variável ("x", "largura" — declaração de
+# função, comportamento original) quanto uma expressão numérica ("4", "-2",
+# "1/2", "pi/2" — avaliação direta em um ponto, ex. "f(4)=3x^2-2x+5"). Qual
+# dos dois casos é feita em `solve_function_text` via `_is_variable_name`,
+# nunca aqui: o regex só decide "isto é sintaticamente nome(algo)=expr?".
+_DEFINITION_PATTERN = re.compile(r"^\s*([a-zA-Z_]\w*)\s*\(\s*(.+?)\s*\)\s*=\s*(.+)$")
+_VARIABLE_NAME_PATTERN = re.compile(r"[a-zA-Z_]\w*")
 
 # Nomes reservados de outras áreas do motor que sintaticamente também casam
 # com "nome(var) = expr" — ex.: "sin(x) = 1/2" não é uma definição de função
@@ -60,11 +67,27 @@ def _split_parts(expression: str) -> list[str]:
     return [part.strip() for part in _SPLIT_PATTERN.split(expression) if part.strip()]
 
 
+def _is_variable_name(text: str) -> bool:
+    return bool(_VARIABLE_NAME_PATTERN.fullmatch(text.strip()))
+
+
 def looks_like_function_definition(text: str) -> bool:
     match = _DEFINITION_PATTERN.match(text)
     if not match:
         return False
-    return match.group(1) not in _RESERVED_FUNCTION_NAMES
+    nome, argumento = match.group(1), match.group(2)
+    if nome in _RESERVED_FUNCTION_NAMES:
+        return False
+    if _is_variable_name(argumento):
+        return True
+    # Grupo 2 não é um nome de variável: só reivindicamos o domínio de
+    # funções se ele também não contiver nenhum símbolo livre solto (ex.
+    # "4", "-2", "1/2", "pi/2" — candidatos a valor de avaliação). Caso
+    # contrário (ex. "x-3" em "Abs(x-3)=5", uma equação modular de outro
+    # domínio) devolvemos False para não roubar a expressão de
+    # equations/ só porque o regex agora é mais permissivo — ver
+    # `extract_safe_symbols` em `safe_parsing.py`.
+    return not extract_safe_symbols(argumento)
 
 
 def is_function_domain_expression(expression: str) -> bool:
@@ -81,13 +104,54 @@ def _parse_value(text: str):
         raise ExpressionError(f"Não foi possível interpretar o valor: {text}") from exc
 
 
+def _evaluate_function_at_point(nome: str, valor_texto: str, lado_direito: str) -> str:
+    """Ramo de avaliação direta: "f(4)=3x^2-2x+5" -> "f(4) = 45". `valor_texto`
+    já não é um nome de variável (ver `_is_variable_name` em
+    `solve_function_text`) — aqui ele precisa ser um valor concreto (sem
+    símbolo livre), senão algo como "f(x+1)=..." seria tratado como ponto de
+    avaliação em vez de rejeitado com um erro claro."""
+    valor = _parse_value(valor_texto)
+    if valor.free_symbols:
+        raise ExpressionError(
+            f"Não foi possível interpretar a função: {nome}({valor_texto})=..."
+        )
+
+    variaveis = extract_safe_symbols(lado_direito)
+    if len(variaveis) > 1:
+        raise ExpressionError(
+            f"Não foi possível determinar a variável da função em: {lado_direito}"
+        )
+
+    try:
+        expr = safe_parse_expr(
+            lado_direito, transformations=_TRANSFORMATIONS, local_dict=dict(variaveis)
+        )
+    except Exception as exc:
+        raise ExpressionError(
+            f"Não foi possível interpretar a função: {lado_direito}"
+        ) from exc
+
+    if variaveis:
+        symbol = next(iter(variaveis.values()))
+        resultado = evaluate_function(expr, symbol, valor)
+    else:
+        resultado = str(simplify(expr))
+
+    return f"{nome}({valor}) = {resultado}"
+
+
 def solve_function_text(expression: str) -> str:
     parts = _split_parts(expression)
     definicao = _DEFINITION_PATTERN.match(parts[0])
     if not definicao:
         raise ExpressionError(f"Não foi possível interpretar a função: {expression}")
 
-    nome, variavel, lado_direito = definicao.groups()
+    nome, argumento, lado_direito = definicao.groups()
+
+    if not _is_variable_name(argumento):
+        return _evaluate_function_at_point(nome, argumento, lado_direito)
+
+    variavel = argumento
     symbol = Symbol(variavel)
 
     # Detecção roda sobre o texto bruto ANTES do parse (ver logexp.py) porque
