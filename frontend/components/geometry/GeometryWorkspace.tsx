@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 
 import { PageShell } from "@/components/layout/PageShell";
-import { Button } from "@/components/shared/Button";
+import { Button, ButtonLink } from "@/components/shared/Button";
 import { FadeIn } from "@/components/shared/FadeIn";
+import { calculatorLink, getGeometryConnections, graphsLink, type RelatedLink } from "@/data/connections";
 import { apiClient } from "@/lib/api/client";
 import { ApiError, friendlyMessage } from "@/lib/api/errors";
 import {
@@ -39,6 +40,22 @@ const SHAPE_TABS: { id: ShapeKind; label: string; source: "local" | "backend" }[
 function toNumber(value: string): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+/**
+ * Forma y=f(x) de uma parábola, só quando o eixo é vertical (vértice e
+ * foco compartilham x — o mesmo caso que o formulário já aceita como
+ * padrão). Eixo horizontal não é função de x; omitido de propósito
+ * (melhor não sugerir gráfico nenhum do que sugerir uma curva errada).
+ * Usada só para o link opcional "Abrir nos gráficos" — a equação/
+ * classificação REAL da figura continua vindo sempre do backend
+ * (`buildExpression`/`handleCalculate`, intocados).
+ */
+function parabolaGraphFn(vertex: Point, focus: Point): string | null {
+  if (vertex.x !== focus.x) return null;
+  const p = focus.y - vertex.y;
+  if (p === 0) return null;
+  return `(x-(${vertex.x}))^2/(${4 * p})+(${vertex.y})`;
 }
 
 interface PointFields {
@@ -250,6 +267,26 @@ export function GeometryWorkspace() {
     }
   }
 
+  /**
+   * "Ferramentas relacionadas" (sistema de conexões internas): a parte
+   * estática vem de `GEOMETRY_CONNECTIONS` (fórmulas/exercícios, não
+   * dependem dos valores do formulário); "Enviar equação para a
+   * calculadora" reaproveita a MESMA expressão que `handleCalculate` já
+   * manda pro backend — nenhuma conversão nova. Triângulo nunca chama o
+   * backend (cálculo 100% local), por isso fica de fora dessa ação.
+   */
+  const relatedTools: RelatedLink[] = [...getGeometryConnections(activeKind)];
+  if (activeKind === "parabola" && shape?.kind === "parabola") {
+    const fn = parabolaGraphFn(shape.vertex, shape.focus);
+    if (fn) relatedTools.push({ icon: "📈", label: "Abrir nos gráficos", href: graphsLink(fn) });
+  }
+  if (activeKind !== "triangle") {
+    const expression = buildExpression();
+    if (expression) {
+      relatedTools.push({ icon: "🧮", label: "Enviar equação para a calculadora", href: calculatorLink(expression) });
+    }
+  }
+
   async function handleCalculate() {
     const expression = buildExpression();
     if (!expression) return;
@@ -379,6 +416,21 @@ export function GeometryWorkspace() {
               </FadeIn>
             )}
           </div>
+
+          {relatedTools.length > 0 && (
+            <div className="rounded-lg border border-border bg-surface p-3">
+              <span className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+                Ferramentas relacionadas
+              </span>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {relatedTools.map((link) => (
+                  <ButtonLink key={link.label} href={link.href} variant="ghost" aria-label={link.label} className="text-xs">
+                    <span aria-hidden="true">{link.icon}</span> {link.label}
+                  </ButtonLink>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div>

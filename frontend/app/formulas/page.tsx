@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 import { FormulasReference } from "@/components/formulas/FormulasReference";
 import { PageShell } from "@/components/layout/PageShell";
@@ -9,9 +10,10 @@ export const metadata: Metadata = {
 };
 
 /**
- * Biblioteca de Fórmulas — Etapa 1: só reorganização de navegação (rota
- * própria em vez de seção dentro de /ferramentas). KaTeX, filtros, busca
- * e novas fórmulas ficam para as próximas etapas.
+ * `Suspense` é exigência técnica do Next.js App Router para qualquer
+ * componente que use `useSearchParams()` (lê `?categoria=`/`?q=`, sistema
+ * de conexões internas), não uma escolha de design — mesmo padrão de
+ * `app/calculadora/page.tsx`.
  */
 export default function FormulasPage() {
   return (
@@ -23,7 +25,9 @@ export default function FormulasPage() {
         </p>
       </div>
 
-      <FormulasReference />
+      <Suspense fallback={null}>
+        <FormulasReference />
+      </Suspense>
     </PageShell>
   );
 }

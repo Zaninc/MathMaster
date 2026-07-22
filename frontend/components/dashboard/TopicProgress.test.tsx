@@ -1,11 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { TopicMetrics } from "@/lib/learning/metrics";
+import type { TopicMetricsView } from "@/lib/dashboard/aggregate";
 
 import { TopicProgress } from "./TopicProgress";
 
-const METRICS: TopicMetrics[] = [
+const METRICS: TopicMetricsView[] = [
   {
     topicId: "t-eq",
     topicTitle: "Equações",
@@ -16,6 +16,7 @@ const METRICS: TopicMetrics[] = [
     exercisesTried: 2,
     exercisesTotal: 3,
     standing: "fraco",
+    topicSlug: "equacoes",
   },
   {
     topicId: "t-alg",
@@ -27,6 +28,7 @@ const METRICS: TopicMetrics[] = [
     exercisesTried: 3,
     exercisesTotal: 3,
     standing: "forte",
+    topicSlug: "algebra-basica",
   },
   {
     topicId: "t-fn",
@@ -38,6 +40,7 @@ const METRICS: TopicMetrics[] = [
     exercisesTried: 0,
     exercisesTotal: 3,
     standing: "nao-iniciado",
+    topicSlug: null,
   },
 ];
 
@@ -60,5 +63,20 @@ describe("TopicProgress", () => {
     expect(screen.getByText("Ponto forte")).toBeInTheDocument();
     expect(screen.getByText("Precisa de atenção")).toBeInTheDocument();
     expect(screen.getByText("Não iniciado")).toBeInTheDocument();
+  });
+
+  describe("cards clicáveis (sistema de conexões internas)", () => {
+    it("tópico com slug conhecido vira link pra /aprendizado?topico=slug", () => {
+      render(<TopicProgress metrics={METRICS} />);
+
+      const link = screen.getByRole("link", { name: "Praticar Álgebra básica" });
+      expect(link).toHaveAttribute("href", "/aprendizado?topico=algebra-basica");
+      expect(link.className).toContain("focus-visible:ring-2");
+    });
+
+    it("tópico sem slug conhecido não vira link (comportamento original preservado)", () => {
+      render(<TopicProgress metrics={METRICS} />);
+      expect(screen.queryByRole("link", { name: "Praticar Funções" })).not.toBeInTheDocument();
+    });
   });
 });

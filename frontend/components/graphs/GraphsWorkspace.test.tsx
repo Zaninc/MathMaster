@@ -1,5 +1,11 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+const searchParamsMock = vi.fn(() => new URLSearchParams());
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => searchParamsMock(),
+}));
 
 import { plotExpressionToLatex } from "@/lib/math/graph-normalize";
 
@@ -9,6 +15,10 @@ describe("GraphsWorkspace", () => {
   beforeAll(async () => {
     // Aquece o dynamic import do mathjs para os waitFor abaixo serem confiáveis.
     await plotExpressionToLatex("x");
+  });
+
+  beforeEach(() => {
+    searchParamsMock.mockReturnValue(new URLSearchParams());
   });
 
   it("adiciona uma função válida sem erro", async () => {
@@ -248,5 +258,32 @@ describe("GraphsWorkspace", () => {
     await waitFor(() =>
       expect(screen.queryByText(/não foi possível|não permitid[ao]/i)).not.toBeInTheDocument()
     );
+  });
+
+  describe("deep-link via ?fn= (sistema de conexões internas)", () => {
+    it("sem ?fn=, começa com a lista de funções vazia (comportamento padrão preservado)", () => {
+      render(<GraphsWorkspace />);
+      expect(screen.getByText("Nenhuma função adicionada ainda.")).toBeInTheDocument();
+    });
+
+    it("?fn= válido pré-adiciona a função à lista", async () => {
+      searchParamsMock.mockReturnValue(new URLSearchParams("fn=x%5E2-4"));
+      render(<GraphsWorkspace />);
+
+      expect(screen.queryByText("Nenhuma função adicionada ainda.")).not.toBeInTheDocument();
+      await screen.findByLabelText(/ocultar função x\^2-4/i);
+    });
+
+    it("?fn= em branco/só espaços é ignorado — nunca adiciona uma função vazia", () => {
+      searchParamsMock.mockReturnValue(new URLSearchParams("fn=%20%20"));
+      render(<GraphsWorkspace />);
+      expect(screen.getByText("Nenhuma função adicionada ainda.")).toBeInTheDocument();
+    });
+
+    it("?fn= com expressão inválida não quebra a página — mesmo tratamento de erro por item de uma função digitada à mão", async () => {
+      searchParamsMock.mockReturnValue(new URLSearchParams("fn=)))"));
+      expect(() => render(<GraphsWorkspace />)).not.toThrow();
+      await screen.findByRole("button", { name: "Remover função )))" });
+    });
   });
 });

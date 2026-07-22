@@ -1,10 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { AttemptView } from "@/components/learning/AttemptList";
-import { buildRecommendations, computeTopicMetrics, type AttemptInput, type TopicMetrics } from "@/lib/learning/metrics";
+import { buildRecommendations, computeTopicMetrics, type AttemptInput } from "@/lib/learning/metrics";
 import type { Exercise, ExerciseDifficulty, Profile, Topic } from "@/lib/supabase/types";
 
-import { attachTopicSlugs, buildDashboardStats, type DashboardStatsData, type RecommendationView } from "./aggregate";
+import {
+  attachTopicMetricSlugs,
+  attachTopicSlugs,
+  buildDashboardStats,
+  type DashboardStatsData,
+  type RecommendationView,
+  type TopicMetricsView,
+} from "./aggregate";
 
 /** Mesma janela usada em /aprendizado para o cálculo de domínio (ver lib/learning/metrics.ts). */
 const METRICS_WINDOW_LIMIT = 200;
@@ -14,7 +21,7 @@ const RECENT_ACTIVITY_LIMIT = 5;
 export interface DashboardData {
   profile: Profile | null;
   stats: DashboardStatsData;
-  topicMetrics: TopicMetrics[];
+  topicMetrics: TopicMetricsView[];
   recommendations: RecommendationView[];
   recentActivity: AttemptView[];
   hasAnyTopics: boolean;
@@ -108,7 +115,7 @@ export async function getDashboardData(supabase: SupabaseClient, userId: string)
   return {
     profile: profile ?? null,
     stats,
-    topicMetrics,
+    topicMetrics: attachTopicMetricSlugs(topicMetrics, topicList),
     recommendations,
     recentActivity,
     hasAnyTopics: topicList.length > 0,

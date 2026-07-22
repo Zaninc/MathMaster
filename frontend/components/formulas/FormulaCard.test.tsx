@@ -5,12 +5,16 @@ import type { FormulaEntry } from "@/data/formulas";
 
 import { FormulaCard } from "./FormulaCard";
 
-const BHASKARA: FormulaEntry = {
-  id: "bhaskara",
+/** Sem entrada em FORMULA_CONNECTIONS (data/connections.ts) — usada pra testar o card "puro", sem ações contextuais. */
+const NO_CONNECTIONS: FormulaEntry = {
+  id: "formula-sem-conexao-curada",
   title: "Fórmula de Bhaskara",
   latex: String.raw`x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}`,
   category: "algebra",
 };
+
+/** id real com conexões curadas (calculadora + gráfico + exercícios) — ver data/connections.ts. */
+const BHASKARA: FormulaEntry = { ...NO_CONNECTIONS, id: "bhaskara" };
 
 describe("FormulaCard", () => {
   beforeEach(() => {
@@ -21,7 +25,7 @@ describe("FormulaCard", () => {
 
   it("mostra o título e renderiza a expressão com KaTeX (não como texto bruto)", () => {
     const { container } = render(
-      <FormulaCard formula={BHASKARA} isFavorite={false} onToggleFavorite={() => {}} />
+      <FormulaCard formula={NO_CONNECTIONS} isFavorite={false} onToggleFavorite={() => {}} />
     );
 
     expect(screen.getByRole("heading", { name: "Fórmula de Bhaskara" })).toBeInTheDocument();
@@ -31,13 +35,13 @@ describe("FormulaCard", () => {
     expect(container.querySelector("code[role='math']")).toBeNull();
   });
 
-  it("não é anunciado como link (só a estrela e o botão de copiar são interativos)", () => {
-    render(<FormulaCard formula={BHASKARA} isFavorite={false} onToggleFavorite={() => {}} />);
+  it("sem conexão curada, não mostra nenhum link de ação (só a estrela e o botão de copiar)", () => {
+    render(<FormulaCard formula={NO_CONNECTIONS} isFavorite={false} onToggleFavorite={() => {}} />);
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("LaTeX inválido não derruba o card — título continua visível", () => {
-    const broken: FormulaEntry = { ...BHASKARA, latex: String.raw`\frac{a` };
+    const broken: FormulaEntry = { ...NO_CONNECTIONS, latex: String.raw`\frac{a` };
 
     expect(() =>
       render(<FormulaCard formula={broken} isFavorite={false} onToggleFavorite={() => {}} />)
@@ -49,26 +53,49 @@ describe("FormulaCard", () => {
   it("estrela reflete isFavorite e chama onToggleFavorite com o id ao clicar", () => {
     const onToggleFavorite = vi.fn();
     const { rerender } = render(
-      <FormulaCard formula={BHASKARA} isFavorite={false} onToggleFavorite={onToggleFavorite} />
+      <FormulaCard formula={NO_CONNECTIONS} isFavorite={false} onToggleFavorite={onToggleFavorite} />
     );
 
     const star = screen.getByRole("button", { name: "Adicionar aos favoritos" });
     expect(star).toHaveAttribute("aria-pressed", "false");
 
     fireEvent.click(star);
-    expect(onToggleFavorite).toHaveBeenCalledWith("bhaskara");
+    expect(onToggleFavorite).toHaveBeenCalledWith("formula-sem-conexao-curada");
 
-    rerender(<FormulaCard formula={BHASKARA} isFavorite onToggleFavorite={onToggleFavorite} />);
+    rerender(<FormulaCard formula={NO_CONNECTIONS} isFavorite onToggleFavorite={onToggleFavorite} />);
     expect(screen.getByRole("button", { name: "Remover dos favoritos" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("copiar fórmula escreve o LaTeX no clipboard e mostra feedback 'Copiado!'", async () => {
-    render(<FormulaCard formula={BHASKARA} isFavorite={false} onToggleFavorite={() => {}} />);
+    render(<FormulaCard formula={NO_CONNECTIONS} isFavorite={false} onToggleFavorite={() => {}} />);
 
     const copyButton = screen.getByRole("button", { name: /copiar fórmula/i });
     fireEvent.click(copyButton);
 
     expect(await screen.findByText("Copiado!")).toBeInTheDocument();
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(BHASKARA.latex);
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(NO_CONNECTIONS.latex);
+  });
+
+  describe("ações contextuais (sistema de conexões internas)", () => {
+    it("fórmula com conexão curada mostra os links esperados, cada um com nome acessível", () => {
+      render(<FormulaCard formula={BHASKARA} isFavorite={false} onToggleFavorite={() => {}} />);
+
+      const calc = screen.getByRole("link", { name: "Abrir na calculadora" });
+      const graph = screen.getByRole("link", { name: "Visualizar nos gráficos" });
+      const exercises = screen.getByRole("link", { name: "Exercícios relacionados" });
+
+      expect(calc).toHaveAttribute("href", expect.stringContaining("/calculadora?expression="));
+      expect(graph).toHaveAttribute("href", expect.stringContaining("/graficos?fn="));
+      expect(exercises).toHaveAttribute("href", "/aprendizado?topico=equacoes");
+    });
+
+    it("links de ação ficam visíveis por foco (paridade com hover) via classe group-focus-within", () => {
+      render(<FormulaCard formula={BHASKARA} isFavorite={false} onToggleFavorite={() => {}} />);
+
+      const link = screen.getByRole("link", { name: "Abrir na calculadora" });
+      expect(link.className).toContain("sm:group-focus-within:opacity-100");
+      expect(link.className).toContain("focus-visible:ring-2");
+      expect(link.tabIndex).not.toBe(-1);
+    });
   });
 });

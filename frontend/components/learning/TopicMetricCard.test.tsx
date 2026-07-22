@@ -46,4 +46,20 @@ describe("TopicMetricCard", () => {
     expect(screen.queryByText("%", { exact: false })).not.toBeInTheDocument();
     expect(screen.getByText(/nenhuma tentativa ainda/i)).toBeInTheDocument();
   });
+
+  it("sem href, não é anunciado como link (comportamento original — usado em LearningStats)", () => {
+    render(<TopicMetricCard metrics={STARTED} />);
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("com href, o card inteiro vira link acessível e com foco visível (Dashboard)", () => {
+    render(<TopicMetricCard metrics={STARTED} href="/aprendizado?topico=algebra-basica" />);
+
+    const link = screen.getByRole("link", { name: "Praticar Álgebra básica" });
+    expect(link).toHaveAttribute("href", "/aprendizado?topico=algebra-basica");
+    expect(link.className).toContain("focus-visible:ring-2");
+    expect(link.tabIndex).not.toBe(-1);
+    // conteúdo continua o mesmo, agora dentro do link
+    expect(screen.getByText("92%")).toBeInTheDocument();
+  });
 });

@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 
-import { Button } from "@/components/shared/Button";
+import { Button, ButtonLink } from "@/components/shared/Button";
 import { FadeIn } from "@/components/shared/FadeIn";
 import { MathFormula } from "@/components/shared/MathFormula";
+import { getCalculatorExplorations } from "@/data/connections";
 import { useSolveLatex } from "@/hooks/useSolveLatex";
 
 import { ResultSkeleton } from "./ResultSkeleton";
@@ -35,6 +36,7 @@ export function ResultPanel({ status, expression, result, errorMessage, errorId,
     success ? expression : null,
     success ? result : null
   );
+  const explorations = success ? getCalculatorExplorations(expression) : [];
 
   async function handleCopy() {
     if (!result) return;
@@ -93,6 +95,27 @@ export function ResultPanel({ status, expression, result, errorMessage, errorId,
               <Button type="button" variant="ghost" disabled aria-label="Ver explicação — recurso em breve">
                 Ver explicação (em breve)
               </Button>
+            </div>
+          </div>
+        </FadeIn>
+      )}
+
+      {success && explorations.length > 0 && (
+        <FadeIn>
+          <div className="rounded-lg border border-border bg-surface p-3">
+            <span className="text-xs font-medium uppercase tracking-wide text-text-secondary">Explorar</span>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {explorations.map((link) => (
+                <ButtonLink
+                  key={link.label}
+                  href={link.href}
+                  variant="ghost"
+                  aria-label={link.label}
+                  className="text-xs"
+                >
+                  <span aria-hidden="true">{link.icon}</span> {link.label}
+                </ButtonLink>
+              ))}
             </div>
           </div>
         </FadeIn>

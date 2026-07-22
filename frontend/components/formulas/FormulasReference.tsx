@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import { useFavoriteFormulas } from "@/hooks/useFavoriteFormulas";
@@ -17,17 +18,29 @@ type Filter = FormulaCategoryId | typeof ALL_FILTER | typeof FAVORITES_FILTER;
 /**
  * Biblioteca de Fórmulas: busca em tempo real (nome, categoria, palavras-
  * chave e símbolos via `matchesQuery`) + filtro por categoria ou por
- * favoritos, todos client-side (sem parâmetro de URL, de propósito —
- * decisão de sprints anteriores, mantida aqui). Favoritos vêm de
- * `useFavoriteFormulas` (persistidos em localStorage). Ordem das
- * categorias = ordem de 1ª aparição em FORMULAS; com busca/filtro ativos,
- * uma categoria só aparece se sobrar pelo menos 1 fórmula visível nela —
- * evita cabeçalho de seção vazio.
+ * favoritos, todos client-side. Favoritos vêm de `useFavoriteFormulas`
+ * (persistidos em localStorage). Ordem das categorias = ordem de 1ª
+ * aparição em FORMULAS; com busca/filtro ativos, uma categoria só aparece
+ * se sobrar pelo menos 1 fórmula visível nela — evita cabeçalho de seção
+ * vazio.
+ *
+ * `?categoria=`/`?q=` (sistema de conexões internas — deep-link vindo da
+ * Calculadora/Geometria) só preenchem o estado INICIAL, uma vez, via
+ * inicializador preguiçoso do `useState` (mesmo padrão de `?expression=`
+ * na Calculadora) — depois disso o filtro/busca voltam a ser 100%
+ * client-side, sem sincronizar de volta pra URL. `categoria` inválida ou
+ * ausente cai em "todas" (nunca quebra, nunca fica vazia por engano).
  */
 export function FormulasReference() {
   const categories = Array.from(new Set(FORMULAS.map((formula) => formula.category)));
-  const [filter, setFilter] = useState<Filter>(ALL_FILTER);
-  const [query, setQuery] = useState("");
+  const searchParams = useSearchParams();
+  const [filter, setFilter] = useState<Filter>(() => {
+    const categoria = searchParams.get("categoria");
+    return categoria !== null && categories.includes(categoria as FormulaCategoryId)
+      ? (categoria as FormulaCategoryId)
+      : ALL_FILTER;
+  });
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
   const { isFavorite, toggleFavorite } = useFavoriteFormulas();
 
   const favoriteCount = FORMULAS.filter((formula) => isFavorite(formula.id)).length;

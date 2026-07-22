@@ -87,4 +87,71 @@ describe("GeometryWorkspace", () => {
 
     expect(screen.queryByText(/Equação: x² \+ y² = 25/)).not.toBeInTheDocument();
   });
+
+  describe("Ferramentas relacionadas (sistema de conexões internas)", () => {
+    it("triângulo mostra fórmulas e exercícios, mas NUNCA 'Enviar equação' (cálculo é 100% local)", () => {
+      render(<GeometryWorkspace />);
+
+      expect(screen.getByRole("link", { name: "Ver fórmulas" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Exercícios relacionados" })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Enviar equação para a calculadora" })).not.toBeInTheDocument();
+    });
+
+    it("círculo mostra fórmulas da circunferência E enviar equação (com a expressão real da figura)", () => {
+      render(<GeometryWorkspace />);
+      fireEvent.click(screen.getByRole("tab", { name: "Círculo" }));
+
+      expect(screen.getByRole("link", { name: "Ver fórmulas da circunferência" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Enviar equação para a calculadora" })).toHaveAttribute(
+        "href",
+        expect.stringContaining(encodeURIComponent("circunferencia((0,0), 5)"))
+      );
+    });
+
+    it("parábola (eixo vertical, preset padrão) mostra 'Abrir nos gráficos' e 'Enviar equação'", () => {
+      render(<GeometryWorkspace />);
+      fireEvent.click(screen.getByRole("tab", { name: "Parábola" }));
+
+      expect(screen.getByRole("link", { name: "Abrir nos gráficos" })).toHaveAttribute(
+        "href",
+        expect.stringContaining("/graficos?fn=")
+      );
+      expect(screen.getByRole("link", { name: "Enviar equação para a calculadora" })).toBeInTheDocument();
+    });
+
+    it("parábola de eixo horizontal NÃO mostra 'Abrir nos gráficos' (não é função de x) mas mantém 'Enviar equação'", () => {
+      render(<GeometryWorkspace />);
+      fireEvent.click(screen.getByRole("tab", { name: "Parábola" }));
+
+      // Foco em (2,0) com vértice em (0,0): mesmo y, eixo horizontal.
+      const [, focusX] = screen.getAllByLabelText("x");
+      fireEvent.change(focusX, { target: { value: "2" } });
+      const [, focusY] = screen.getAllByLabelText("y");
+      fireEvent.change(focusY, { target: { value: "0" } });
+
+      expect(screen.queryByRole("link", { name: "Abrir nos gráficos" })).not.toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Enviar equação para a calculadora" })).toBeInTheDocument();
+    });
+
+    it("elipse/hipérbole/reta mostram só 'Enviar equação' (sem fórmula própria no catálogo)", () => {
+      render(<GeometryWorkspace />);
+
+      fireEvent.click(screen.getByRole("tab", { name: "Reta" }));
+      expect(screen.getByRole("link", { name: "Enviar equação para a calculadora" })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Ver fórmulas" })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("tab", { name: "Elipse" }));
+      expect(screen.getByRole("link", { name: "Enviar equação para a calculadora" })).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("tab", { name: "Hipérbole" }));
+      expect(screen.getByRole("link", { name: "Enviar equação para a calculadora" })).toBeInTheDocument();
+    });
+
+    it("todo link tem foco visível e é navegável por teclado (herdado do Button)", () => {
+      render(<GeometryWorkspace />);
+      const link = screen.getByRole("link", { name: "Ver fórmulas" });
+      expect(link.className).toContain("focus-visible:ring-2");
+      expect(link.tabIndex).not.toBe(-1);
+    });
+  });
 });

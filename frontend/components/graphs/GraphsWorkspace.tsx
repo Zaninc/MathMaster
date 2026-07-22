@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { PageShell } from "@/components/layout/PageShell";
@@ -19,8 +20,22 @@ function generateId(): string {
   return `fn-${idCounter}`;
 }
 
+/**
+ * `?fn=` (sistema de conexões internas — deep-link vindo da
+ * Calculadora/Fórmulas/Geometria) preenche o estado INICIAL da lista de
+ * funções, uma única vez, via inicializador preguiçoso do `useState`
+ * (mesmo padrão de `?expression=` na Calculadora). Uma expressão inválida
+ * aqui recebe exatamente o mesmo tratamento de qualquer função digitada à
+ * mão: entra na lista e mostra erro só naquele item — nunca quebra a
+ * página nem fica vazia por engano.
+ */
 export function GraphsWorkspace() {
-  const [functions, setFunctions] = useState<PlotFunction[]>([]);
+  const searchParams = useSearchParams();
+  const [functions, setFunctions] = useState<PlotFunction[]>(() => {
+    const fn = searchParams.get("fn")?.trim();
+    if (!fn) return [];
+    return [{ id: generateId(), expression: fn, color: PALETTE[0], visible: true }];
+  });
   const [compiled, setCompiled] = useState<Map<string, PlotFn>>(new Map());
   const [errors, setErrors] = useState<Map<string, string>>(new Map());
   const [viewport, setViewport] = useState<Viewport>(DEFAULT_VIEWPORT);

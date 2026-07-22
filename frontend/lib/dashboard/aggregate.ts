@@ -24,6 +24,11 @@ export interface RecommendationView extends Recommendation {
   topicSlug: string | null;
 }
 
+export interface TopicMetricsView extends TopicMetrics {
+  /** null quando o tópico não tem slug conhecido — `TopicMetricCard` simplesmente não vira link nesse caso. */
+  topicSlug: string | null;
+}
+
 export interface AttemptExerciseRef {
   exercise_id: string;
 }
@@ -70,5 +75,18 @@ export function attachTopicSlugs(recommendations: Recommendation[], topics: Topi
   return recommendations.map((recommendation) => ({
     ...recommendation,
     topicSlug: slugByTopicId.get(recommendation.topicId) ?? null,
+  }));
+}
+
+/**
+ * Mesmo padrão de `attachTopicSlugs`, para os cards de progresso por
+ * tópico (`TopicProgress`/`TopicMetricCard`) virarem link pra
+ * `/aprendizado?topico=slug` — sistema de conexões internas.
+ */
+export function attachTopicMetricSlugs(metrics: TopicMetrics[], topics: Topic[]): TopicMetricsView[] {
+  const slugByTopicId = new Map(topics.map((topic) => [topic.id, topic.slug]));
+  return metrics.map((metric) => ({
+    ...metric,
+    topicSlug: slugByTopicId.get(metric.topicId) ?? null,
   }));
 }

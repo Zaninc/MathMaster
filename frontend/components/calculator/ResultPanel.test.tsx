@@ -95,3 +95,87 @@ describe("ResultPanel", () => {
     expect(screen.getByText("Não foi possível interpretar.")).toBeInTheDocument();
   });
 });
+
+describe("ResultPanel — bloco Explorar (sistema de conexões internas)", () => {
+  it("equação quadrática mostra 'Ver gráfico', 'Ver fórmula relacionada' e 'Praticar exercícios semelhantes'", () => {
+    render(
+      <ResultPanel
+        status="success"
+        expression="x² - 4 = 0"
+        result="x = 2 ou x = -2"
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    expect(screen.getByText("Explorar")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ver gráfico" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/graficos?fn=")
+    );
+    expect(screen.getByRole("link", { name: "Ver fórmula relacionada" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/formulas?")
+    );
+    expect(screen.getByRole("link", { name: "Praticar exercícios semelhantes" })).toHaveAttribute(
+      "href",
+      "/aprendizado?topico=equacoes"
+    );
+  });
+
+  it("derivada mostra só 'Ver fórmula relacionada'", () => {
+    render(
+      <ResultPanel
+        status="success"
+        expression="d/dx(x² + 3x)"
+        result="2x + 3"
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    expect(screen.getByRole("link", { name: "Ver fórmula relacionada" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Ver gráfico" })).not.toBeInTheDocument();
+  });
+
+  it("expressão sem classificação não mostra o bloco Explorar", () => {
+    render(
+      <ResultPanel status="success" expression="2 + 2" result="4" errorMessage={null} errorId="err" onRetry={NOOP} />
+    );
+    expect(screen.queryByText("Explorar")).not.toBeInTheDocument();
+  });
+
+  it("não mostra Explorar fora do estado de sucesso", () => {
+    render(
+      <ResultPanel
+        status="error"
+        expression="x² - 4 = 0"
+        result={null}
+        errorMessage="Algo deu errado"
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+    expect(screen.queryByText("Explorar")).not.toBeInTheDocument();
+  });
+
+  it("cada link do Explorar tem nome acessível e foco visível (herdado do Button)", () => {
+    render(
+      <ResultPanel
+        status="success"
+        expression="x² - 4 = 0"
+        result="x = 2 ou x = -2"
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    const link = screen.getByRole("link", { name: "Ver gráfico" });
+    expect(link).toHaveAccessibleName("Ver gráfico");
+    expect(link.className).toContain("focus-visible:ring-2");
+    expect(link.tabIndex).not.toBe(-1);
+  });
+});

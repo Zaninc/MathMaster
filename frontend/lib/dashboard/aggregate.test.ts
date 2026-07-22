@@ -4,6 +4,7 @@ import type { Recommendation, TopicMetrics } from "@/lib/learning/metrics";
 import type { Topic } from "@/lib/supabase/types";
 
 import {
+  attachTopicMetricSlugs,
   attachTopicSlugs,
   buildDashboardStats,
   computeAccuracyRate,
@@ -143,5 +144,32 @@ describe("attachTopicSlugs", () => {
     ];
 
     expect(attachTopicSlugs(recommendations, TOPICS)[0].topicSlug).toBeNull();
+  });
+});
+
+describe("attachTopicMetricSlugs", () => {
+  const TOPICS: Topic[] = [
+    { id: "t-1", slug: "algebra-basica", title: "Álgebra básica", description: null, position: 1 },
+  ];
+
+  const METRIC: TopicMetrics = {
+    topicId: "t-1",
+    topicTitle: "Álgebra básica",
+    started: true,
+    domain: 80,
+    confidence: "media",
+    attemptsCount: 5,
+    exercisesTried: 2,
+    exercisesTotal: 3,
+    standing: "neutro",
+  };
+
+  it("anexa o slug correto ao tópico", () => {
+    expect(attachTopicMetricSlugs([METRIC], TOPICS)[0].topicSlug).toBe("algebra-basica");
+  });
+
+  it("slug null quando o tópico não é encontrado, sem quebrar", () => {
+    const orphan: TopicMetrics = { ...METRIC, topicId: "t-desconhecido" };
+    expect(attachTopicMetricSlugs([orphan], TOPICS)[0].topicSlug).toBeNull();
   });
 });
