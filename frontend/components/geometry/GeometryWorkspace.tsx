@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 
 import { PageShell } from "@/components/layout/PageShell";
-import { Button, ButtonLink } from "@/components/shared/Button";
+import { Button } from "@/components/shared/Button";
+import { ContextActions } from "@/components/shared/ContextActions";
 import { FadeIn } from "@/components/shared/FadeIn";
 import { calculatorLink, getGeometryConnections, graphsLink, type RelatedLink } from "@/data/connections";
 import { apiClient } from "@/lib/api/client";
@@ -418,17 +419,8 @@ export function GeometryWorkspace() {
           </div>
 
           {relatedTools.length > 0 && (
-            <div className="rounded-lg border border-border bg-surface p-3">
-              <span className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-                Ferramentas relacionadas
-              </span>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {relatedTools.map((link) => (
-                  <ButtonLink key={link.label} href={link.href} variant="ghost" aria-label={link.label} className="text-xs">
-                    <span aria-hidden="true">{link.icon}</span> {link.label}
-                  </ButtonLink>
-                ))}
-              </div>
+            <div className="rounded-lg border border-border bg-surface px-3.5 py-3">
+              <ContextActions eyebrow="Ferramentas relacionadas" links={relatedTools} />
             </div>
           )}
         </div>

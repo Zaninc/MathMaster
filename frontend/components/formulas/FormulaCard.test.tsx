@@ -15,6 +15,10 @@ const NO_CONNECTIONS: FormulaEntry = {
 
 /** id real com conexões curadas (calculadora + gráfico + exercícios) — ver data/connections.ts. */
 const BHASKARA: FormulaEntry = { ...NO_CONNECTIONS, id: "bhaskara" };
+/** 2 conexões curadas (calculadora + exercícios) — ver data/connections.ts. */
+const DELTA: FormulaEntry = { ...NO_CONNECTIONS, id: "delta", title: "Delta (discriminante)" };
+/** 1 conexão curada (calculadora) — ver data/connections.ts. */
+const PITAGORAS: FormulaEntry = { ...NO_CONNECTIONS, id: "teorema-pitagoras", title: "Teorema de Pitágoras" };
 
 describe("FormulaCard", () => {
   beforeEach(() => {
@@ -96,6 +100,32 @@ describe("FormulaCard", () => {
       expect(link.className).toContain("sm:group-focus-within:opacity-100");
       expect(link.className).toContain("focus-visible:ring-2");
       expect(link.tabIndex).not.toBe(-1);
+    });
+  });
+
+  describe("grade 2×2 — 'Copiar fórmula' nunca fica isolado sozinho num canto", () => {
+    it("3 conexões (par: 4 ações no total) — grade fecha 2×2, ninguém precisa ocupar 2 colunas", () => {
+      render(<FormulaCard formula={BHASKARA} isFavorite={false} onToggleFavorite={() => {}} />);
+      const copyButton = screen.getByRole("button", { name: /copiar fórmula/i });
+      expect(copyButton.className).not.toContain("col-span-2");
+    });
+
+    it("2 conexões (ímpar: 3 ações no total) — 'Copiar' é o sobrando e ocupa as 2 colunas", () => {
+      render(<FormulaCard formula={DELTA} isFavorite={false} onToggleFavorite={() => {}} />);
+      const copyButton = screen.getByRole("button", { name: /copiar fórmula/i });
+      expect(copyButton.className).toContain("col-span-2");
+    });
+
+    it("1 conexão (par: 2 ações no total) — fecha a fileira sozinha, sem span", () => {
+      render(<FormulaCard formula={PITAGORAS} isFavorite={false} onToggleFavorite={() => {}} />);
+      const copyButton = screen.getByRole("button", { name: /copiar fórmula/i });
+      expect(copyButton.className).not.toContain("col-span-2");
+    });
+
+    it("0 conexões (ímpar: 1 ação no total) — 'Copiar' sozinho ocupa as 2 colunas em vez de ficar isolado no canto", () => {
+      render(<FormulaCard formula={NO_CONNECTIONS} isFavorite={false} onToggleFavorite={() => {}} />);
+      const copyButton = screen.getByRole("button", { name: /copiar fórmula/i });
+      expect(copyButton.className).toContain("col-span-2");
     });
   });
 });
