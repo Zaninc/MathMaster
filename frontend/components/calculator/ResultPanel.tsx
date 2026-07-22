@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
-import { Button, ButtonLink } from "@/components/shared/Button";
+import { Button } from "@/components/shared/Button";
 import { FadeIn } from "@/components/shared/FadeIn";
 import { MathFormula } from "@/components/shared/MathFormula";
 import { getCalculatorExplorations } from "@/data/connections";
@@ -102,19 +103,29 @@ export function ResultPanel({ status, expression, result, errorMessage, errorId,
 
       {success && explorations.length > 0 && (
         <FadeIn>
-          <div className="rounded-lg border border-border bg-surface p-3">
-            <span className="text-xs font-medium uppercase tracking-wide text-text-secondary">Explorar</span>
-            <div className="mt-2 flex flex-wrap gap-2">
+          <div className="rounded-lg border border-border bg-surface px-3.5 py-3">
+            <div className="flex items-center gap-1.5">
+              <span aria-hidden="true" className="h-1 w-1 rounded-full bg-accent" />
+              <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
+                Explorar
+              </span>
+            </div>
+            <div className="mt-2.5 flex flex-wrap gap-1">
               {explorations.map((link) => (
-                <ButtonLink
+                <Link
                   key={link.label}
                   href={link.href}
-                  variant="ghost"
                   aria-label={link.label}
-                  className="text-xs"
+                  className="group/link inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium tracking-[-0.01em] text-text-secondary transition-colors duration-(--motion-base) ease-out hover:bg-accent/[0.08] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 >
-                  <span aria-hidden="true">{link.icon}</span> {link.label}
-                </ButtonLink>
+                  <span
+                    aria-hidden="true"
+                    className="text-[13px] leading-none opacity-75 transition-opacity duration-(--motion-base) group-hover/link:opacity-100"
+                  >
+                    {link.icon}
+                  </span>
+                  <span>{link.label}</span>
+                </Link>
               ))}
             </div>
           </div>
