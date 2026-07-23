@@ -1,3 +1,5 @@
+import { forwardRef } from "react";
+
 import katex from "katex";
 import "katex/dist/katex.min.css";
 
@@ -8,6 +10,20 @@ export interface MathFormulaProps {
   displayMode?: boolean;
   /** Classes extras aplicadas ao wrapper (espaçamento/cor de contexto). */
   className?: string;
+  /**
+   * Sprint V2.1 (BUG 1): quando `true` (e `displayMode` é `false`), envolve
+   * o KaTeX inline num wrapper com rolagem horizontal própria — mesma
+   * técnica do `displayMode`, adaptada para continuar um elemento de nível
+   * inline (`<span>` com `display:block` via classe, nunca `<div>`, que
+   * seria HTML inválido dentro de um `<p>`). Usar SÓ onde uma fórmula pode
+   * legitimamente crescer sem limite (resultado de somatório, preview de
+   * expressão livre) — ex. `ResultPanel`/`HistoryPanel`/`MathPreview`.
+   * Deliberadamente OPT-IN, não o padrão: um rótulo pequeno de botão (ex.
+   * `FunctionList.ExampleLabel`) precisa do oposto — crescer livremente e
+   * deixar o `flex-wrap` do container decidir a quebra de linha, nunca
+   * ganhar sua própria barra de rolagem interna (ver comentário lá).
+   */
+  scrollable?: boolean;
 }
 
 /**
@@ -26,8 +42,17 @@ export interface MathFormulaProps {
  * o try/catch cobre erros não-parseáveis devolvendo a fórmula crua em
  * `<code>`. As cores do KaTeX herdam `currentColor`, então o tema escuro
  * (e qualquer cor de contexto via `className`) funciona sem CSS extra.
+ *
+ * `ref` (Sprint V2.1, apresentação progressiva) encaminha para o elemento
+ * raiz de fato renderizado (`<code>`/`<div>`/`<span>`) — usado por
+ * `ProgressiveMathResult` para medir overflow real via
+ * `hooks/useIsOverflowing.ts`. Opcional; nenhum consumidor existente passa
+ * `ref`, então isso não muda nada para eles.
  */
-export function MathFormula({ formula, displayMode = false, className }: MathFormulaProps) {
+export const MathFormula = forwardRef<HTMLElement, MathFormulaProps>(function MathFormula(
+  { formula, displayMode = false, className, scrollable = false },
+  ref
+) {
   let html: string | null = null;
   try {
     html = katex.renderToString(formula, {
@@ -43,7 +68,7 @@ export function MathFormula({ formula, displayMode = false, className }: MathFor
 
   if (html === null) {
     return (
-      <code role="math" aria-label={formula} className={className}>
+      <code ref={ref as React.Ref<HTMLElement>} role="math" aria-label={formula} className={className}>
         {formula}
       </code>
     );
@@ -56,11 +81,33 @@ export function MathFormula({ formula, displayMode = false, className }: MathFor
     // para que o espaçamento vertical fique a cargo do layout consumidor.
     return (
       <div
+        ref={ref as React.Ref<HTMLDivElement>}
         className={`max-w-full overflow-x-auto overflow-y-hidden [&_.katex-display]:my-0 ${className ?? ""}`.trim()}
         dangerouslySetInnerHTML={{ __html: html }}
       />
     );
   }
 
-  return <span className={className} dangerouslySetInnerHTML={{ __html: html }} />;
-}
+  if (scrollable) {
+    // `display:block` via classe (não a tag) continua HTML válido dentro
+    // de um `<p>` — só a TAG importa para o modelo de conteúdo, não o
+    // `display` computado. `overflow-y-hidden` só corta o que mesmo assim
+    // sobrar de altura; a caixa cresce livremente para acomodar frações
+    // altas, não há `max-height` fixo aqui — mesmo padrão do `displayMode`.
+    return (
+      <span
+        ref={ref as React.Ref<HTMLSpanElement>}
+        className={`block max-w-full overflow-x-auto overflow-y-hidden align-middle [&_.katex-display]:my-0 ${className ?? ""}`.trim()}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    );
+  }
+
+  return (
+    <span
+      ref={ref as React.Ref<HTMLSpanElement>}
+      className={className}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+});
