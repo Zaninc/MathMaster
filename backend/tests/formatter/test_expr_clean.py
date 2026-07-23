@@ -4,7 +4,9 @@ documentada no próprio módulo (Sprint 7.2: `simplify()`/`cancel()` puros
 desfatoravam "(x-1)*(x+1)" para "x**2-1")."""
 from __future__ import annotations
 
-from sympy import Rational, factorial, sin, symbols
+import time
+
+from sympy import Rational, cos, factorial, sin, symbols
 from sympy.abc import x
 
 from app.formatter.expr_clean import clean_expr, evalf_expr
@@ -42,3 +44,34 @@ def test_evalf_expr_on_symbolic_expression_only_evaluates_numeric_parts() -> Non
     # caminho de exceção, é o comportamento normal do SymPy nesse caso).
     expr = sin(x)
     assert evalf_expr(expr) == expr
+
+
+# --- Hotfix (Sprint V2.1, BUG 2): trigsimp limitado a poucos átomos -------
+#
+# Causa-raiz medida empiricamente: `trigsimp` busca identidades ENTRE todos
+# os átomos trigonométricos de uma expressão, e esse custo cresce muito
+# rápido com a quantidade de átomos independentes (~0.04s a 12 átomos,
+# ~3.6s a 60). Um somatório como "Σ(i=1..30) sin(i)" produz uma soma de 30
+# átomos sin(k) sem nenhuma identidade real para achar — `clean_expr` pagava
+# esse custo em TODO resultado, mesmo sem ganho algum.
+
+
+def test_clean_expr_still_applies_trigsimp_below_the_atom_threshold() -> None:
+    # Poucos átomos (2) — comportamento de antes, intocado: a identidade
+    # fundamental continua sendo encontrada normalmente.
+    expr = sin(x) ** 2 + cos(x) ** 2
+    assert clean_expr(expr) == 1
+
+
+def test_clean_expr_skips_trigsimp_above_the_atom_threshold_but_stays_fast() -> None:
+    # 60 átomos (30 sin + 30 cos) de argumento numérico independente —
+    # acima do limite, `trigsimp` nem é tentado; nenhum outro simplificador
+    # da bateria encurta essa soma, então o resultado permanece intocado.
+    expr = sum(sin(i) + cos(i) for i in range(1, 31))
+    start = time.perf_counter()
+    result = clean_expr(expr)
+    elapsed = time.perf_counter() - start
+    # Bem abaixo dos ~3.6s que `trigsimp` sozinho levava nesse mesmo caso
+    # antes da correção — margem generosa para variação de máquina/CI.
+    assert elapsed < 2.5, f"levou {elapsed:.2f}s, deveria pular trigsimp"
+    assert result == expr

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from sympy import cancel, factor, radsimp, trigsimp
 from sympy.core.expr import Expr
+from sympy.functions.elementary.trigonometric import TrigonometricFunction
 
 # NOTE: simplify(), sqrtdenest() and cancel() were deliberately excluded from
 # (or restricted in) this battery after a real regression was caught during
@@ -23,7 +24,29 @@ from sympy.core.expr import Expr
 # product behaviour as simplify(), so it is only applied when the source
 # text actually looks like a fraction ("/" present) — the one case it's
 # needed for and safe in (cancelling a common factor from num/denom).
-_SIMPLIFIERS = (radsimp, trigsimp, factor)
+#
+# Sprint V2.1 hotfix (profiling): `trigsimp` searches for identities BETWEEN
+# every pair of trig atoms in the expression, so its cost grows steeply with
+# how many independent trig calls it has to consider — measured empirically:
+# ~0.17s at 24 atoms, ~0.75s at 40, ~3.6s at 60 (`sin(1)+cos(1)+...+sin(n)+
+# cos(n)` for n=12/20/30). A summation like "Σ(i=1..30) sin(i)" produces
+# exactly this shape (30 unrelated `sin(k)` atoms, no identity to find), and
+# `clean_expr` used to pay that cost on every bare-expression result
+# regardless of size. `_bounded_trigsimp` skips the attempt above a
+# generous-but-bounded atom count — below it, behavior is 100% unchanged
+# (still the real `trigsimp`); above it, `best` simply keeps whatever the
+# other (cheap, non-search-based) simplifiers already produced, same as any
+# other simplifier here that fails to improve on `best`.
+_MAX_TRIG_ATOMS_FOR_TRIGSIMP = 12
+
+
+def _bounded_trigsimp(expr: Expr) -> Expr:
+    if len(expr.atoms(TrigonometricFunction)) > _MAX_TRIG_ATOMS_FOR_TRIGSIMP:
+        return expr
+    return trigsimp(expr)
+
+
+_SIMPLIFIERS = (radsimp, _bounded_trigsimp, factor)
 
 
 def _is_equivalent(candidate: Expr, original: Expr) -> bool:
