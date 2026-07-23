@@ -25,7 +25,7 @@ describe("CalculatorWorkspace", () => {
 
   it("resolve com sucesso e atualiza o histórico", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
-    vi.mocked(apiClient.solve).mockResolvedValue({ expression: "2+2", result: "4" });
+    vi.mocked(apiClient.solve).mockResolvedValue({ expression: "2+2", result: "4", approx: null });
 
     render(<CalculatorWorkspace />);
 
@@ -163,7 +163,7 @@ describe("CalculatorWorkspace", () => {
 
   it("ida e volta pelo histórico preserva a expressão exata (Unicode visual incluído)", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([
-      { expression: "√(9)", result: "3", timestamp: "2026-01-01T00:00:00Z" },
+      { expression: "√(9)", result: "3", approx: null, timestamp: "2026-01-01T00:00:00Z" },
     ]);
     render(<CalculatorWorkspace />);
 
@@ -185,7 +185,7 @@ describe("CalculatorWorkspace", () => {
 
   it("preenche o campo ao clicar num item do histórico", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([
-      { expression: "2+2", result: "4", timestamp: "2026-01-01T00:00:00Z" },
+      { expression: "2+2", result: "4", approx: null, timestamp: "2026-01-01T00:00:00Z" },
     ]);
 
     render(<CalculatorWorkspace />);
@@ -207,7 +207,7 @@ describe("CalculatorWorkspace", () => {
 
   it("oculta um item do histórico localmente ao clicar em Ocultar", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([
-      { expression: "2+2", result: "4", timestamp: "2026-01-01T00:00:00Z" },
+      { expression: "2+2", result: "4", approx: null, timestamp: "2026-01-01T00:00:00Z" },
     ]);
 
     render(<CalculatorWorkspace />);

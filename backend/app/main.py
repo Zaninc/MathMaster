@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.execution import shutdown_active_processes, solve_expression_with_timeout
+from app.execution import shutdown_active_processes, solve_expression_with_timeout_and_approx
 from app.formatter import format_result, render_math
 from app.history import add_entry, get_history
 from app.math_engine import ExpressionError, normalize_all, solve_expression
@@ -81,7 +81,7 @@ def solve(
     request: SolveRequest, _rate_limit: None = Depends(enforce_rate_limit)
 ) -> SolveResponse:
     try:
-        raw_result = solve_expression_with_timeout(request.expression)
+        raw_result, raw_approx = solve_expression_with_timeout_and_approx(request.expression)
     except ExpressionError as exc:
         logger.warning("ExpressionError para %r: %s", request.expression, exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -93,15 +93,20 @@ def solve(
     # notação natural de cálculo ("d/dx(x**2)") precisa virar
     # "derivada(x**2, x)" antes de chegar em `format_result`. A
     # normalização é pura e idempotente, então recalculá-la aqui (o
-    # processo isolado de `solve_expression_with_timeout` já normalizou a
-    # própria cópia internamente) não muda o resultado, só evita acoplar
-    # este processo ao interno do outro. `request.expression` continua
-    # intocado para o histórico e a resposta.
+    # processo isolado de `solve_expression_with_timeout_and_approx` já
+    # normalizou a própria cópia internamente) não muda o resultado, só
+    # evita acoplar este processo ao interno do outro. `request.expression`
+    # continua intocado para o histórico e a resposta.
     normalized_expression = normalize_all(request.expression)
     result = render_math(format_result(normalized_expression, raw_result))
-    add_entry(request.expression, result)
-    logger.info("Resolvido: %r -> %r", request.expression, result)
-    return SolveResponse(expression=request.expression, result=result)
+    # Sprint V2.1 (apresentação progressiva) — a aproximação é um decimal
+    # puro (nunca uma das formas estruturadas que `format_result` classifica
+    # — intervalo/conjunto/lista de igualdades/expressão), então só o
+    # acabamento cosmético de `render_math` é aplicado, nunca `format_result`.
+    approx = render_math(raw_approx) if raw_approx is not None else None
+    add_entry(request.expression, result, approx)
+    logger.info("Resolvido: %r -> %r (approx=%r)", request.expression, result, approx)
+    return SolveResponse(expression=request.expression, result=result, approx=approx)
 
 
 @app.get("/history", response_model=list[HistoryItem])

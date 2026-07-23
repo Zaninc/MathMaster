@@ -16,10 +16,10 @@ import app.main as main_module
 def test_unhandled_exception_returns_generic_500(
     client_no_raise: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def _boom(expression: str) -> str:
+    def _boom(expression: str) -> tuple[str, str | None]:
         raise RuntimeError("bug interno simulado, nunca deveria vazar ao cliente")
 
-    monkeypatch.setattr(main_module, "solve_expression_with_timeout", _boom)
+    monkeypatch.setattr(main_module, "solve_expression_with_timeout_and_approx", _boom)
 
     response = client_no_raise.post("/solve", json={"expression": "2+2"})
 
@@ -31,10 +31,10 @@ def test_unhandled_exception_returns_generic_500(
 def test_unhandled_exception_is_logged(
     client_no_raise: TestClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    def _boom(expression: str) -> str:
+    def _boom(expression: str) -> tuple[str, str | None]:
         raise RuntimeError("bug interno simulado")
 
-    monkeypatch.setattr(main_module, "solve_expression_with_timeout", _boom)
+    monkeypatch.setattr(main_module, "solve_expression_with_timeout_and_approx", _boom)
 
     with caplog.at_level(logging.ERROR, logger="mathmaster"):
         client_no_raise.post("/solve", json={"expression": "2+2"})

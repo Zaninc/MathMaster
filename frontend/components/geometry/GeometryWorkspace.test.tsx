@@ -37,6 +37,7 @@ describe("GeometryWorkspace", () => {
     vi.mocked(apiClient.solve).mockResolvedValue({
       expression: "circunferencia((0,0), 5)",
       result: "Tipo: circunferência; Centro: (0, 0); Raio: 5; Equação: x² + y² = 25",
+      approx: null,
     });
 
     render(<GeometryWorkspace />);
@@ -76,6 +77,7 @@ describe("GeometryWorkspace", () => {
     vi.mocked(apiClient.solve).mockResolvedValue({
       expression: "circunferencia((0,0), 5)",
       result: "Tipo: circunferência; Centro: (0, 0); Raio: 5; Equação: x² + y² = 25",
+      approx: null,
     });
 
     render(<GeometryWorkspace />);

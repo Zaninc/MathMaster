@@ -27,6 +27,7 @@ from app.config import settings
 class HistoryEntry(TypedDict):
     expression: str
     result: str
+    approx: str | None
     timestamp: str
 
 
@@ -34,10 +35,11 @@ _history: list[HistoryEntry] = []
 _history_lock = threading.Lock()
 
 
-def add_entry(expression: str, result: str) -> HistoryEntry:
+def add_entry(expression: str, result: str, approx: str | None = None) -> HistoryEntry:
     entry: HistoryEntry = {
         "expression": expression,
         "result": result,
+        "approx": approx,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     with _history_lock:

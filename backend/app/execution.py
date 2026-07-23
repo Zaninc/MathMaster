@@ -46,10 +46,13 @@ import multiprocessing
 import queue
 import threading
 from multiprocessing.process import BaseProcess
+from typing import Callable, TypeVar
 
 from app.config import settings
-from app.math_engine import ExpressionError, solve_expression
+from app.math_engine import ExpressionError, solve_expression, solve_expression_with_approx
 from app.math_engine.errors import ComputationTimeoutError
+
+T = TypeVar("T")
 
 _SPAWN_CONTEXT = multiprocessing.get_context("spawn")
 
@@ -92,6 +95,22 @@ def _run_solve(expression: str, result_queue: multiprocessing.Queue) -> None:
         result_queue.put(("ok", result))
 
 
+def _run_solve_with_approx(expression: str, result_queue: multiprocessing.Queue) -> None:
+    """Sprint V2.1 (apresentação progressiva) — mesmo protocolo de
+    `_run_solve`, só troca `solve_expression` por `solve_expression_with_approx`
+    (o payload "ok" vira uma tupla `(resultado, approx)`; tuplas atravessam
+    o `multiprocessing.Queue` normalmente via pickle, sem tratamento
+    especial)."""
+    try:
+        result = solve_expression_with_approx(expression)
+    except ExpressionError as exc:
+        result_queue.put(("expression_error", str(exc)))
+    except Exception as exc:
+        result_queue.put(("internal_error", f"{type(exc).__name__}: {exc}"))
+    else:
+        result_queue.put(("ok", result))
+
+
 def _terminate_and_reap(process: BaseProcess) -> None:
     if process.pid is None:
         # process.start() nunca chegou a suceder -- não há processo do SO
@@ -107,19 +126,21 @@ def _terminate_and_reap(process: BaseProcess) -> None:
         process.join()
 
 
-def solve_expression_with_timeout(expression: str) -> str:
-    """Executa `solve_expression` em um processo isolado, com um limite real
-    de tempo (`settings.compute_timeout_seconds`). Levanta
-    `ComputationTimeoutError` (subclasse de `ExpressionError`) se o cálculo
-    ainda estiver rodando quando o prazo esgotar — o processo é encerrado à
-    força, nunca deixado rodando em segundo plano. Um `finally` garante que
-    o processo e a fila são sempre limpos, mesmo se algo inesperado
-    acontecer no processo pai.
+def _run_in_subprocess_with_timeout(
+    target: Callable[[str, multiprocessing.Queue], None], expression: str
+) -> T:
+    """Núcleo compartilhado de `solve_expression_with_timeout`/
+    `solve_expression_with_timeout_and_approx` (Sprint V2.1) — isola
+    QUALQUER função de protocolo `(expression, queue) -> None` que siga o
+    contrato `("ok", payload) | ("expression_error", str) |
+    ("internal_error", str)` em um processo próprio, com o mesmo limite
+    real de tempo (`settings.compute_timeout_seconds`). Extraído para que as
+    duas variantes (com/sem aproximação) nunca duplicem a lógica de
+    timeout/shutdown/limpeza — só o `target` (e, portanto, o formato do
+    `payload` de sucesso) muda entre elas.
     """
     result_queue: multiprocessing.Queue = _SPAWN_CONTEXT.Queue()
-    process = _SPAWN_CONTEXT.Process(
-        target=_run_solve, args=(expression, result_queue), daemon=True
-    )
+    process = _SPAWN_CONTEXT.Process(target=target, args=(expression, result_queue), daemon=True)
     _register_process(process)
     try:
         process.start()
@@ -146,3 +167,24 @@ def solve_expression_with_timeout(expression: str) -> str:
     if status == "expression_error":
         raise ExpressionError(payload)
     raise RuntimeError(payload)
+
+
+def solve_expression_with_timeout(expression: str) -> str:
+    """Executa `solve_expression` em um processo isolado, com um limite real
+    de tempo (`settings.compute_timeout_seconds`). Levanta
+    `ComputationTimeoutError` (subclasse de `ExpressionError`) se o cálculo
+    ainda estiver rodando quando o prazo esgotar — o processo é encerrado à
+    força, nunca deixado rodando em segundo plano.
+    """
+    return _run_in_subprocess_with_timeout(_run_solve, expression)
+
+
+def solve_expression_with_timeout_and_approx(expression: str) -> tuple[str, str | None]:
+    """Sprint V2.1 (apresentação progressiva) — mesma proteção de timeout de
+    `solve_expression_with_timeout`, chamando `solve_expression_with_approx`
+    dentro do processo isolado em vez de `solve_expression`. Usada só pelo
+    `/solve` de `main.py`; `solve_expression_with_timeout` continua intocada
+    (mesma assinatura, mesmo comportamento) para `/ready` e para a suíte de
+    testes existente.
+    """
+    return _run_in_subprocess_with_timeout(_run_solve_with_approx, expression)

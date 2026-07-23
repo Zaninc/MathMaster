@@ -22,7 +22,7 @@ describe("QuickCalculator", () => {
   });
 
   it("resolve uma expressão com sucesso e mostra o resultado", async () => {
-    vi.mocked(apiClient.solve).mockResolvedValue({ expression: "2+2", result: "4" });
+    vi.mocked(apiClient.solve).mockResolvedValue({ expression: "2+2", result: "4", approx: null });
     render(<QuickCalculator />);
 
     fireEvent.change(screen.getByLabelText("Expressão matemática"), { target: { value: "2+2" } });

@@ -32,6 +32,7 @@ export function CalculatorWorkspace() {
   const [status, setStatus] = useState<ResultStatus>("idle");
   const [solvedExpression, setSolvedExpression] = useState("");
   const [result, setResult] = useState<string | null>(null);
+  const [approx, setApprox] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [hiddenTimestamps, setHiddenTimestamps] = useState<Set<string>>(new Set());
@@ -76,11 +77,13 @@ export function CalculatorWorkspace() {
     if (value.trim().length === 0) return;
     setStatus("loading");
     setResult(null);
+    setApprox(null);
     setErrorMessage(null);
     setSolvedExpression(value);
     try {
       const response = await apiClient.solve(value);
       setResult(response.result);
+      setApprox(response.approx);
       setStatus("success");
       await refreshHistory();
     } catch (cause) {
@@ -125,6 +128,7 @@ export function CalculatorWorkspace() {
     setExpression(value);
     setStatus("idle");
     setResult(null);
+    setApprox(null);
     setErrorMessage(null);
     inputRef.current?.focus();
   }
@@ -176,6 +180,7 @@ export function CalculatorWorkspace() {
               status={status}
               expression={solvedExpression}
               result={result}
+              approx={approx}
               errorMessage={errorMessage}
               errorId={errorId}
               onRetry={handleClear}

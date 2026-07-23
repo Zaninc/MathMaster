@@ -53,7 +53,7 @@ def test_solve_success(client: TestClient) -> None:
     response = client.post("/solve", json={"expression": "2+2"})
     assert response.status_code == 200
     body = response.json()
-    assert body == {"expression": "2+2", "result": "4"}
+    assert body == {"expression": "2+2", "result": "4", "approx": None}
 
 
 def test_solve_expression_error_returns_400(client: TestClient) -> None:
