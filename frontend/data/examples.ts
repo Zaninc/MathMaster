@@ -14,6 +14,8 @@ export const QUICK_EXAMPLES: QuickExample[] = [
   { label: "∫₀¹ x² dx", expression: "∫₀¹ x² dx" },
   { label: "lim x→0 sen(x)/x", expression: "lim x→0 sen(x)/x" },
   { label: "circunferencia((0,0),5)", expression: "circunferencia((0,0),5)" },
+  // Sprint V2.1 — somatório finito, sintaxe principal Σ(var=inf..sup) expr.
+  { label: "Σ(i=1..10) i", expression: "Σ(i=1..10) i" },
 ];
 
 export interface QuickShortcut {

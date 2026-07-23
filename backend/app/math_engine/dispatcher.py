@@ -19,6 +19,11 @@ from .logarithms.dispatcher import (
 )
 from .parser.normalize import normalize_expression
 from .safe_parsing import safe_parse_expr
+from .summation.dispatcher import (
+    is_summation_domain_expression,
+    solve_summation_text,
+    solve_summation_with_approx,
+)
 from .trigonometry.dispatcher import (
     is_trigonometry_domain_expression,
     solve_trigonometry_text,
@@ -55,6 +60,14 @@ def solve_expression(expression: str) -> str:
     if is_analytic_geometry_domain_expression(expression):
         return solve_analytic_geometry_text(expression)
 
+    # Sprint V2.1 — precisa vir antes de calculus/functions/trigonometry/
+    # logarithms/equations pelo mesmo motivo que já justifica calculus vir
+    # antes delas: o corpo de "Σ(...)  ..." pode conter livremente "sin(",
+    # "log(", "=" etc., e essas áreas casam por `.search()` no texto
+    # inteiro. Ver docstring de `summation/dispatcher.py`.
+    if is_summation_domain_expression(expression):
+        return solve_summation_text(expression)
+
     # Sprint 12 — precisa vir antes de functions/trigonometry/logarithms:
     # essas áreas casam "sin("/"log(" em qualquer posição do texto, o que
     # roubaria uma chamada como "integral(sin(x), x)" se checado depois.
@@ -81,3 +94,22 @@ def solve_expression(expression: str) -> str:
         ) from exc
 
     return solve_algebra(parsed)
+
+
+def solve_expression_with_approx(expression: str) -> tuple[str, str | None]:
+    """Sprint V2.1 (apresentação progressiva) — mesmo resultado de
+    `solve_expression`, mais uma aproximação numérica decimal quando a
+    expressão é um somatório (única área que produz hoje resultados
+    simbólicos longos o bastante para precisar disso; ver `MEMORY`/relatório
+    da sprint — escopo consciente, não retroativo às outras áreas).
+
+    Contrato de `solve_expression` continua 100% intocado (mesma função,
+    mesma assinatura, usada em `/ready` e em toda a suíte de testes) — esta
+    é uma função NOVA e separada, só chamada por `execution.py`/`main.py`
+    para o `/solve`.
+    """
+    result = solve_expression(expression)
+    normalized = normalize_all(expression)
+    if is_summation_domain_expression(normalized):
+        return result, solve_summation_with_approx(normalized)
+    return result, None

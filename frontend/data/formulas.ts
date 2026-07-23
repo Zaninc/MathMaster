@@ -10,13 +10,14 @@
  * acrescentou mais 17 fórmulas (29→46), sempre ao final do bloco da
  * categoria correspondente — preserva a ordem visual das já existentes.
  */
-export type FormulaCategoryId = "algebra" | "geometria" | "trigonometria" | "calculo";
+export type FormulaCategoryId = "algebra" | "geometria" | "trigonometria" | "calculo" | "somatorios";
 
 export const FORMULA_CATEGORY_LABELS: Record<FormulaCategoryId, string> = {
   algebra: "Álgebra",
   geometria: "Geometria",
   trigonometria: "Trigonometria",
   calculo: "Cálculo",
+  somatorios: "Somatórios",
 };
 
 export interface FormulaEntry {
@@ -304,5 +305,36 @@ export const FORMULAS: FormulaEntry[] = [
     title: "Derivada da tangente",
     latex: String.raw`\frac{d}{dx}\tan(x)=\sec^2(x)`,
     category: "calculo",
+  },
+  // Sprint V2.1 — Somatórios, ordem pedida pelo Theo.
+  {
+    id: "soma-primeiros-naturais",
+    title: "Soma dos primeiros n naturais",
+    latex: String.raw`\sum_{i=1}^{n} i = \frac{n(n+1)}{2}`,
+    category: "somatorios",
+  },
+  {
+    id: "soma-primeiros-quadrados",
+    title: "Soma dos primeiros n quadrados",
+    latex: String.raw`\sum_{i=1}^{n} i^2 = \frac{n(n+1)(2n+1)}{6}`,
+    category: "somatorios",
+  },
+  {
+    id: "soma-primeiros-cubos",
+    title: "Soma dos primeiros n cubos",
+    latex: String.raw`\sum_{i=1}^{n} i^3 = \left(\frac{n(n+1)}{2}\right)^2`,
+    category: "somatorios",
+  },
+  {
+    id: "soma-pa-finita",
+    title: "Soma de PA finita",
+    latex: String.raw`S_n = \frac{(a_1+a_n)n}{2}`,
+    category: "somatorios",
+  },
+  {
+    id: "soma-pg-finita",
+    title: "Soma de PG finita",
+    latex: String.raw`S_n = \frac{a_1(q^n-1)}{q-1},\; q \neq 1`,
+    category: "somatorios",
   },
 ];

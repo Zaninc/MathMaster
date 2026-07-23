@@ -171,6 +171,16 @@ function isTrigonometric(expression: string): boolean {
 }
 
 /**
+ * Sprint V2.1 — reconhece a sintaxe principal do somatório (Σ(...)) e os
+ * aliases secundários (sum(.../somatorio(...), só por PREFIXO — mesmo
+ * critério de `is_summation_domain_expression` no backend, nunca por
+ * ocorrência no meio do texto.
+ */
+function isSummation(expression: string): boolean {
+  return /^\s*(Σ\(|sum\(|somatorio\()/i.test(expression);
+}
+
+/**
  * `x - a` de uma equação "x - a = 0" para virar uma função plotável — só
  * quando o lado direito é exatamente "0" (o único caso inequívoco); em
  * qualquer outra forma, a sugestão de gráfico é omitida (melhor não
@@ -183,6 +193,26 @@ function quadraticLeftHandSide(expression: string): string | null {
 
 /** Sem correspondência = array vazio = `ResultPanel` não renderiza o bloco "Explorar". */
 export function getCalculatorExplorations(expression: string): RelatedLink[] {
+  // Checado ANTES de `isQuadraticEquation`: um corpo de somatório como
+  // "Σ(i=1..5) sin(i)^2 + cos(i)^2" contém tanto "=" (no cabeçalho) quanto
+  // "^2" — seria roubado pela heurística de equação do 2º grau se checado
+  // depois. Mesmo raciocínio já aplicado na cascata do backend.
+  if (isSummation(expression)) {
+    // Gráfico NÃO incluído aqui de propósito (escopo consciente da Sprint
+    // V2.1): um somatório é uma soma discreta, não uma função contínua de x
+    // — reaproveitar `graphsLink(fn)` produziria uma função errada, e
+    // `graph-normalize.ts`/`plot-evaluator.ts` não têm hoje nenhum
+    // precedente de dado discreto (ver auditoria da sprint). Contrato
+    // futuro documentado, não implementado: uma rota dedicada (não
+    // `graphsLink`) recebendo `tipo=somatorio`, `variavel`, `inferior`,
+    // `superior` e `expressao` como parâmetros, para uma visualização
+    // discreta própria (nunca plotada como curva contínua).
+    return [
+      { icon: "📚", label: "Ver fórmula relacionada", href: formulasLink({ categoria: "somatorios" }) },
+      { icon: "📝", label: "Praticar exercícios semelhantes", href: exercisesLink("somatorios") },
+    ];
+  }
+
   if (isQuadraticEquation(expression)) {
     const links: RelatedLink[] = [];
     const lhs = quadraticLeftHandSide(expression);

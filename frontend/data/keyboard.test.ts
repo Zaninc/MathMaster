@@ -106,6 +106,16 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(power?.selection).toBeUndefined();
   });
 
+  it("tecla Σ (Símbolos) insere a sintaxe principal do somatório já preenchida", () => {
+    const simbolos = KEYBOARD_CATEGORIES.find((category) => category.id === "simbolos");
+    const key = simbolos?.keys.find((candidate) => candidate.label === "Σ");
+    expect(key).toBeDefined();
+    expect(key!.insert).toBe("Σ(i=1..10) i");
+    expect(key!.cursorOffset).toBe(key!.insert.length);
+    expect(key!.latex).toBe("\\sum_{i=1}^{n}");
+    expect(key!.ariaLabel).toBeDefined();
+  });
+
   it("nenhuma tecla insere um operador cru sem operandos", () => {
     for (const category of KEYBOARD_CATEGORIES) {
       for (const key of category.keys) {

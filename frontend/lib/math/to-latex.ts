@@ -216,6 +216,21 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
     return `\\lim_{${variable} \\to ${point}} ${body}`;
   }
 
+  // Aliases secundários do somatório (sintaxe principal é "Σ(var=inf..sup)
+  // expr", tratada à parte em `inputToLatex`/`tryWholeSum" — esta forma só
+  // existe porque "sum(...)"/"somatorio(...)" já É sintaxe mathjs válida
+  // (chamada de função com 4 argumentos), então o mathjs a reconheceria
+  // sozinho e a renderizaria com o template genérico se este caso não
+  // existisse aqui. Ordem oficial: variável, limite inferior, limite
+  // superior, expressão — mesma ordem do backend (`summation/parsing.py`).
+  if ((name === "sum" || name === "somatorio") && nodeArgs.length === 4) {
+    const variable = texOf(nodeArgs[0], options);
+    const lower = texOf(nodeArgs[1], options);
+    const upper = texOf(nodeArgs[2], options);
+    const body = texOf(nodeArgs[3], options);
+    return `\\sum_{${variable}=${lower}}^{${upper}} ${body}`;
+  }
+
   return undefined;
 }
 
@@ -266,12 +281,20 @@ const EQUATION_SPLIT = /(?<![<>!=])=(?!=)/;
  * Expressão ou equação/lista de igualdades ("x = 2", "f(2) = 10",
  * "x₁ = -2"). Cada lado é convertido separadamente — "=" nunca chega ao
  * mathjs (lá seria atribuição, com outro significado).
+ *
+ * Sprint V2.1 (apresentação progressiva): checa a notação Σ ANTES de
+ * dividir por "=" — o cabeçalho "Σ(i=1..30) ..." tem um "=" próprio (parte
+ * do "i=1..30") que `EQUATION_SPLIT` cortaria no lugar errado. Necessário
+ * aqui (não só em `inputToLatex`) porque, a partir desta sprint, o BACKEND
+ * pode devolver a própria notação Σ como `result` (somatório que não
+ * expande) — `resultToLatex`/`valueToLatex` chegam a esta função também.
  */
 export async function expressionToLatex(text: string): Promise<string | null> {
-  const pieces = text
-    .trim()
-    .split(EQUATION_SPLIT)
-    .map((side) => side.trim());
+  const trimmed = text.trim();
+  const sigmaSum = await sigmaSumToLatex(trimmed);
+  if (sigmaSum !== null) return sigmaSum;
+
+  const pieces = trimmed.split(EQUATION_SPLIT).map((side) => side.trim());
   if (pieces.some((piece) => piece === "")) return null;
 
   const rendered: string[] = [];
@@ -413,6 +436,41 @@ const INTEGRAL_INDEFINITE = /^∫\s*(.+?)\s*d([a-zA-Z])$/;
 // "->" além de "→": o backend aceita as duas setas (`_VAR_ARROW` em
 // natural_notation.py) — o catálogo daqui espelha o reconhecimento de lá.
 const LIMIT_INPUT = /^lim\s*(?:_\{|\(|_)?\s*([a-zA-Z])\s*(?:->|→)\s*([^)}\s]+)\s*(?:\}|\))?\s*(.+)$/;
+const SUM_SIGMA_PREFIX = /^Σ\(/;
+
+/**
+ * "Σ(variavel=inferior..superior) expressao" — sintaxe principal do
+ * somatório (Sprint V2.1). Diferente de derivada/integral/limite, o corpo
+ * não fica dentro dos mesmos parênteses do cabeçalho (pode conter parênteses
+ * próprios, ex. "Σ(i=1..5) sin(i)^2 + cos(i)^2"), então usa o mesmo
+ * bracket-matching de `findMatchingParen` em vez de um regex único.
+ * Retorna `null` (cabeçalho incompleto/malformado) em vez de lançar — quem
+ * chama cai para o Tier 2, que nunca falha.
+ */
+async function sigmaSumToLatex(trimmed: string): Promise<string | null> {
+  if (!SUM_SIGMA_PREFIX.test(trimmed)) return null;
+  const openIndex = trimmed.indexOf("(");
+  const close = findMatchingParen(trimmed, openIndex);
+  if (close === null) return null;
+
+  const header = trimmed.slice(openIndex + 1, close);
+  const body = trimmed.slice(close + 1).trim();
+  const eqIndex = header.indexOf("=");
+  if (eqIndex === -1 || body === "") return null;
+  const dotsIndex = header.indexOf("..", eqIndex);
+  if (dotsIndex === -1) return null;
+
+  const variable = header.slice(0, eqIndex).trim();
+  const lowerRaw = header.slice(eqIndex + 1, dotsIndex).trim();
+  const upperRaw = header.slice(dotsIndex + 2).trim();
+
+  const lower = await singleExpressionToLatex(lowerRaw);
+  const upper = await singleExpressionToLatex(upperRaw);
+  const bodyLatex = await expressionToLatex(body);
+  if (lower === null || upper === null || bodyLatex === null) return null;
+
+  return `\\sum_{${variable}=${lower}}^{${upper}} ${bodyLatex}`;
+}
 
 async function boundsToLatex(raw: string, table: Record<string, string> | null): Promise<string | null> {
   const ascii = table === null ? raw : translateRun(raw, table);
@@ -427,6 +485,9 @@ async function boundsToLatex(raw: string, table: Record<string, string> | null):
  */
 export async function inputToLatex(text: string): Promise<string | null> {
   const trimmed = text.trim();
+
+  const sigmaSum = await sigmaSumToLatex(trimmed);
+  if (sigmaSum !== null) return sigmaSum;
 
   const derivative = trimmed.match(DERIVATIVE_INPUT);
   if (derivative) {
@@ -584,7 +645,9 @@ function renderCall(name: string, argsText: string): string {
     return `\\lim_{${rawArgs[1]} \\to ${args[2]}} ${args[0]}`;
   }
   if (SUM_NAMES.has(name) && args.length === 4) {
-    return `\\sum_{${rawArgs[1]}=${args[2]}}^{${args[3]}} ${args[0]}`;
+    // Ordem oficial: variável, limite inferior, limite superior, expressão
+    // (mesma ordem do backend, `summation/parsing.py`).
+    return `\\sum_{${escapeLatexText(rawArgs[0])}=${args[1]}}^{${args[2]}} ${args[3]}`;
   }
 
   const label = name.length < 3 ? escapeLatexText(name) : `\\operatorname{${escapeLatexText(name)}}`;
@@ -644,6 +707,34 @@ function tryWholeLimit(text: string): string | null {
   const point = convertFragment(match[2]);
   const body = convertFragment(match[3]);
   return `\\lim_{${match[1]} \\to ${point}} ${body}`;
+}
+
+/**
+ * Rede de segurança do Tier 2 para a sintaxe principal do somatório
+ * ("Σ(var=inf..sup) expr") — usada só quando o Tier 1 (`sigmaSumToLatex`,
+ * via mathjs, fidelidade máxima) não reconhece a entrada (típico durante a
+ * digitação, cabeçalho ainda incompleto). Mesmo bracket-matching de
+ * `findMatchingParen`; nunca lança, cai para `flatScan` linha abaixo se o
+ * cabeçalho não estiver bem formado.
+ */
+function tryWholeSum(text: string): string | null {
+  if (!text.startsWith("Σ(")) return null;
+  const openIndex = text.indexOf("(");
+  const close = findMatchingParen(text, openIndex);
+  if (close === null) return null;
+
+  const header = text.slice(openIndex + 1, close);
+  const body = text.slice(close + 1).trim();
+  const eqIndex = header.indexOf("=");
+  if (eqIndex === -1 || body === "") return null;
+  const dotsIndex = header.indexOf("..", eqIndex);
+  if (dotsIndex === -1) return null;
+
+  const variable = header.slice(0, eqIndex).trim();
+  const lower = header.slice(eqIndex + 1, dotsIndex).trim();
+  const upper = header.slice(dotsIndex + 2).trim();
+
+  return `\\sum_{${escapeLatexText(variable)}=${convertFragment(lower)}}^{${convertFragment(upper)}} ${convertFragment(body)}`;
 }
 
 function tryWholeCall(text: string): string | null {
@@ -857,6 +948,7 @@ function convertFragment(raw: string): string {
     tryWholeDerivative(text) ??
     tryWholeIntegral(text) ??
     tryWholeLimit(text) ??
+    tryWholeSum(text) ??
     tryWholeCall(text) ??
     tryWholeGroup(text) ??
     flatScan(text)

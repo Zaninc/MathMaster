@@ -97,4 +97,22 @@ describe("getCalculatorExplorations", () => {
   it("expressão sem classificação não sugere nada", () => {
     expect(getCalculatorExplorations("2 + 2")).toEqual([]);
   });
+
+  it("somatório (sintaxe principal Σ) sugere fórmula e exercícios de Somatórios", () => {
+    const links = getCalculatorExplorations("Σ(i=1..10) i");
+    expect(links).toEqual([
+      { icon: "📚", label: "Ver fórmula relacionada", href: formulasLink({ categoria: "somatorios" }) },
+      { icon: "📝", label: "Praticar exercícios semelhantes", href: exercisesLink("somatorios") },
+    ]);
+  });
+
+  it("somatório via aliases sum(...)/somatorio(...) é reconhecido do mesmo jeito", () => {
+    expect(getCalculatorExplorations("sum(i,1,10,i)")).toHaveLength(2);
+    expect(getCalculatorExplorations("somatorio(i,1,10,i)")).toHaveLength(2);
+  });
+
+  it("corpo de somatório com '^2' e '=' no cabeçalho não é roubado pela heurística de equação do 2º grau", () => {
+    const links = getCalculatorExplorations("Σ(i=1..5) sin(i)^2 + cos(i)^2");
+    expect(links.map((link) => link.label)).toEqual(["Ver fórmula relacionada", "Praticar exercícios semelhantes"]);
+  });
 });

@@ -181,6 +181,19 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
       { label: "≥", insert: "≥", cursorOffset: 1, ariaLabel: "Inserir maior ou igual" },
       { label: "≠", insert: "≠", cursorOffset: 1, ariaLabel: "Inserir diferente" },
       { label: "∫", insert: "∫", cursorOffset: 1, ariaLabel: "Inserir integral", latex: "\\int" },
+      {
+        // Sprint V2.1 — sintaxe principal do somatório (Σ(var=inf..sup)
+        // expr). Insere um exemplo completo e válido (não um template vazio
+        // com parênteses, diferente de d/dx()/∫() dx): os limites/variável
+        // já preenchidos são o ponto de partida mais rápido para editar,
+        // mesmo raciocínio do resto do teclado ("o usuário enxerga no campo
+        // praticamente o mesmo símbolo que clicou").
+        label: "Σ",
+        insert: "Σ(i=1..10) i",
+        cursorOffset: "Σ(i=1..10) i".length,
+        ariaLabel: "Inserir somatório",
+        latex: "\\sum_{i=1}^{n}",
+      },
     ],
   },
 ];

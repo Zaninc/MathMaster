@@ -77,6 +77,14 @@ describe("expressionToLatex", () => {
     expect(limit).toContain("\\sin");
   });
 
+  it("converte os aliases sum(...)/somatorio(...) (ordem: variável, inferior, superior, expressão)", async () => {
+    const sum = normalized(await expressionToLatex("sum(i,1,10,i)"));
+    expect(sum).toContain("\\sum_{i=1}^{10}");
+
+    const somatorio = normalized(await expressionToLatex("somatorio(i,1,10,i)"));
+    expect(somatorio).toContain("\\sum_{i=1}^{10}");
+  });
+
   it("falha fechado para símbolos fora do catálogo e palavras puras", async () => {
     expect(await expressionToLatex("Perpendiculares ⊥")).toBeNull();
     expect(await expressionToLatex("crescente")).toBeNull();
@@ -180,6 +188,16 @@ describe("resultToLatex", () => {
     expect(await resultToLatex("Relação entre as retas: Perpendiculares ⊥")).toBeNull();
   });
 
+  it("converte a notação Σ compacta como RESULTADO (Sprint V2.1 — somatório que não expande)", async () => {
+    // O "=" dentro de "i=1..30" não pode ser confundido com o separador de
+    // equação — regressão do bug real encontrado na validação manual desta
+    // sprint (resultToLatex caía pro fallback de texto puro).
+    const segments = await resultToLatex("Σ(i=1..30) sin(i)");
+    expect(segments).toHaveLength(1);
+    expect(segments![0].label).toBeNull();
+    expect(normalized(segments![0].latex)).toContain("\\sum_{i=1}^{30}");
+  });
+
   it("mantém segmentos textuais no meio de segmentos matemáticos", async () => {
     const segments = await resultToLatex(
       "Tipo: função logarítmica; Domínio: (0, +∞); Monotonicidade: crescente"
@@ -233,6 +251,37 @@ describe("inputToLatex (echo da expressão digitada)", () => {
   it("falha fechado para sintaxe de geometria (tuplas)", async () => {
     expect(await inputToLatex("circunferencia((0,0),5)")).toBeNull();
     expect(await inputToLatex("distancia((0,0),(3,4))")).toBeNull();
+  });
+
+  // --- Sprint V2.1: sintaxe principal do somatório Σ(var=inf..sup) expr ---
+
+  it("converte a sintaxe principal do somatório", async () => {
+    const latex = normalized(await inputToLatex("Σ(i=1..10) i"));
+    expect(latex).toContain("\\sum_{i=1}^{10}");
+  });
+
+  it("converte o corpo do somatório com fidelidade real (fração, não texto com '/')", async () => {
+    const latex = normalized(await inputToLatex("Σ(i=1..5) ((i²+1)/(2*i))"));
+    expect(latex).toContain("\\sum_{i=1}^{5}");
+    expect(latex).toContain("\\frac");
+    expect(latex).toContain("{i}^{2}+1");
+  });
+
+  it("preserva um corpo com mais de uma função (parênteses próprios)", async () => {
+    const latex = normalized(await inputToLatex("Σ(i=1..5) sin(i)^2 + cos(i)^2"));
+    expect(latex).toContain("\\sum_{i=1}^{5}");
+    expect(latex).toContain("\\sin");
+    expect(latex).toContain("\\cos");
+  });
+
+  it("aceita limite inferior negativo", async () => {
+    const latex = normalized(await inputToLatex("Σ(i=-3..3) (2*i+1)"));
+    expect(latex).toContain("\\sum_{i=-3}^{3}");
+  });
+
+  it("cabeçalho incompleto (ainda digitando) devolve null — Tier 2 assume o preview", async () => {
+    expect(await inputToLatex("Σ(i=1..")).toBeNull();
+    expect(await inputToLatex("Σ(i=1..10)")).toBeNull();
   });
 });
 
@@ -360,6 +409,18 @@ describe("safeExpressionLatex (Tier 2 — nunca falha)", () => {
       expect(safeExpressionLatex(input).length, input).toBeGreaterThan(0);
     }
   });
+
+  it("somatório completo (rede de segurança, mesmo resultado do Tier 1)", () => {
+    const latex = safeExpressionLatex("Σ(i=1..10) i");
+    expect(latex).toContain("\\sum_{i=1}^{10}");
+    assertRendersSafely(latex, "Σ(i=1..10) i");
+  });
+
+  it("somatório com cabeçalho incompleto (ainda digitando) nunca lança", () => {
+    for (const input of ["Σ(i=1..", "Σ(i=1..10", "Σ("]) {
+      assertRendersSafely(safeExpressionLatex(input), input);
+    }
+  });
 });
 
 describe("previewLatex (pipeline único da pré-visualização e do histórico)", () => {
@@ -395,5 +456,15 @@ describe("previewLatex (pipeline único da pré-visualização e do histórico)"
     expect(normalized(await previewLatex("derivada(x**2, x)"))).toContain("\\frac{d}{dx}");
     expect(normalized(await previewLatex("integral(x**2, x, 0, 1)"))).toContain("\\int_{0}^{1}");
     expect(normalized(await previewLatex("limite(sen(x)/x, x, 0)"))).toContain("\\operatorname{sen}");
+  });
+
+  it("reconhece a sintaxe principal do somatório, completa ou ainda em digitação", async () => {
+    expect(normalized(await previewLatex("Σ(i=1..10) i"))).toContain("\\sum_{i=1}^{10}");
+
+    for (const input of ["Σ(i=1..", "Σ(i=1..10)", "Σ("]) {
+      const latex = await previewLatex(input);
+      expect(latex, input).not.toBeNull();
+      assertRendersSafely(latex as string, input);
+    }
   });
 });
