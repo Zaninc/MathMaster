@@ -9,7 +9,7 @@ import { MathKeyboard } from "@/components/math-input/MathKeyboard";
 import { MathPreview } from "@/components/math-input/MathPreview";
 import { Button } from "@/components/shared/Button";
 import { ExampleButton } from "@/components/shared/ExampleButton";
-import { QUICK_EXAMPLES } from "@/data/examples";
+import { CALCULATOR_QUICK_EXAMPLES } from "@/data/examples";
 import type { KeyboardKey } from "@/data/keyboard";
 import { apiClient } from "@/lib/api/client";
 import type { HistoryItem } from "@/lib/api/types";
@@ -194,7 +194,7 @@ export function CalculatorWorkspace() {
           <div className="order-4 lg:order-3">
             <p className="mb-2 text-sm font-medium text-text-secondary">Exemplos</p>
             <div className="flex flex-wrap gap-2">
-              {QUICK_EXAMPLES.map((example) => (
+              {CALCULATOR_QUICK_EXAMPLES.map((example) => (
                 <ExampleButton key={example.expression} example={example} onSelect={fillExpression} />
               ))}
             </div>

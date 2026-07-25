@@ -6,6 +6,12 @@ export interface QuickExample {
 /**
  * Os 6 exemplos pedidos no briefing da Sprint Frontend V1 — todos
  * confirmados contra o backend real (smoke test manual, Etapa 1).
+ *
+ * Consumida hoje só pela Home (`components/home/QuickCalculator.tsx`) —
+ * a Calculadora (`components/calculator/CalculatorWorkspace.tsx`) usa
+ * `CALCULATOR_QUICK_EXAMPLES` (abaixo) desde a simplificação pós-Sprint
+ * V2.3. Separadas deliberadamente: a Home pede para não mexer nos
+ * exemplos das "outras páginas" ao ajustar só a vitrine da Calculadora.
  */
 export const QUICK_EXAMPLES: QuickExample[] = [
   { label: "x² - 4 = 0", expression: "x² - 4 = 0" },
@@ -38,6 +44,32 @@ export const QUICK_EXAMPLES: QuickExample[] = [
   { label: "modulo(3+4i)", expression: "modulo(3+4i)" },
   { label: "argumento(1+i)", expression: "argumento(1+i)" },
   { label: "polar(1+i)", expression: "polar(1+i)" },
+];
+
+/**
+ * Vitrine rápida da Calculadora (`/calculadora`) — 10 exemplos fixos, um
+ * por área do motor, NUNCA um catálogo completo do que é suportado
+ * (decisão de UX do Theo, pós-Sprint V2.3: `QUICK_EXAMPLES` tinha
+ * crescido para 18 itens ali, virando exemplo de cada operação nova em
+ * vez de continuar uma vitrine). Operações que não aparecem mais aqui
+ * (ex. det/inv/transpose, multiplicação de matrizes, conjugado/
+ * argumento/polar de complexos) continuam 100% suportadas pelo motor —
+ * só deixaram de ocupar espaço na tela principal da calculadora;
+ * permanecem acessíveis pela Biblioteca de Fórmulas e pelos exemplos
+ * próprios de cada categoria lá (`data/formulas.ts`). Ordem fixa, todos
+ * confirmados contra o backend real.
+ */
+export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
+  { label: "x² - 4 = 0", expression: "x² - 4 = 0" },
+  { label: "sen(π/6)", expression: "sen(π/6)" },
+  { label: "d/dx(x² + 3x)", expression: "d/dx(x² + 3x)" },
+  { label: "∫₀¹ x² dx", expression: "∫₀¹ x² dx" },
+  { label: "lim x→0 sen(x)/x", expression: "lim x→0 sen(x)/x" },
+  { label: "circunferencia((0,0),5)", expression: "circunferencia((0,0),5)" },
+  { label: "Σ(i=1..10) i", expression: "Σ(i=1..10) i" },
+  { label: "[[1,2],[3,4]]", expression: "[[1,2],[3,4]]" },
+  { label: "(2+i)(3-i)", expression: "(2+i)(3-i)" },
+  { label: "|3+4i|", expression: "|3+4i|" },
 ];
 
 export interface QuickShortcut {
