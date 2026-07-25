@@ -79,10 +79,17 @@ export const MathFormula = forwardRef<HTMLElement, MathFormulaProps>(function Ma
     // estourar a coluna lateral (280-340px) do painel de resultados.
     // `.katex-display` traz `margin: 1em 0` do CSS do KaTeX — zerado aqui
     // para que o espaçamento vertical fique a cargo do layout consumidor.
+    // `pr-1`: o próprio HTML do KaTeX (delimitadores SVG do `\left`/`\right`,
+    // ex. em matrizes) mede alguns px a mais de `scrollWidth` do que o
+    // `clientWidth` do wrapper por arredondamento sub-pixel do layout do
+    // KaTeX — mesmo quando o conteúdo cabe visualmente, o que fazia
+    // `overflow-x-auto` mostrar uma barra permanente e falsa. A folga
+    // absorve esse ruído sem mascarar overflow real (confirmado com uma
+    // matriz 5x5 genuinamente larga, que continua rolando normalmente).
     return (
       <div
         ref={ref as React.Ref<HTMLDivElement>}
-        className={`max-w-full overflow-x-auto overflow-y-hidden [&_.katex-display]:my-0 ${className ?? ""}`.trim()}
+        className={`max-w-full overflow-x-auto overflow-y-hidden pr-1 [&_.katex-display]:my-0 ${className ?? ""}`.trim()}
         dangerouslySetInnerHTML={{ __html: html }}
       />
     );
@@ -97,7 +104,7 @@ export const MathFormula = forwardRef<HTMLElement, MathFormulaProps>(function Ma
     return (
       <span
         ref={ref as React.Ref<HTMLSpanElement>}
-        className={`block max-w-full overflow-x-auto overflow-y-hidden align-middle [&_.katex-display]:my-0 ${className ?? ""}`.trim()}
+        className={`block max-w-full overflow-x-auto overflow-y-hidden pr-1 align-middle [&_.katex-display]:my-0 ${className ?? ""}`.trim()}
         dangerouslySetInnerHTML={{ __html: html }}
       />
     );
