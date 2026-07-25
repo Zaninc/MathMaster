@@ -130,6 +130,16 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(key!.ariaLabel).toBeDefined();
   });
 
+  it("tecla i (Símbolos) insere a unidade imaginária minúscula", () => {
+    const simbolos = KEYBOARD_CATEGORIES.find((category) => category.id === "simbolos");
+    const key = simbolos?.keys.find((candidate) => candidate.label === "i");
+    expect(key).toBeDefined();
+    expect(key!.insert).toBe("i");
+    expect(key!.cursorOffset).toBe(1);
+    expect(key!.latex).toBe("i");
+    expect(key!.ariaLabel).toBeDefined();
+  });
+
   it("nenhuma tecla insere um operador cru sem operandos", () => {
     for (const category of KEYBOARD_CATEGORIES) {
       for (const key of category.keys) {

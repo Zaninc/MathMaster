@@ -31,6 +31,13 @@ export const QUICK_EXAMPLES: QuickExample[] = [
   // `matrix/parsing.py`/`matrix/evaluator.py`), só deixou de aparecer como
   // exemplo rápido. Nenhuma mudança de backend, teclado, histórico ou
   // Biblioteca de Fórmulas.
+  // Sprint V2.3 — Motor de Números Complexos.
+  { label: "3+4i", expression: "3+4i" },
+  { label: "(2+i)(3-i)", expression: "(2+i)(3-i)" },
+  { label: "conjugado(3+4i)", expression: "conjugado(3+4i)" },
+  { label: "modulo(3+4i)", expression: "modulo(3+4i)" },
+  { label: "argumento(1+i)", expression: "argumento(1+i)" },
+  { label: "polar(1+i)", expression: "polar(1+i)" },
 ];
 
 export interface QuickShortcut {

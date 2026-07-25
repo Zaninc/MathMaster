@@ -192,6 +192,33 @@ describe("expressionToLatex", () => {
     expect(latex).toContain("\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}");
     expect(latex).not.toContain("\\right)");
   });
+
+  // --- Sprint V2.3 (Motor de Números Complexos) — o mathjs já reconhece
+  // "i" nativamente como unidade imaginária; só os aliases PT-BR/EN de
+  // função (conjugado/conj/modulo/abs/argumento/arg) precisam de um caso
+  // dedicado (ver `COMPLEX_ALIAS_LATEX`).
+
+  it("converte a unidade imaginária e aritmética retangular", async () => {
+    expect(normalized(await expressionToLatex("3+4i"))).toContain("i");
+    expect(normalized(await expressionToLatex("(2+i)*(3-i)"))).toContain(
+      "\\left(2+i\\right)\\cdot\\left(3-i\\right)"
+    );
+  });
+
+  it("converte conjugado/conj com a notação de barra superior", async () => {
+    expect(normalized(await expressionToLatex("conjugado(3+4i)"))).toContain("\\overline{3+4i}");
+    expect(await expressionToLatex("conj(3+4i)")).toBe(await expressionToLatex("conjugado(3+4i)"));
+  });
+
+  it("converte modulo/abs com a notação de módulo (barras)", async () => {
+    expect(normalized(await expressionToLatex("modulo(3+4i)"))).toContain("\\left|3+4i\\right|");
+    expect(await expressionToLatex("abs(3+4i)")).toBe(await expressionToLatex("modulo(3+4i)"));
+  });
+
+  it("converte argumento/arg com \\arg", async () => {
+    expect(normalized(await expressionToLatex("argumento(1+i)"))).toContain("\\arg\\left(1+i\\right)");
+    expect(await expressionToLatex("arg(1+i)")).toBe(await expressionToLatex("argumento(1+i)"));
+  });
 });
 
 describe("valueToLatex", () => {
@@ -268,6 +295,28 @@ describe("valueToLatex", () => {
     expect(latex).toContain("\\left[");
     expect(latex).toContain("\\right]");
   });
+
+  // --- Sprint V2.3 (Motor de Números Complexos) — forma polar. O "·" e a
+  // justaposição "r(" (sem "*") tornam essa string ilegível para o
+  // pipeline genérico do mathjs (confirmado empiricamente) — precisa do
+  // reconhecimento estrutural dedicado de `polarFormToLatex`.
+
+  it("converte a forma polar do resultado (√r + cos/sin + i·sin)", async () => {
+    const latex = normalized(await valueToLatex("√2(cos(π/4)+i·sin(π/4))"));
+    expect(latex).toContain("\\sqrt{2}");
+    expect(latex).toContain("\\cos\\left(\\frac{\\pi}{4}\\right)");
+    expect(latex).toContain("\\sin\\left(\\frac{\\pi}{4}\\right)");
+  });
+
+  it("converte a forma polar com ângulo sem fração de π (fica simbólico)", async () => {
+    const latex = normalized(await valueToLatex("5(cos(atan(4/3))+i·sin(atan(4/3)))"));
+    expect(latex).toContain("\\cos");
+    expect(latex).toContain("\\sin");
+  });
+
+  it("forma polar malformada (θ diferente em cos/sin) não é reconhecida (fail-closed)", async () => {
+    expect(await valueToLatex("√2(cos(π/4)+i·sin(π/3))")).toBeNull();
+  });
 });
 
 describe("resultToLatex", () => {
@@ -325,6 +374,21 @@ describe("resultToLatex", () => {
     expect(segments).toHaveLength(1);
     expect(segments![0].label).toBeNull();
     expect(normalized(segments![0].latex)).toContain("\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}");
+  });
+
+  it("converte um resultado de aritmética complexa (Sprint V2.3) como segmento único", async () => {
+    const segments = await resultToLatex("7 + i");
+    expect(segments).toHaveLength(1);
+    expect(segments![0].label).toBeNull();
+    expect(normalized(segments![0].latex)).toContain("i");
+  });
+
+  it("converte um resultado em forma polar (Sprint V2.3) — nunca cai pro texto cru", async () => {
+    const segments = await resultToLatex("√2(cos(π/4)+i·sin(π/4))");
+    expect(segments).toHaveLength(1);
+    expect(segments![0].label).toBeNull();
+    expect(segments![0].latex).not.toBeNull();
+    expect(normalized(segments![0].latex)).toContain("\\sqrt{2}");
   });
 
   it("converte um resultado escalar de det(...) normalmente (não é reconhecido como matriz)", async () => {
@@ -644,6 +708,30 @@ describe("previewLatex (pipeline único da pré-visualização e do histórico)"
 
   it("digitação incompleta de um programa de matriz (ainda no meio de uma atribuição) nunca lança", async () => {
     for (const input of ["A=[[1,2],[3,4]]\nB=", "A=[[1,2],[3,4]]\nB=[[5,", "A=[[1,2],[3,4]]\n"]) {
+      const latex = await previewLatex(input);
+      expect(latex, input).not.toBeNull();
+      assertRendersSafely(latex as string, input);
+    }
+  });
+
+  // --- Sprint V2.3 (Motor de Números Complexos) ---------------------------
+
+  it("mostra a unidade imaginária e aritmética retangular assim que digitadas", async () => {
+    for (const input of ["i", "3-4i", "(2+i)*(3-i)"]) {
+      const latex = await previewLatex(input);
+      expect(latex, input).not.toBeNull();
+      assertRendersSafely(latex as string, input);
+    }
+  });
+
+  it("mostra conjugado/modulo/argumento renderizados assim que a chamada fica completa", async () => {
+    expect(normalized(await previewLatex("conjugado(3+4i)"))).toContain("\\overline{3+4i}");
+    expect(normalized(await previewLatex("modulo(3+4i)"))).toContain("\\left|3+4i\\right|");
+    expect(normalized(await previewLatex("argumento(1+i)"))).toContain("\\arg\\left(1+i\\right)");
+  });
+
+  it("digitação incompleta de conjugado/modulo/argumento/polar nunca lança e sempre renderiza em segurança (Tier 2)", async () => {
+    for (const input of ["conjugado(", "modulo(", "argumento(", "polar(", "polar(1+i"]) {
       const latex = await previewLatex(input);
       expect(latex, input).not.toBeNull();
       assertRendersSafely(latex as string, input);

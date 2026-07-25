@@ -8,6 +8,7 @@ import {
   getFormulaConnections,
   getGeometryConnections,
   graphsLink,
+  isComplex,
 } from "./connections";
 
 describe("URL helpers", () => {
@@ -215,5 +216,54 @@ describe("getCalculatorExplorations", () => {
     // uso pretendido, mas documentado aqui para não regredir em silêncio.
     const links = getCalculatorExplorations("A=[[1,2],[3,4]]\n5");
     expect(links.map((link) => link.label)).toContain("Ver fórmulas relacionadas");
+  });
+
+  // --- Sprint V2.3 (Motor de Números Complexos) --------------------------
+
+  it("aritmética com i sugere fórmulas e exercícios de Números Complexos", () => {
+    const links = getCalculatorExplorations("(2+i)*(3-i)");
+    expect(links).toEqual([
+      { icon: "📚", label: "Ver fórmulas relacionadas", href: formulasLink({ categoria: "numeros-complexos" }) },
+      { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("numeros-complexos") },
+    ]);
+  });
+
+  it("chamada de função complexa em qualquer posição (ex. 'i' colado a um dígito) é reconhecida", () => {
+    expect(getCalculatorExplorations("3-4i")).toHaveLength(2);
+    expect(getCalculatorExplorations("conjugado(3+4i)")).toHaveLength(2);
+    expect(getCalculatorExplorations("modulo(3+4i)")).toHaveLength(2);
+  });
+
+  it("equação usando 'i' (ex. 'i^2 = -1') não é roubada pelo gate de números complexos", () => {
+    expect(isComplex("i^2 = -1")).toBe(false);
+  });
+});
+
+describe("isComplex", () => {
+  it("reconhece a unidade imaginária isolada, mesmo colada a um dígito", () => {
+    expect(isComplex("2+i")).toBe(true);
+    expect(isComplex("3-4i")).toBe(true);
+    expect(isComplex("-5+2i")).toBe(true);
+    expect(isComplex("i")).toBe(true);
+  });
+
+  it("reconhece as quatro funções, canônicas e aliases PT-BR/EN", () => {
+    for (const name of ["conjugado", "conj", "modulo", "abs", "argumento", "arg", "polar"]) {
+      expect(isComplex(`${name}(1+i)`), name).toBe(true);
+    }
+  });
+
+  it("não confunde 'i' dentro de um identificador maior com a unidade imaginária", () => {
+    expect(isComplex("circunferencia((0,0),5)")).toBe(false);
+    expect(isComplex("sin(x)")).toBe(false);
+  });
+
+  it("nunca reivindica uma expressão com '=' (preserva equações/definições existentes)", () => {
+    expect(isComplex("modulo(x) = 5")).toBe(false);
+    expect(isComplex("i = 5")).toBe(false);
+  });
+
+  it("expressão sem nenhuma referência a i não é reconhecida", () => {
+    expect(isComplex("2 + 2")).toBe(false);
   });
 });

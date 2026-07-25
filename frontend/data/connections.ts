@@ -132,6 +132,26 @@ export const FORMULA_CONNECTIONS: Partial<Record<string, RelatedLink[]>> = {
   ],
   "matriz-identidade": [{ icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("[[1,0],[0,1]]") }],
   "traco-matriz": [{ icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("trace([[1,2],[3,4]])") }],
+  // Sprint V2.3 — Motor de Números Complexos.
+  "definicao-numero-complexo": [
+    { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("3+4i") },
+    { icon: "📝", label: "Exercícios relacionados", href: exercisesLink("numeros-complexos") },
+  ],
+  "conjugado-complexo": [
+    { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("conjugado(3+4i)") },
+  ],
+  "modulo-complexo": [
+    { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("modulo(3+4i)") },
+  ],
+  "argumento-complexo": [
+    { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("argumento(1+i)") },
+  ],
+  "forma-polar-complexo": [
+    { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("polar(1+i)") },
+  ],
+  "formula-euler": [
+    { icon: "🧮", label: "Ver forma polar relacionada", href: calculatorLink("polar(1+i)") },
+  ],
 };
 
 export function getFormulaConnections(formulaId: string): RelatedLink[] {
@@ -209,6 +229,30 @@ const MATRIX_FUNCTION_PATTERN =
 
 function isMatrix(expression: string): boolean {
   return expression.includes("[[") || MATRIX_FUNCTION_PATTERN.test(expression);
+}
+
+/**
+ * Sprint V2.3 (Motor de Números Complexos) — mesmo critério do backend
+ * (`complex/dispatcher.py:is_complex_domain_expression`): uma chamada
+ * conhecida (canônica ou alias PT-BR/EN) em qualquer posição, OU a
+ * unidade imaginária como token isolado — nunca quando a expressão
+ * contém "=" (preserva o comportamento de equações/definições de função
+ * já existente, mesmo raciocínio do backend).
+ */
+const COMPLEX_FUNCTION_PATTERN = /\b(conjugado|conj|modulo|abs|argumento|arg|polar)\s*\(/i;
+
+// "i"/"I" isolado de QUALQUER letra/underscore dos dois lados — mas
+// dígito colado do lado esquerdo é permitido de propósito, para casar
+// "4i"/"-4i"/"3-4i" (implicit multiplication). NÃO usar `\bi\b`: dígito
+// também é caractere de palavra para `\b`, então não haveria fronteira
+// entre "4" e "i" — mesmo bug (e mesma correção) do backend, ver
+// `complex/dispatcher.py`.
+const IMAGINARY_UNIT_TOKEN_PATTERN = /(?<![A-Za-z_])[iI](?![A-Za-z_])/;
+
+export function isComplex(expression: string): boolean {
+  if (expression.includes("=")) return false;
+  if (COMPLEX_FUNCTION_PATTERN.test(expression)) return true;
+  return IMAGINARY_UNIT_TOKEN_PATTERN.test(expression);
 }
 
 /**
@@ -343,6 +387,21 @@ export function getCalculatorExplorations(expression: string): RelatedLink[] {
     });
     links.push({ icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-linear") });
     return links;
+  }
+
+  // Checado logo depois de `isMatrix` — mesma posição do Motor de Números
+  // Complexos na cascata do backend (`math_engine/dispatcher.py`: complex
+  // entra depois de matrix, antes de calculus/functions/trigonometry/
+  // logarithms/equations).
+  if (isComplex(finalStatement)) {
+    return [
+      {
+        icon: "📚",
+        label: "Ver fórmulas relacionadas",
+        href: formulasLink({ categoria: "numeros-complexos" }),
+      },
+      { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("numeros-complexos") },
+    ];
   }
 
   if (isQuadraticEquation(finalStatement)) {

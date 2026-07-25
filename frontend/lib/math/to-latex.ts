@@ -193,6 +193,25 @@ const MATRIX_ALIAS_LATEX: Record<string, (arg: string) => string> = {
 };
 
 /**
+ * Sprint V2.3 (Motor de Números Complexos) — o mathjs já reconhece
+ * "conjugado"/"modulo"/"argumento"/"conj"/"abs"/"arg" nativamente como
+ * chamadas de função (`FunctionNode`, sintaxe genérica de chamada), mas o
+ * serializer default não conhece esses NOMES específicos e cairia no
+ * `\mathrm{nome}(...)` genérico (confirmado empiricamente) — notação
+ * matemática padrão própria para cada uma, mesmo padrão de
+ * `MATRIX_ALIAS_LATEX` acima. "abs"/"modulo" e "conj"/"conjugado" usam a
+ * MESMA função aqui (semântica idêntica, só o nome digitado muda).
+ */
+const COMPLEX_ALIAS_LATEX: Record<string, (arg: string) => string> = {
+  conjugado: (arg) => `\\overline{${arg}}`,
+  conj: (arg) => `\\overline{${arg}}`,
+  modulo: (arg) => `\\left|${arg}\\right|`,
+  abs: (arg) => `\\left|${arg}\\right|`,
+  argumento: (arg) => `\\arg\\left(${arg}\\right)`,
+  arg: (arg) => `\\arg\\left(${arg}\\right)`,
+};
+
+/**
  * Handler passado ao `toTex` do mathjs — cobre só o vocabulário do produto
  * e os wrappers de cálculo; todo o resto (frações, raízes, potências,
  * trigonometria canônica, matrizes) fica com o serializer default do
@@ -222,6 +241,10 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
 
   if (name !== null && name in MATRIX_ALIAS_LATEX && nodeArgs.length === 1) {
     return MATRIX_ALIAS_LATEX[name](texOf(nodeArgs[0], options));
+  }
+
+  if (name !== null && name in COMPLEX_ALIAS_LATEX && nodeArgs.length === 1) {
+    return COMPLEX_ALIAS_LATEX[name](texOf(nodeArgs[0], options));
   }
 
   // exp() renderiza como "e elevado" — a linguagem visual do produto
@@ -386,6 +409,45 @@ async function pairToLatex(text: string): Promise<string | null> {
   return `${open} ${left},\\; ${right} ${close}`;
 }
 
+/**
+ * Sprint V2.3 (Motor de Números Complexos) — forma polar. O backend
+ * produz SEMPRE a forma exata "{r}(cos({θ})+i·sin({θ}))"
+ * (`complex/dispatcher.py:_render_polar`) — nunca digitada pelo usuário,
+ * só devolvida como RESULTADO. O "·" e a justaposição "r(" (sem "*")
+ * fazem essa string ficar FORA do que o mathjs entende como uma única
+ * expressão (confirmado empiricamente: "·" quebra o parser), então
+ * precisa de reconhecimento estrutural dedicado, ANTES do pipeline
+ * genérico — mesma filosofia classify-first do resto deste arquivo/do
+ * `formatter/` do backend. Reconstrução exata (não regex "solto"): só
+ * casa quando a string INTEIRA bate byte a byte com "r(cos(θ)+i·sin(θ))"
+ * para o r/θ extraídos — nunca "adivinha" a partir de um prefixo.
+ */
+function parsePolarForm(text: string): { r: string; theta: string } | null {
+  const trimmed = text.trim();
+  const marker = "(cos(";
+  const markerIndex = trimmed.indexOf(marker);
+  if (markerIndex === -1) return null;
+  const r = trimmed.slice(0, markerIndex);
+  if (r === "") return null;
+
+  const thetaOpenIndex = markerIndex + marker.length - 1;
+  const thetaCloseIndex = findMatchingParen(trimmed, thetaOpenIndex);
+  if (thetaCloseIndex === null) return null;
+  const theta = trimmed.slice(thetaOpenIndex + 1, thetaCloseIndex);
+
+  const reconstructed = `${r}(cos(${theta})+i·sin(${theta}))`;
+  return trimmed === reconstructed ? { r, theta } : null;
+}
+
+async function polarFormToLatex(text: string): Promise<string | null> {
+  const parsed = parsePolarForm(text);
+  if (parsed === null) return null;
+  const r = await singleExpressionToLatex(parsed.r);
+  const theta = await singleExpressionToLatex(parsed.theta);
+  if (r === null || theta === null) return null;
+  return `${r}\\left(\\cos\\left(${theta}\\right) + i\\sin\\left(${theta}\\right)\\right)`;
+}
+
 const PERIODIC_SUFFIX = /^(.*),\s*([a-z])\s*∈\s*ℤ$/;
 
 /**
@@ -434,6 +496,9 @@ export async function valueToLatex(text: string): Promise<string | null> {
   if (listParts.length > 1 && listParts.every((part) => EQUATION_SPLIT.test(part))) {
     return joinConverted(listParts, ",\\; ", expressionToLatex);
   }
+
+  const polar = await polarFormToLatex(trimmed);
+  if (polar !== null) return polar;
 
   return (await pairToLatex(trimmed)) ?? (await expressionToLatex(trimmed));
 }
@@ -659,6 +724,16 @@ const PREVIEW_UNARY_LATEX: Record<string, (arg: string) => string> = {
   tan: (a) => `\\tan\\left(${a}\\right)`,
   sec: (a) => `\\sec\\left(${a}\\right)`,
   exp: (a) => `e^{${a}}`,
+  // Sprint V2.3 (Motor de Números Complexos) — mesma notação de
+  // `COMPLEX_ALIAS_LATEX` (Tier 1), duplicada aqui de propósito: o Tier 2
+  // nunca importa do Tier 1 (funções puras independentes, ver cabeçalho
+  // da seção Tier 2 abaixo).
+  conjugado: (a) => `\\overline{${a}}`,
+  conj: (a) => `\\overline{${a}}`,
+  modulo: (a) => `\\left|${a}\\right|`,
+  abs: (a) => `\\left|${a}\\right|`,
+  argumento: (a) => `\\arg\\left(${a}\\right)`,
+  arg: (a) => `\\arg\\left(${a}\\right)`,
 };
 
 /** Nome da função conhecida -> comando LaTeX "cru" (sem argumento), para o caso de chamada incompleta ("log(" ainda sem fechar). */
@@ -673,6 +748,12 @@ const PREVIEW_COMMAND_WORD: Record<string, string> = {
   tg: "\\operatorname{tg}",
   tan: "\\tan",
   sec: "\\sec",
+  conjugado: "\\overline{}",
+  conj: "\\overline{}",
+  modulo: "|",
+  abs: "|",
+  argumento: "\\arg",
+  arg: "\\arg",
 };
 
 /**

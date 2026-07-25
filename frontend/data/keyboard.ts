@@ -186,6 +186,17 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
     keys: [
       { label: "π", insert: "π", cursorOffset: 1, ariaLabel: "Inserir pi", latex: "\\pi" },
       { label: "e", insert: "e", cursorOffset: 1, ariaLabel: "Inserir número de Euler" },
+      {
+        // Sprint V2.3 (Motor de Números Complexos) — "i" minúsculo é a
+        // unidade imaginária em toda a área `complex/` do backend (ver
+        // `math_engine/complex/evaluator.py`); inserção simples de um
+        // caractere, mesmo padrão de "e" acima (cursor logo depois).
+        label: "i",
+        insert: "i",
+        cursorOffset: 1,
+        ariaLabel: "Inserir unidade imaginária i",
+        latex: "i",
+      },
       { label: "∞", insert: "∞", cursorOffset: 1, ariaLabel: "Inserir infinito", latex: "\\infty" },
       { label: "→", insert: "→", cursorOffset: 1, ariaLabel: "Inserir seta (usada em limites)" },
       { label: "≤", insert: "≤", cursorOffset: 1, ariaLabel: "Inserir menor ou igual" },

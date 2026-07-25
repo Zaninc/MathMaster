@@ -16,7 +16,8 @@ export type FormulaCategoryId =
   | "trigonometria"
   | "calculo"
   | "somatorios"
-  | "algebra-linear";
+  | "algebra-linear"
+  | "numeros-complexos";
 
 export const FORMULA_CATEGORY_LABELS: Record<FormulaCategoryId, string> = {
   algebra: "Álgebra",
@@ -25,6 +26,7 @@ export const FORMULA_CATEGORY_LABELS: Record<FormulaCategoryId, string> = {
   calculo: "Cálculo",
   somatorios: "Somatórios",
   "algebra-linear": "Álgebra Linear",
+  "numeros-complexos": "Números Complexos",
 };
 
 export interface FormulaEntry {
@@ -380,5 +382,42 @@ export const FORMULAS: FormulaEntry[] = [
     title: "Traço de uma matriz",
     latex: String.raw`\operatorname{tr}(A) = \sum_{i=1}^{n} a_{ii}`,
     category: "algebra-linear",
+  },
+  // Sprint V2.3 — Motor de Números Complexos, ordem pedida pelo Theo.
+  {
+    id: "definicao-numero-complexo",
+    title: "Definição de número complexo",
+    latex: String.raw`z = a + bi,\quad i^2 = -1`,
+    category: "numeros-complexos",
+  },
+  {
+    id: "conjugado-complexo",
+    title: "Conjugado",
+    latex: String.raw`\overline{a+bi} = a-bi`,
+    category: "numeros-complexos",
+  },
+  {
+    id: "modulo-complexo",
+    title: "Módulo",
+    latex: String.raw`|a+bi| = \sqrt{a^2+b^2}`,
+    category: "numeros-complexos",
+  },
+  {
+    id: "argumento-complexo",
+    title: "Argumento",
+    latex: String.raw`\arg(a+bi) = \theta,\quad \tan(\theta) = \frac{b}{a}`,
+    category: "numeros-complexos",
+  },
+  {
+    id: "forma-polar-complexo",
+    title: "Forma polar",
+    latex: String.raw`z = r\left(\cos(\theta) + i\sin(\theta)\right)`,
+    category: "numeros-complexos",
+  },
+  {
+    id: "formula-euler",
+    title: "Fórmula de Euler",
+    latex: String.raw`e^{i\theta} = \cos(\theta) + i\sin(\theta)`,
+    category: "numeros-complexos",
   },
 ];

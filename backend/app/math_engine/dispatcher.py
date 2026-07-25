@@ -10,6 +10,7 @@ from .analytic_geometry.dispatcher import (
 )
 from .calculus.dispatcher import is_calculus_domain_expression, solve_calculus_text
 from .calculus.natural_notation import normalize_calculus_notation
+from .complex.dispatcher import is_complex_domain_expression, solve_complex_text
 from .equations.dispatcher import is_equation_domain_expression, solve_equation_text
 from .errors import ExpressionError
 from .functions.dispatcher import is_function_domain_expression, solve_function_text
@@ -77,6 +78,14 @@ def solve_expression(expression: str) -> str:
     # `matrix/dispatcher.py`.
     if is_matrix_domain_expression(expression):
         return solve_matrix_text(expression)
+
+    # Sprint V2.3 — precisa vir antes de calculus/functions/trigonometry/
+    # logarithms/equations pelo mesmo motivo que já justifica matrix vir
+    # antes delas: o argumento de "conjugado(...)"/"modulo(...)"/etc. pode
+    # conter livremente números que essas áreas casariam por conta própria.
+    # Ver docstring de `complex/dispatcher.py`.
+    if is_complex_domain_expression(expression):
+        return solve_complex_text(expression)
 
     # Sprint 12 — precisa vir antes de functions/trigonometry/logarithms:
     # essas áreas casam "sin("/"log(" em qualquer posição do texto, o que
