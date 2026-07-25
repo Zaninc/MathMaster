@@ -21,10 +21,26 @@ interface ProgressiveMathResultProps {
    * aninhar `<button>` dentro de `<button>` é HTML inválido e o clique do
    * toggle borbulharia para o botão externo. Nesses casos, a aproximação
    * (quando detectada) fica fixa — o usuário sempre pode clicar
-   * "Reutilizar" para ver o valor exato completo na calculadora. Padrão
-   * `true` em todo o resto (ex. `ResultPanel`, que não tem esse aninhamento).
+   * "Reutilizar" para ver o valor exato completo na calculadora. Ignorado
+   * quando `mode` é passado (ver abaixo) — modo controlado nunca renderiza
+   * o botão interno, o chamador é quem decide onde colocar o dele.
    */
   allowToggle?: boolean;
+  /**
+   * Sprint "alternância exato/aproximado" (pós-V2.1): quando fornecido, o
+   * modo de exibição é CONTROLADO externamente — nenhuma detecção de
+   * overflow, nenhum botão interno, nenhuma troca automática. Usado pelo
+   * `ResultPanel`, que expõe um único botão "Resultado aproximado"/
+   * "Resultado exato" na barra de ações (fora deste componente) para poder
+   * também alimentar o botão "Copiar" com o valor atualmente visível — os
+   * dois precisam compartilhar o mesmo estado, que só o chamador pode ter.
+   * Omitido (undefined) preserva 100% o comportamento anterior: troca
+   * sozinho para a aproximação quando a fórmula exata realmente ultrapassa
+   * o espaço disponível, com o botão de toggle embutido (usado por
+   * `HistoryPanel`, que não pode ter um botão controlado porque já vive
+   * dentro de outro `<button>`).
+   */
+  mode?: "exact" | "approx";
 }
 
 type Mode = "auto" | "exact" | "approx";
@@ -65,6 +81,7 @@ export function ProgressiveMathResult({
   approx,
   className,
   allowToggle = true,
+  mode: controlledMode,
 }: ProgressiveMathResultProps) {
   const [ref, isOverflowing] = useIsOverflowing<HTMLElement>();
   const [mode, setMode] = useState<Mode>("auto");
@@ -72,7 +89,8 @@ export function ProgressiveMathResult({
   // recomendado do React para "resetar estado quando uma prop muda"
   // (ajuste direto no corpo do render, nunca `setState` dentro de efeito,
   // que dispararia o lint `react-hooks/set-state-in-effect` já visto antes
-  // neste projeto em `RouteTransition`).
+  // neste projeto em `RouteTransition`). Só é relevante em modo não
+  // controlado — em modo controlado o chamador já é dono do reset.
   const [previousLatex, setPreviousLatex] = useState(latex);
   if (latex !== previousLatex) {
     setPreviousLatex(latex);
@@ -81,6 +99,13 @@ export function ProgressiveMathResult({
 
   if (latex === null) {
     return <span className={className}>{text}</span>;
+  }
+
+  if (controlledMode !== undefined) {
+    if (controlledMode === "approx" && approx !== null) {
+      return <span className={className}>≈ {approx}</span>;
+    }
+    return <MathFormula ref={ref} formula={latex} scrollable className={className} />;
   }
 
   const autoWantsApprox = approx !== null && isOverflowing;

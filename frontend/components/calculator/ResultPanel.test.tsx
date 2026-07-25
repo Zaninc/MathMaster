@@ -251,14 +251,14 @@ describe("ResultPanel — bloco Explorar (sistema de conexões internas)", () =>
   });
 });
 
-describe("ResultPanel — apresentação progressiva (Sprint V2.1)", () => {
+describe("ResultPanel — alternância exato/aproximado", () => {
   beforeEach(() => {
     Object.assign(navigator, {
       clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
     });
   });
 
-  it("sem approx, mostra só o botão 'Copiar' (comportamento de antes, intocado)", async () => {
+  it("sem approx, mostra só o botão 'Copiar' e nenhum toggle (comportamento de antes, intocado)", async () => {
     render(
       <ResultPanel
         status="success"
@@ -272,11 +272,11 @@ describe("ResultPanel — apresentação progressiva (Sprint V2.1)", () => {
     );
 
     expect(screen.getByRole("button", { name: "Copiar" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Copiar aproximado" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Copiar exato" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Resultado aproximado" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Resultado exato" })).not.toBeInTheDocument();
   });
 
-  it("com approx (resultado sem rótulo), mostra 'Copiar aproximado' e 'Copiar exato' em vez de 'Copiar'", async () => {
+  it("com approx (resultado sem rótulo), mostra o resultado exato compacto de início, com botão 'Resultado aproximado'", async () => {
     render(
       <ResultPanel
         status="success"
@@ -290,13 +290,13 @@ describe("ResultPanel — apresentação progressiva (Sprint V2.1)", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Copiar aproximado" })).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Resultado aproximado" })).toBeInTheDocument()
     );
-    expect(screen.getByRole("button", { name: "Copiar exato" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Copiar" })).not.toBeInTheDocument();
+    expect(screen.queryByText("≈ 1.87")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copiar" })).toBeInTheDocument();
   });
 
-  it("'Copiar aproximado' copia o texto aproximado; 'Copiar exato' copia o texto exato do backend", async () => {
+  it("alterna exato -> aproximado ao clicar em 'Resultado aproximado'", async () => {
     render(
       <ResultPanel
         status="success"
@@ -310,17 +310,142 @@ describe("ResultPanel — apresentação progressiva (Sprint V2.1)", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Copiar aproximado" })).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Resultado aproximado" })).toBeInTheDocument()
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Copiar aproximado" }));
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("1.87");
+    fireEvent.click(screen.getByRole("button", { name: "Resultado aproximado" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Copiar exato" }));
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("sin(1) + sin(2)");
+    expect(screen.getByText("≈ 1.87")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resultado exato" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Resultado aproximado" })).not.toBeInTheDocument();
   });
 
-  it("approx não é associado a um resultado com MÚLTIPLOS segmentos rotulados (ex. geometria) — mostra 'Copiar' normal", async () => {
+  it("alterna aproximado -> exato ao clicar em 'Resultado exato'", async () => {
+    render(
+      <ResultPanel
+        status="success"
+        expression="Σ(i=1..30) sin(i)"
+        result="sin(1) + sin(2)"
+        approx="1.87"
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Resultado aproximado" })).toBeInTheDocument()
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Resultado aproximado" }));
+    expect(screen.getByText("≈ 1.87")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Resultado exato" }));
+
+    expect(screen.queryByText("≈ 1.87")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resultado aproximado" })).toBeInTheDocument();
+  });
+
+  it("alternar o modo não aciona o clipboard sozinho", async () => {
+    render(
+      <ResultPanel
+        status="success"
+        expression="Σ(i=1..30) sin(i)"
+        result="sin(1) + sin(2)"
+        approx="1.87"
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Resultado aproximado" })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Resultado aproximado" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resultado exato" }));
+
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+  });
+
+  it("'Copiar' copia o valor exato quando o modo exato está visível, e o aproximado depois de alternar", async () => {
+    render(
+      <ResultPanel
+        status="success"
+        expression="Σ(i=1..30) sin(i)"
+        result="sin(1) + sin(2)"
+        approx="1.87"
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Resultado aproximado" })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Copiar" }));
+    expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith("sin(1) + sin(2)");
+
+    fireEvent.click(screen.getByRole("button", { name: "Resultado aproximado" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copiar" }));
+    expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith("1.87");
+  });
+
+  it("a expressão original permanece inalterada ao trocar entre exato e aproximado", async () => {
+    const { container } = render(
+      <ResultPanel
+        status="success"
+        expression="Σ(i=1..30) sin(i)"
+        result="sin(1) + sin(2)"
+        approx="1.87"
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Resultado aproximado" })).toBeInTheDocument()
+    );
+    const expressionBefore = container.querySelectorAll(".katex")[0]?.textContent;
+
+    fireEvent.click(screen.getByRole("button", { name: "Resultado aproximado" }));
+    const expressionAfterApprox = container.querySelectorAll(".katex")[0]?.textContent;
+
+    fireEvent.click(screen.getByRole("button", { name: "Resultado exato" }));
+    const expressionAfterExact = container.querySelectorAll(".katex")[0]?.textContent;
+
+    expect(expressionBefore).toBeTruthy();
+    expect(expressionAfterApprox).toBe(expressionBefore);
+    expect(expressionAfterExact).toBe(expressionBefore);
+  });
+
+  it("resultado e expressão não aparecem duplicados quando o resultado é a mesma notação Σ não expandida", async () => {
+    const { container } = render(
+      <ResultPanel
+        status="success"
+        expression="Σ(i=1..30) (sin(i)+cos(i))"
+        result="Σ(i=1..30) (sin(i)+cos(i))"
+        approx="-1.047113797"
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Resultado aproximado" })).toBeInTheDocument()
+    );
+    // Mesmo quando expressão e resultado exato coincidem textualmente, cada
+    // um é renderizado em UM único elemento seu — exatamente dois blocos
+    // KaTeX (expressão + resultado), nunca um terceiro nó "extra"
+    // duplicando a mesma fórmula.
+    expect(container.querySelectorAll(".katex").length).toBe(2);
+  });
+
+  it("approx não é associado a um resultado com MÚLTIPLOS segmentos rotulados (ex. geometria) — mostra 'Copiar' normal, sem toggle", async () => {
     render(
       <ResultPanel
         status="success"
@@ -335,6 +460,6 @@ describe("ResultPanel — apresentação progressiva (Sprint V2.1)", () => {
 
     await waitFor(() => expect(screen.getByText("Raio:")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Copiar" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Copiar aproximado" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Resultado aproximado" })).not.toBeInTheDocument();
   });
 });

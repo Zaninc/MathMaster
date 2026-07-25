@@ -114,6 +114,24 @@ describe("ProgressiveMathResult", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
+  it("modo controlado ('exact'): mostra o valor exato, ignora overflow real e não renderiza botão interno", () => {
+    const { container } = render(
+      <ProgressiveMathResult latex="\sum_{i=1}^{30}\sin(i)" text="..." approx="1.87" mode="exact" />
+    );
+    overflow(container);
+
+    expect(container.querySelector(".katex")).not.toBeNull();
+    expect(screen.queryByText("≈ 1.87")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("modo controlado ('approx'): mostra a aproximação mesmo sem overflow e não renderiza botão interno", () => {
+    render(<ProgressiveMathResult latex="\sum_{i=1}^{30}\sin(i)" text="..." approx="1.87" mode="approx" />);
+
+    expect(screen.getByText("≈ 1.87")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
   it("reseta para automático quando o latex muda (resultado novo não herda a escolha manual do anterior)", () => {
     const { container, rerender } = render(
       <ProgressiveMathResult latex="\sum_{i=1}^{30}\sin(i)" text="..." approx="1.87" />

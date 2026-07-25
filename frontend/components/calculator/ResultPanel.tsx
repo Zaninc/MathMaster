@@ -24,6 +24,8 @@ interface ResultPanelProps {
   onRetry: () => void;
 }
 
+type DisplayMode = "exact" | "approx";
+
 /**
  * Progressive enhancement (Sprint KaTeX Fase 2): o texto puro do backend é
  * SEMPRE renderizado primeiro (mesma UI de antes); quando a conversão
@@ -31,11 +33,18 @@ interface ResultPanelProps {
  * com sucesso, a exibição é promovida a KaTeX. Conversão nula ou pendente
  * = exatamente a calculadora anterior — nenhum caminho novo de falha.
  *
- * Sprint V2.1: quando o backend manda uma aproximação (`approx`) E o
- * resultado exato REALMENTE ultrapassa o espaço do card (`ProgressiveMathResult`),
- * a aproximação vira o valor principal com um botão "Ver resultado exato".
- * "Copiar" mostra duas opções nesse caso — aproximado e exato — em vez de
- * uma só; continua copiando texto cru do backend, nunca LaTeX.
+ * Sprint "alternância exato/aproximado" (pós-V2.1): a expressão do topo
+ * (o que o usuário digitou) NUNCA alterna — é sempre o eco fiel do input,
+ * em modo controlado "exact" fixo (`ProgressiveMathResult` com
+ * `approx={null}`). Só o RESULTADO alterna, e só quando o backend manda
+ * uma aproximação (`approx`) associada a ele (`resultApprox`): um único
+ * botão "Resultado aproximado"/"Resultado exato" troca o modo, e o modo é
+ * dono aqui (não mais dentro de `ProgressiveMathResult`, que já não decide
+ * sozinho trocar para a aproximação por overflow) — precisa ser dono neste
+ * nível porque o botão "Copiar" também depende dele, para copiar sempre o
+ * que está visível no momento. Resultados longos continuam começando no
+ * modo exato compacto (o scroll horizontal do `MathFormula` já evita
+ * vazamento do card, ver `scrollable`); alternar nunca copia sozinho.
  */
 export function ResultPanel({
   status,
@@ -46,7 +55,8 @@ export function ResultPanel({
   errorId,
   onRetry,
 }: ResultPanelProps) {
-  const [copiedTarget, setCopiedTarget] = useState<"exact" | "approx" | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [mode, setMode] = useState<DisplayMode>("exact");
   const success = status === "success" && result !== null;
   const { expressionLatex, segments } = useSolveLatex(
     success ? expression : null,
@@ -57,15 +67,36 @@ export function ResultPanel({
   // um segmento único, "label: null") — nunca associado a um segmento
   // específico de um resultado rotulado tipo "Centro: ...; Raio: ...".
   const resultApprox = segments !== null && segments.length === 1 ? approx : null;
+  // Nunca em modo aproximado quando não há aproximação para este resultado
+  // (ex. resultado rotulado) — evita herdar uma escolha "approx" de um
+  // resultado anterior que a tinha, entre o reset abaixo rodar e o próximo
+  // resultado chegar.
+  const displayMode: DisplayMode = resultApprox !== null ? mode : "exact";
 
-  async function handleCopy(text: string, target: "exact" | "approx") {
+  // Reseta o modo de exibição e o "Copiado!" quando um resultado NOVO
+  // chega — ajuste direto no corpo do render (nunca `setState` num efeito,
+  // mesmo padrão já usado em `ProgressiveMathResult`/`RouteTransition`).
+  const resultKey = `${expression}\n${result ?? ""}`;
+  const [previousResultKey, setPreviousResultKey] = useState(resultKey);
+  if (resultKey !== previousResultKey) {
+    setPreviousResultKey(resultKey);
+    setMode("exact");
+    setCopied(false);
+  }
+
+  async function handleCopy() {
+    const text = displayMode === "approx" ? (resultApprox ?? "") : (result ?? "");
     try {
       await navigator.clipboard.writeText(text);
-      setCopiedTarget(target);
-      setTimeout(() => setCopiedTarget(null), 2000);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
       // clipboard indisponível (ex. contexto não seguro) — não é crítico, falha silenciosa
     }
+  }
+
+  function handleToggleMode() {
+    setMode((current) => (current === "approx" ? "exact" : "approx"));
   }
 
   if (status === "idle") {
@@ -81,10 +112,13 @@ export function ResultPanel({
           <div className="min-w-0 w-full rounded-lg border border-success/40 bg-success/10 p-4">
             <span className="text-xs font-medium uppercase tracking-wide text-text-secondary">Resolvido</span>
             <p className="mt-1 min-w-0 text-sm text-text-muted">
-              <ProgressiveMathResult latex={expressionLatex} text={expression} approx={null} />
+              <ProgressiveMathResult latex={expressionLatex} text={expression} approx={null} mode="exact" />
             </p>
+            <span className="mt-3 block text-xs font-medium uppercase tracking-wide text-text-secondary">
+              Resultado
+            </span>
             {segments !== null ? (
-              <div className="mt-2 flex min-w-0 flex-col gap-1 text-lg text-text-primary">
+              <div className="mt-1 flex min-w-0 flex-col gap-1 text-lg text-text-primary">
                 {segments.map((segment) => (
                   <p
                     key={`${segment.label ?? ""}:${segment.text}`}
@@ -97,30 +131,21 @@ export function ResultPanel({
                       latex={segment.latex}
                       text={segment.text}
                       approx={segments.length === 1 ? resultApprox : null}
+                      mode={displayMode}
                     />
                   </p>
                 ))}
               </div>
             ) : (
-              <p className="mt-2 text-xl text-text-primary">{result}</p>
+              <p className="mt-1 text-xl text-text-primary">{result}</p>
             )}
             <div className="mt-4 flex flex-wrap gap-2">
-              {resultApprox !== null ? (
-                <>
-                  <Button type="button" variant="secondary" onClick={() => handleCopy(resultApprox, "approx")}>
-                    {copiedTarget === "approx" ? "Copiado!" : "Copiar aproximado"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => handleCopy(result ?? "", "exact")}
-                  >
-                    {copiedTarget === "exact" ? "Copiado!" : "Copiar exato"}
-                  </Button>
-                </>
-              ) : (
-                <Button type="button" variant="secondary" onClick={() => handleCopy(result ?? "", "exact")}>
-                  {copiedTarget === "exact" ? "Copiado!" : "Copiar"}
+              <Button type="button" variant="secondary" onClick={handleCopy}>
+                {copied ? "Copiado!" : "Copiar"}
+              </Button>
+              {resultApprox !== null && (
+                <Button type="button" variant="secondary" onClick={handleToggleMode}>
+                  {displayMode === "approx" ? "Resultado exato" : "Resultado aproximado"}
                 </Button>
               )}
               <Button type="button" variant="secondary" onClick={onRetry}>
