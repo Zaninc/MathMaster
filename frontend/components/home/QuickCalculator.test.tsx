@@ -7,9 +7,14 @@ vi.mock("@/lib/api/client", () => ({
 
 import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
-import { inputToLatex } from "@/lib/math/to-latex";
+import { inputToLatex, resultToLatex } from "@/lib/math/to-latex";
 
 import { QuickCalculator } from "./QuickCalculator";
+
+function solve(expression: string) {
+  fireEvent.change(screen.getByLabelText("Expressão matemática"), { target: { value: expression } });
+  fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+}
 
 describe("QuickCalculator", () => {
   beforeAll(async () => {
@@ -83,5 +88,155 @@ describe("QuickCalculator", () => {
     fireEvent.click(screen.getByRole("button", { name: /preencher exemplo: d\/dx\(x² \+ 3x\)/i }));
 
     expect(screen.getByLabelText("Expressão matemática")).toHaveValue("d/dx(x² + 3x)");
+  });
+});
+
+/**
+ * Correção de consistência visual (pós-Sprint V2.3): o card de resultado
+ * renderizava `{result}` cru — agora reaproveita `useSolveLatex`/
+ * `ProgressiveMathResult`, a MESMA infraestrutura de
+ * `components/calculator/ResultPanel.tsx` (ver `ResultPanel.test.tsx`
+ * para os testes equivalentes de referência, mesmo padrão de asserção via
+ * `annotation` do MathML do KaTeX).
+ */
+describe("QuickCalculator — resultado em KaTeX (correção pós-Sprint V2.3)", () => {
+  afterEach(() => {
+    vi.mocked(apiClient.solve).mockReset();
+  });
+
+  function annotationsOf(container: HTMLElement): (string | null)[] {
+    return Array.from(container.querySelectorAll("annotation")).map((node) => node.textContent);
+  }
+
+  it("1. resultado de equação renderizado em KaTeX (subscritos de solução)", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "x² - 4 = 0",
+      result: "x₁ = -2, x₂ = 2",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("x² - 4 = 0");
+
+    await waitFor(() => expect(annotationsOf(container).some((latex) => latex?.includes("x_{1}"))).toBe(true));
+  });
+
+  it("2. resultado de matriz (transpose) renderizado como \\begin{bmatrix}", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "transpose([[1,2,3],[4,5,6]])",
+      result: "[[1, 4], [2, 5], [3, 6]]",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("transpose([[1,2,3],[4,5,6]])");
+
+    await waitFor(() =>
+      expect(annotationsOf(container).some((latex) => latex?.includes("\\begin{bmatrix}"))).toBe(true)
+    );
+  });
+
+  it("3. frações em matriz (inv) renderizadas como \\frac", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "inv([[2,0],[0,2]])",
+      result: "[[1/2, 0], [0, 1/2]]",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("inv([[2,0],[0,2]])");
+
+    await waitFor(() =>
+      expect(annotationsOf(container).some((latex) => latex?.includes("\\frac{1}{2}"))).toBe(true)
+    );
+    expect(annotationsOf(container).some((latex) => latex?.includes("\\begin{bmatrix}"))).toBe(true);
+  });
+
+  it("4. argumento complexo renderizado como \\frac{\\pi}{4}", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "argumento(1+i)",
+      result: "π/4",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("argumento(1+i)");
+
+    await waitFor(() =>
+      expect(annotationsOf(container).some((latex) => latex?.includes("\\frac{\\pi}{4}"))).toBe(true)
+    );
+  });
+
+  it("5. forma polar renderizada com raiz, cosseno, seno e unidade imaginária", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "polar(1+i)",
+      result: "√2(cos(π/4)+i·sin(π/4))",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("polar(1+i)");
+
+    await waitFor(() => expect(annotationsOf(container).some((latex) => latex?.includes("\\sqrt"))).toBe(true));
+    const polar = annotationsOf(container).find((latex) => latex?.includes("\\sqrt"));
+    expect(polar).toContain("\\cos");
+    expect(polar).toContain("\\sin");
+  });
+
+  it("6. resultado de somatório renderizado em KaTeX", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "Σ(i=1..10) i",
+      result: "55",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("Σ(i=1..10) i");
+
+    await waitFor(() => expect(annotationsOf(container).some((latex) => latex === "55")).toBe(true));
+  });
+
+  it("7. resultado de número complexo renderizado em KaTeX", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "(2+i)(3-i)",
+      result: "7 + i",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("(2+i)(3-i)");
+
+    await waitFor(() => expect(annotationsOf(container).some((latex) => latex === "7+ i")).toBe(true));
+  });
+
+  it("8. fallback seguro: resultado sem forma reconhecida vira texto puro, sem lançar e sem KaTeX inválido", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "relacao_retas([(0,0),(1,0)],[(0,0),(0,1)])",
+      result: "Relação entre as retas: Perpendiculares ⊥",
+      approx: null,
+    });
+    render(<QuickCalculator />);
+    solve("relacao_retas([(0,0),(1,0)],[(0,0),(0,1)])");
+
+    expect(await screen.findByText("Relação entre as retas: Perpendiculares ⊥")).toBeInTheDocument();
+  });
+
+  it("9. nenhuma regressão: erro do backend continua mostrando a mensagem amigável em texto", async () => {
+    vi.mocked(apiClient.solve).mockRejectedValue(
+      new ApiError("invalid_expression", "Não foi possível interpretar a expressão: @@@")
+    );
+    render(<QuickCalculator />);
+    solve("@@@");
+
+    expect(await screen.findByText("Não foi possível interpretar a expressão: @@@")).toBeInTheDocument();
+  });
+
+  it("10. reaproveita a pipeline compartilhada de lib/math/to-latex — mesma saída de resultToLatex direto, sem conversor paralelo", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "(2+i)(3-i)",
+      result: "7 + i",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("(2+i)(3-i)");
+
+    const expectedSegments = await resultToLatex("7 + i");
+    expect(expectedSegments).not.toBeNull();
+    const expectedLatex = expectedSegments![0].latex;
+
+    await waitFor(() => expect(annotationsOf(container).some((latex) => latex === expectedLatex)).toBe(true));
   });
 });
