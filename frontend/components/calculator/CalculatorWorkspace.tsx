@@ -37,7 +37,7 @@ export function CalculatorWorkspace() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [hiddenTimestamps, setHiddenTimestamps] = useState<Set<string>>(new Set());
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const pendingSelectionRef = useRef<number | null>(null);
   const inputId = useId();
   const errorId = useId();

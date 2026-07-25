@@ -212,28 +212,71 @@ function isMatrix(expression: string): boolean {
 }
 
 /**
- * "[[1,2],[3,4]]" -> a mesma string, só quando a expressão INTEIRA já é um
- * literal de matriz puro (sem operação em cima) — mesmo raciocínio
- * conservador de `quadraticLeftHandSide`: melhor omitir a ação "Ver
- * propriedades" do que compor um `det(...)` sobre uma expressão que já é
- * ela mesma "det(...)"/"inv(...)"/uma soma de matrizes/etc. Bracket-
- * matching real (não só `startsWith`/`endsWith`, que aceitaria por engano
- * "[[1,2],[3,4]] + [[5,6],[7,8]]" — também começa com "[[" e termina com
- * "]]") — o colchete de abertura precisa fechar exatamente no ÚLTIMO
- * caractere da expressão.
+ * Sprint V2.2.1 (Variáveis Locais para Matrizes) — a expressão INTEIRA já
+ * É uma chamada pronta a det/inv/transpose/trace (canônico ou alias
+ * PT-BR), ex. "det(A)". Usado para decidir quando OMITIR "Ver
+ * propriedades": compor "det(det(A))" não faz sentido — a propriedade já
+ * é o resultado pedido.
  */
-function matrixLiteralFromExpression(expression: string): string | null {
-  const trimmed = expression.trim();
-  if (!trimmed.startsWith("[")) return null;
+const MATRIX_PROPERTY_CALL_PATTERN =
+  /^(det|inv|transpose|trace|determinante|inversa|transposta|traço)\s*\(.*\)$/i;
+
+function isMatrixPropertyCall(statement: string): boolean {
+  return MATRIX_PROPERTY_CALL_PATTERN.test(statement.trim());
+}
+
+/**
+ * Sprint V2.2.1 — divide um programa de matriz em instruções por quebra de
+ * linha OU ";" no nível mais alto (fora de colchetes/parênteses/chaves) —
+ * mesmo bracket-counting de `matrix/parsing.py:_split_statements` no
+ * backend, nunca um split ingênuo (uma matriz formatada em várias linhas,
+ * "[[1, 2],\n [3, 4]]", tem sua própria quebra de linha DENTRO do
+ * colchete — nível > 0, não pode virar um corte de instrução). Instruções
+ * vazias são descartadas.
+ */
+function splitMatrixStatements(expression: string): string[] {
+  const statements: string[] = [];
   let depth = 0;
-  for (let i = 0; i < trimmed.length; i++) {
-    if (trimmed[i] === "[") depth += 1;
-    else if (trimmed[i] === "]") {
-      depth -= 1;
-      if (depth === 0) return i === trimmed.length - 1 ? trimmed : null;
+  let current = "";
+  for (const char of expression) {
+    if (char === "(" || char === "[" || char === "{") depth += 1;
+    else if (char === ")" || char === "]" || char === "}") depth -= 1;
+    if ((char === "\n" || char === ";") && depth === 0) {
+      const statement = current.trim();
+      if (statement !== "") statements.push(statement);
+      current = "";
+      continue;
     }
+    current += char;
   }
-  return null;
+  const tail = current.trim();
+  if (tail !== "") statements.push(tail);
+  return statements;
+}
+
+/**
+ * A ÚLTIMA instrução de um programa de matriz — "a exploração continua
+ * baseada na expressão final" (Sprint V2.2.1). Para qualquer expressão de
+ * instrução única (99% dos casos, nenhuma mudança de comportamento) é a
+ * própria expressão, já cortada.
+ */
+function extractFinalStatement(expression: string): string {
+  const statements = splitMatrixStatements(expression);
+  return statements.length > 0 ? statements[statements.length - 1] : expression.trim();
+}
+
+/**
+ * Link de "Ver propriedades": reconstrói o programa inteiro com a MESMA
+ * sequência de atribuições, só envolvendo a instrução final em
+ * "det(...)" — preserva as variáveis já definidas, para o link continuar
+ * resolvível (ex. "A=[[1,2],[3,4]]\nA" -> "A=[[1,2],[3,4]]\ndet(A)").
+ */
+function buildMatrixPropertiesLink(expression: string): string {
+  const statements = splitMatrixStatements(expression);
+  if (statements.length === 0) return calculatorLink(`det(${expression.trim()})`);
+  const finalStatement = statements[statements.length - 1];
+  const program = [...statements.slice(0, -1), `det(${finalStatement})`].join("\n");
+  return calculatorLink(program);
 }
 
 /**
@@ -249,11 +292,19 @@ function quadraticLeftHandSide(expression: string): string | null {
 
 /** Sem correspondência = array vazio = `ResultPanel` não renderiza o bloco "Explorar". */
 export function getCalculatorExplorations(expression: string): RelatedLink[] {
+  // Sprint V2.2.1 — "a exploração continua baseada na expressão final":
+  // um programa de matriz com atribuições ("A=[[1,2],[3,4]]\ndet(A)") é
+  // classificado pela ÚLTIMA instrução, não pelo texto inteiro (que teria
+  // "=" e "[[" de sobra, sem relação com o que de fato foi resolvido).
+  // Para 99% dos casos (instrução única, sem atribuição) é a própria
+  // expressão — nenhuma mudança de comportamento.
+  const finalStatement = extractFinalStatement(expression);
+
   // Checado ANTES de `isQuadraticEquation`: um corpo de somatório como
   // "Σ(i=1..5) sin(i)^2 + cos(i)^2" contém tanto "=" (no cabeçalho) quanto
   // "^2" — seria roubado pela heurística de equação do 2º grau se checado
   // depois. Mesmo raciocínio já aplicado na cascata do backend.
-  if (isSummation(expression)) {
+  if (isSummation(finalStatement)) {
     // Gráfico NÃO incluído aqui de propósito (escopo consciente da Sprint
     // V2.1): um somatório é uma soma discreta, não uma função contínua de x
     // — reaproveitar `graphsLink(fn)` produziria uma função errada, e
@@ -272,12 +323,18 @@ export function getCalculatorExplorations(expression: string): RelatedLink[] {
   // Checado logo depois de `isSummation` — mesma posição do Motor de
   // Matrizes na cascata do backend (`math_engine/dispatcher.py`: matrix
   // entra depois de summation, antes de calculus/functions/trigonometry/
-  // logarithms/equations).
+  // logarithms/equations). O GATE usa `expression` inteira (não só a
+  // instrução final): uma referência de variável na instrução final, ex.
+  // "A" em "A=[[1,2],[3,4]]\nA", não tem "[[" nela mesma — só o programa
+  // inteiro revela que é matriz. "Ver propriedades" (Sprint V2.2.1) vale
+  // para literal puro, referência de variável ou operação cujo resultado
+  // seja matriz — só NÃO aparece quando a instrução final já é uma
+  // chamada pronta a det/inv/transpose/trace (canônico ou alias PT-BR):
+  // compor "det(det(...))" não faz sentido.
   if (isMatrix(expression)) {
     const links: RelatedLink[] = [];
-    const literal = matrixLiteralFromExpression(expression);
-    if (literal) {
-      links.push({ icon: "🧮", label: "Ver propriedades", href: calculatorLink(`det(${literal})`) });
+    if (!isMatrixPropertyCall(finalStatement)) {
+      links.push({ icon: "🧮", label: "Ver propriedades", href: buildMatrixPropertiesLink(expression) });
     }
     links.push({
       icon: "📚",
@@ -288,20 +345,20 @@ export function getCalculatorExplorations(expression: string): RelatedLink[] {
     return links;
   }
 
-  if (isQuadraticEquation(expression)) {
+  if (isQuadraticEquation(finalStatement)) {
     const links: RelatedLink[] = [];
-    const lhs = quadraticLeftHandSide(expression);
+    const lhs = quadraticLeftHandSide(finalStatement);
     if (lhs) links.push({ icon: "📈", label: "Ver gráfico", href: graphsLink(lhs) });
     links.push({ icon: "📚", label: "Ver fórmula relacionada", href: formulasLink({ categoria: "algebra", q: "bhaskara" }) });
     links.push({ icon: "📝", label: "Praticar exercícios semelhantes", href: exercisesLink("equacoes") });
     return links;
   }
 
-  if (isDerivative(expression)) {
+  if (isDerivative(finalStatement)) {
     return [{ icon: "📚", label: "Ver fórmula relacionada", href: formulasLink({ categoria: "calculo" }) }];
   }
 
-  if (isTrigonometric(expression)) {
+  if (isTrigonometric(finalStatement)) {
     return [{ icon: "📝", label: "Praticar exercícios semelhantes", href: exercisesLink("trigonometria") }];
   }
 

@@ -86,8 +86,14 @@ const FUNCTION_LATEX: Record<string, string> = {
   tg: "\\operatorname{tg}",
 };
 
-/** Só o alfabeto que o mathjs entende sobra depois da transliteração. */
-const SAFE_CHARSET = /^[0-9A-Za-z_+\-*/^.,()[\]<>=!\s]*$/;
+/**
+ * Só o alfabeto que o mathjs entende sobra depois da transliteração.
+ * ";" (Sprint V2.2.1) — separador de instrução de um programa de matriz
+ * ("A=[[1,2],[3,4]]; det(A)"), mesmo papel de "\n" (já coberto por `\s`) —
+ * o mathjs já entende os dois nativamente como fim de instrução dentro de
+ * um `BlockNode`.
+ */
+const SAFE_CHARSET = /^[0-9A-Za-z_+\-*/^.,()[\]<>=!;\s]*$/;
 
 // Sprint V2.2 (Motor de Matrizes) — "traço(" é o único alias PT-BR de
 // matriz com caractere fora do ASCII ("ç"); os outros três
@@ -310,6 +316,16 @@ function splitTopLevel(text: string, separator: string): string[] {
 
 const EQUATION_SPLIT = /(?<![<>!=])=(?!=)/;
 
+// Sprint V2.2 (Motor de Matrizes) — mesmo marcador léxico do backend
+// (`matrix/dispatcher.py:_MATRIX_LITERAL_MARKER`): "[[" é inequívoco,
+// nenhuma outra forma do catálogo usa colchete duplo.
+const MATRIX_LITERAL_PREFIX = "[[";
+
+// Sprint V2.2.1 (Variáveis Locais para Matrizes) — instruções separadas
+// por quebra de linha ou ";" ("A=[[1,2],[3,4]]\nB=...\nA*B"), mesmo
+// critério de separador do backend (`matrix/parsing.py:_split_statements`).
+const MULTI_STATEMENT_MARKER = /[\n;]/;
+
 /**
  * Expressão ou equação/lista de igualdades ("x = 2", "f(2) = 10",
  * "x₁ = -2"). Cada lado é convertido separadamente — "=" nunca chega ao
@@ -321,11 +337,26 @@ const EQUATION_SPLIT = /(?<![<>!=])=(?!=)/;
  * aqui (não só em `inputToLatex`) porque, a partir desta sprint, o BACKEND
  * pode devolver a própria notação Σ como `result` (somatório que não
  * expande) — `resultToLatex`/`valueToLatex` chegam a esta função também.
+ *
+ * Sprint V2.2.1: mesmo raciocínio para um PROGRAMA de matriz com
+ * atribuições ("A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA*B") — cada atribuição
+ * tem o seu próprio "=", e `EQUATION_SPLIT` (pensado para no máximo um
+ * "=", eco de uma equação simples) cortaria isso em pedaços errados. O
+ * mathjs já entende "A=matriz\nB=matriz\nexpr" nativamente como um
+ * programa de várias instruções (`BlockNode`/`AssignmentNode`, com
+ * `\begin{bmatrix}` e tudo) — delega direto pra lá em vez de tentar
+ * dividir por "=" primeiro. Detecção: precisa ter uma matriz literal E
+ * mais de uma instrução (quebra de linha ou ";") — um "x = 2" comum
+ * (sem "[[") continua indo pelo caminho de sempre, intocado.
  */
 export async function expressionToLatex(text: string): Promise<string | null> {
   const trimmed = text.trim();
   const sigmaSum = await sigmaSumToLatex(trimmed);
   if (sigmaSum !== null) return sigmaSum;
+
+  if (trimmed.includes(MATRIX_LITERAL_PREFIX) && MULTI_STATEMENT_MARKER.test(trimmed)) {
+    return singleExpressionToLatex(trimmed);
+  }
 
   const pieces = trimmed.split(EQUATION_SPLIT).map((side) => side.trim());
   if (pieces.some((piece) => piece === "")) return null;
@@ -356,11 +387,6 @@ async function pairToLatex(text: string): Promise<string | null> {
 }
 
 const PERIODIC_SUFFIX = /^(.*),\s*([a-z])\s*∈\s*ℤ$/;
-
-// Sprint V2.2 (Motor de Matrizes) — mesmo marcador léxico do backend
-// (`matrix/dispatcher.py:_MATRIX_LITERAL_MARKER`): "[[" é inequívoco,
-// nenhuma outra forma do catálogo usa colchete duplo.
-const MATRIX_LITERAL_PREFIX = "[[";
 
 /**
  * Valor matemático em qualquer forma do catálogo do backend, da mais

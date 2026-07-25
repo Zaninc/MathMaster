@@ -29,16 +29,22 @@ poucos padrões dos exemplos da sprint — isso é o que permite expressões
 como "[[1,2],[3,4]] + [[5,6],[7,8]] * 2" funcionarem de graça, sem
 casos especiais.
 
-Preparação para evolução futura (nomes de matriz, ex. "A=[[1,2],[3,4]]" /
-"A*B" — ver docstring de `dispatcher.py`): o único lugar que precisaria de
-um novo ramo é `_parse_primary`, no ponto marcado abaixo — um identificador
-maiúsculo sem "(" em seguida vira hoje um `ScalarNode` (tratado como
-parâmetro livre de uma célula/potência); armazenar aí uma referência de
-matriz em vez de tratar como escalar é a única mudança estrutural
-necessária nesta camada.
+Sprint V2.2.1 (Variáveis Locais para Matrizes) — um PROGRAMA de matriz é
+zero ou mais atribuições ("NOME = expressão-de-matriz") seguidas de UMA
+expressão final, cada instrução separada por quebra de linha OU ";" no
+nível mais alto (fora de colchetes/parênteses — bracket-counting, nunca
+split ingênuo, ver `_split_statements`). Um identificador maiúsculo
+("A", "B", "M1") que NÃO é seguido de "(" — já reconhecido como
+`ScalarNode` desde a Sprint V2.2, ponto de extensão documentado ali —
+continua sendo esse mesmo nó; quem decide se ele é uma referência de
+variável de matriz ou um parâmetro escalar livre é `evaluator.py`, no
+momento da avaliação (o ambiente local só existe ali, nunca aqui).
+Identificador minúsculo continua 100% como antes (parâmetro escalar
+livre) — só maiúsculo entra no namespace de variável de matriz.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Union
 
@@ -83,6 +89,32 @@ class MatrixBinaryOpNode:
 
 MatrixNode = Union[MatrixLiteralNode, ScalarNode, MatrixCallNode, MatrixBinaryOpNode]
 
+
+@dataclass(frozen=True)
+class AssignmentNode:
+    """Uma atribuição de variável de matriz local ("NOME = expressão") já
+    parseada — `matrix` é a MESMA árvore `MatrixNode` de sempre (reaproveita
+    `_parse_expression` por completo; uma atribuição pode ter qualquer
+    expressão do lado direito, não só um literal, ex. "A = [[1,2],[3,4]] +
+    [[1,1],[1,1]]"). `evaluator.py` decide se o valor avaliado é realmente
+    uma matriz (nunca um escalar — fora do escopo desta sprint)."""
+
+    name: str
+    matrix: MatrixNode
+
+
+@dataclass(frozen=True)
+class ProgramNode:
+    """Zero ou mais `AssignmentNode` seguidos de UMA expressão final —
+    produzido por `parse_matrix_program`, o novo ponto de entrada de
+    `dispatcher.py`. As variáveis existem só durante a avaliação deste
+    programa (`evaluator.evaluate_matrix_program` descarta o ambiente ao
+    final) — nunca há estado entre chamadas do `/solve`."""
+
+    assignments: tuple[AssignmentNode, ...]
+    expression: MatrixNode
+
+
 # Nome digitado -> nome canônico usado por `evaluator.py`/`dispatcher.py`.
 CANONICAL_FUNCTION_NAMES: dict[str, str] = {
     "det": "det",
@@ -94,6 +126,28 @@ CANONICAL_FUNCTION_NAMES: dict[str, str] = {
     "trace": "trace",
     "traço": "trace",
 }
+
+# Sprint V2.2.1 — nomes que não podem ser usados como variável de matriz:
+# as próprias funções de matriz (`CANONICAL_FUNCTION_NAMES`, incluindo os
+# aliases PT-BR — evita "Det = [[1,2],[3,4]]" colidir com "det(...)" de
+# forma confusa) mais o vocabulário de célula pedido explicitamente
+# (trigonometria/log/raiz). Comparação é case-insensitive (`name.lower()`)
+# — "Det"/"DET" são igualmente reservados, não só "det" (que já cairia no
+# erro de nome inválido antes disso, por não começar com maiúscula).
+RESERVED_NAMES: frozenset[str] = frozenset(CANONICAL_FUNCTION_NAMES) | {
+    "sin",
+    "cos",
+    "tan",
+    "ln",
+    "log",
+    "sqrt",
+}
+
+# Variável de matriz: letra maiúscula seguida de letras/dígitos/underscore
+# — "A", "B", "M1", "Matriz2". Minúsculo inicial nunca é nome de variável
+# de matriz (continua sendo parâmetro escalar livre, comportamento
+# intocado desde antes desta sprint).
+_NAME_PATTERN = re.compile(r"^[A-Z][A-Za-z0-9_]*$")
 
 
 # --- Bracket-counting (nunca regex) -------------------------------------
@@ -284,3 +338,94 @@ def parse_matrix_expression(expression: str) -> MatrixNode:
     if end != len(expression):
         raise ExpressionError(f"Não foi possível interpretar a expressão de matriz: {expression}")
     return node
+
+
+# --- Programa (atribuições + expressão final) -----------------------------
+
+
+def _split_statements(text: str) -> list[str]:
+    """Divide `text` em instruções por "\\n" OU ";" no nível mais alto —
+    fora de colchetes/parênteses/chaves — num único bracket-counting
+    (nunca um split ingênuo, e nunca dois passes separados para os dois
+    separadores: os dois são tratados igualmente, no mesmo laço, mesma
+    técnica de `_split_top_level` generalizada para múltiplos caracteres
+    de separação). Instruções vazias (linha em branco, ";" duplo,
+    espaço) são descartadas aqui — o chamador nunca precisa filtrar de
+    novo."""
+    statements: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for char in text:
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+        if char in "\n;" and depth == 0:
+            statement = "".join(current).strip()
+            if statement:
+                statements.append(statement)
+            current = []
+            continue
+        current.append(char)
+    tail = "".join(current).strip()
+    if tail:
+        statements.append(tail)
+    return statements
+
+
+def _parse_assignment_line(line: str) -> AssignmentNode:
+    """`line` já é uma instrução isolada (sem "\\n"/";" de nível mais
+    alto). Divide em "NOME" / "expressão" pelo primeiro "=" de nível mais
+    alto — mesmo `_split_top_level` de sempre, que já ignora "=" dentro de
+    colchetes/parênteses (irrelevante aqui, pois nomes de variável nunca
+    têm colchete, mas mantém a mesma disciplina de bracket-counting em vez
+    de um `line.split("=", 1)` ingênuo)."""
+    parts = _split_top_level(line, "=")
+    if len(parts) != 2:
+        raise ExpressionError(f"Atribuição de matriz inválida: '{line}'.")
+
+    name, rhs_text = parts[0].strip(), parts[1].strip()
+    if not _NAME_PATTERN.match(name):
+        raise ExpressionError(
+            f"Nome de variável inválido: '{name}'. Use uma letra maiúscula seguida "
+            "opcionalmente de letras/números (ex. A, B, M1)."
+        )
+    if name.lower() in RESERVED_NAMES:
+        raise ExpressionError(
+            f"'{name}' é um nome reservado (função/constante do motor de matrizes) "
+            "e não pode ser usado como variável."
+        )
+    if not rhs_text:
+        raise ExpressionError(f"Atribuição sem expressão: '{line}'.")
+
+    matrix_node, end = _parse_expression(rhs_text, 0)
+    end = _skip_whitespace(rhs_text, end)
+    if end != len(rhs_text):
+        raise ExpressionError(f"Não foi possível interpretar a atribuição: '{line}'.")
+
+    return AssignmentNode(name=name, matrix=matrix_node)
+
+
+def parse_matrix_program(text: str) -> ProgramNode:
+    """Ponto de entrada de `dispatcher.py` (Sprint V2.2.1) — substitui a
+    chamada direta a `parse_matrix_expression` de antes. Zero atribuições
+    (o caso de 100% das expressões da Sprint V2.2, sem nenhuma mudança de
+    comportamento) produz um `ProgramNode` com `assignments=()` e a mesma
+    árvore de sempre em `expression`."""
+    statements = _split_statements(text)
+    if not statements:
+        raise ExpressionError("A expressão não pode estar vazia.")
+
+    *assignment_lines, expression_line = statements
+
+    assignments: list[AssignmentNode] = []
+    seen_names: set[str] = set()
+    for line in assignment_lines:
+        assignment = _parse_assignment_line(line)
+        if assignment.name in seen_names:
+            raise ExpressionError(f"Variável '{assignment.name}' já foi definida.")
+        seen_names.add(assignment.name)
+        assignments.append(assignment)
+
+    expression = parse_matrix_expression(expression_line)
+    return ProgramNode(assignments=tuple(assignments), expression=expression)

@@ -25,6 +25,12 @@ export const QUICK_EXAMPLES: QuickExample[] = [
     label: "[[1,2],[3,4]]*[[5,6],[7,8]]",
     expression: "[[1,2],[3,4]]*[[5,6],[7,8]]",
   },
+  // Sprint V2.2.2 — os exemplos com variáveis locais (A=..., B=...) da
+  // V2.2.1 foram removidos daqui por decisão de UX do Theo, após testar a
+  // interface: a sintaxe continua 100% suportada pelo motor (ver
+  // `matrix/parsing.py`/`matrix/evaluator.py`), só deixou de aparecer como
+  // exemplo rápido. Nenhuma mudança de backend, teclado, histórico ou
+  // Biblioteca de Fórmulas.
 ];
 
 export interface QuickShortcut {

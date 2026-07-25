@@ -12,6 +12,8 @@ depois que os operandos, que podem ser expressões arbitrárias, já viraram
 `sympy.Matrix`/`sympy.Expr` concretos)."""
 from __future__ import annotations
 
+from typing import Union
+
 from sympy.core.expr import Expr
 from sympy.matrices import MatrixBase
 
@@ -81,4 +83,16 @@ def validate_power_exponent(exponent: Expr) -> int:
         raise ExpressionError(
             f"O expoente de uma potência de matriz não pode ser maior que {MAX_MATRIX_POWER}."
         )
+    return value
+
+
+def validate_assignment_is_matrix(name: str, value: Union[MatrixBase, Expr]) -> MatrixBase:
+    """Sprint V2.2.1 — uma atribuição de variável local SEMPRE precisa
+    avaliar para uma matriz (nunca um escalar, ex. "A = 5"): variáveis
+    escalares estão fora do escopo desta sprint, por decisão explícita
+    ("não misturar escalares e matrizes em atribuições"). Devolve `value`
+    já tipado como `MatrixBase` para o chamador não precisar de outro
+    `isinstance` depois desta checagem."""
+    if not isinstance(value, MatrixBase):
+        raise ExpressionError(f"'{name}' precisa ser uma matriz (recebido um valor escalar).")
     return value

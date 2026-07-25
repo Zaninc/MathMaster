@@ -205,6 +205,23 @@ describe("CalculatorWorkspace", () => {
     expect(screen.getByLabelText("Expressão matemática")).toHaveValue("d/dx(x² + 3x)");
   });
 
+  it("Sprint V2.2.1: o campo (agora um textarea) preserva um valor multi-linha de variáveis locais de matriz", async () => {
+    // Sprint V2.2.2 removeu os exemplos com variáveis locais (A=..., B=...)
+    // da lista de "Exemplos" (decisão de UX) — a sintaxe continua 100%
+    // suportada pelo motor e pelo campo em si, só deixou de ter um botão
+    // de exemplo dedicado. Preenchimento simulado diretamente (mesmo
+    // caminho que colar/digitar exerceria) em vez de clicar um exemplo.
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    render(<CalculatorWorkspace />);
+
+    const field = screen.getByLabelText("Expressão matemática");
+    expect(field.tagName).toBe("TEXTAREA");
+
+    fireEvent.change(field, { target: { value: "A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA*B" } });
+
+    expect(field).toHaveValue("A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA*B");
+  });
+
   it("oculta um item do histórico localmente ao clicar em Ocultar", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([
       { expression: "2+2", result: "4", approx: null, timestamp: "2026-01-01T00:00:00Z" },

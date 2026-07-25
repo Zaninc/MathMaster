@@ -159,6 +159,39 @@ describe("expressionToLatex", () => {
     // "²ⁿ" não é template oficial — fail-closed.
     expect(await expressionToLatex("x²ⁿ")).toBeNull();
   });
+
+  // --- Sprint V2.2.1 (Variáveis Locais para Matrizes) ---------------------
+
+  it("converte um programa de matriz multi-linha (atribuições + expressão final)", async () => {
+    const latex = normalized(
+      await expressionToLatex("A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA*B")
+    );
+    expect(latex).toContain("\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}");
+    expect(latex).toContain("\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}");
+    expect(latex).toContain("\\cdot");
+  });
+
+  it("converte um programa de matriz separado por ';' com o mesmo conteúdo de um separado por quebra de linha", async () => {
+    // O mathjs preserva o ";" como token literal no LaTeX (separador
+    // visível), então a string não é byte-idêntica à versão com "\n" — só
+    // o CONTEÚDO (as duas matrizes + o det) precisa ser o mesmo.
+    const withSemicolon = normalized(await expressionToLatex("A=[[1,2],[3,4]]; det(A)"));
+    const withNewline = normalized(await expressionToLatex("A=[[1,2],[3,4]]\ndet(A)"));
+    expect(withSemicolon.replace(/;/g, "")).toBe(withNewline.replace(/;/g, ""));
+  });
+
+  it("uma equação simples de UMA linha continua indo pelo split de '=' de sempre (regressão)", async () => {
+    // Sem "[[" nem "\n"/";" — não deve entrar no atalho de programa de
+    // matriz; continua reconhecendo "x = 2" via EQUATION_SPLIT.
+    const latex = normalized(await expressionToLatex("x = 2"));
+    expect(latex).toBe("x=2");
+  });
+
+  it("uma matriz de duas linhas SEM atribuição (só formatação visual) continua funcionando (regressão da colisão com pairToLatex)", async () => {
+    const latex = normalized(await expressionToLatex("[[1, 2],\n [3, 4]]"));
+    expect(latex).toContain("\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}");
+    expect(latex).not.toContain("\\right)");
+  });
 });
 
 describe("valueToLatex", () => {
@@ -388,6 +421,16 @@ describe("inputToLatex (echo da expressão digitada)", () => {
     const latex = normalized(await inputToLatex("2 * [[1,2],[3,4]]"));
     expect(latex).toContain("\\begin{bmatrix}");
   });
+
+  // --- Sprint V2.2.1 (Variáveis Locais para Matrizes) ---------------------
+
+  it("converte o echo de um programa de matriz com atribuições, preservando a expressão digitada", async () => {
+    const latex = normalized(
+      await inputToLatex("A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA*B")
+    );
+    expect(latex).toContain("\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}");
+    expect(latex).toContain("\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}");
+  });
 });
 
 /**
@@ -584,6 +627,23 @@ describe("previewLatex (pipeline único da pré-visualização e do histórico)"
 
   it("digitação incompleta de matriz nunca lança e sempre renderiza em segurança (Tier 2)", async () => {
     for (const input of ["[[1,2],[3,", "[[1,2],", "[["]) {
+      const latex = await previewLatex(input);
+      expect(latex, input).not.toBeNull();
+      assertRendersSafely(latex as string, input);
+    }
+  });
+
+  // --- Sprint V2.2.1 (Variáveis Locais para Matrizes) ---------------------
+
+  it("mostra o programa de matriz completo (atribuições + expressão final) assim que fica válido", async () => {
+    const latex = await previewLatex("A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA*B");
+    expect(latex).not.toBeNull();
+    expect(latex).toContain("\\begin{bmatrix}");
+    assertRendersSafely(latex as string, "A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA*B");
+  });
+
+  it("digitação incompleta de um programa de matriz (ainda no meio de uma atribuição) nunca lança", async () => {
+    for (const input of ["A=[[1,2],[3,4]]\nB=", "A=[[1,2],[3,4]]\nB=[[5,", "A=[[1,2],[3,4]]\n"]) {
       const latex = await previewLatex(input);
       expect(latex, input).not.toBeNull();
       assertRendersSafely(latex as string, input);

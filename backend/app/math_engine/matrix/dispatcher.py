@@ -33,13 +33,14 @@ critério (`.search()`) que `trigonometry`/`logarithms` já usam, necessário
 aqui porque o operando de matriz pode vir depois de um escalar
 ("2 * [[1,2],[3,4]]", que não começa com "[[").
 
-Preparação para evolução futura (nomes de matriz — ver docstring de
-`parsing.py`): esta função de detecção de domínio não precisaria mudar
-quando essa evolução chegar — "A*B" sem nenhum "[[" na expressão não seria
-reconhecido hoje (comportamento correto: cai para `algebra`, que rejeita
-"A"/"B" como identificadores de múltiplas letras), e a detecção baseada em
-"[[" continuaria funcionando para o caso "A=[[1,2],[3,4]]" (contém "[["),
-sem exigir nenhuma mudança aqui.
+Sprint V2.2.1 (Variáveis Locais para Matrizes): um programa como
+"A=[[1,2],[3,4]]\\nB=[[5,6],[7,8]]\\nA*B" continua caindo aqui sem
+NENHUMA mudança nesta função — contém "[[" na primeira atribuição, então
+`is_matrix_domain_expression` já reconhece antes mesmo de saber que há
+atribuições. Quem interpreta atribuição/ambiente local é
+`parsing.parse_matrix_program`/`evaluator.evaluate_matrix_program`, únicas
+peças novas chamadas por `solve_matrix_text` abaixo — exatamente a
+preparação já prevista na docstring de `parsing.py` da Sprint V2.2.
 """
 from __future__ import annotations
 
@@ -47,8 +48,8 @@ import re
 
 from sympy.matrices import MatrixBase
 
-from .evaluator import evaluate_matrix_node
-from .parsing import CANONICAL_FUNCTION_NAMES, parse_matrix_expression
+from .evaluator import evaluate_matrix_program
+from .parsing import CANONICAL_FUNCTION_NAMES, parse_matrix_program
 
 _MATRIX_LITERAL_MARKER = "[["
 
@@ -79,7 +80,7 @@ def _render_matrix(matrix: MatrixBase) -> str:
 
 
 def solve_matrix_text(expression: str) -> str:
-    node = parse_matrix_expression(expression)
-    result = evaluate_matrix_node(node)
+    program = parse_matrix_program(expression)
+    result = evaluate_matrix_program(program)
     rendered = _render_matrix(result) if isinstance(result, MatrixBase) else str(result)
     return _rename_natural_log(rendered)

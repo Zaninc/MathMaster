@@ -127,17 +127,29 @@ describe("getCalculatorExplorations", () => {
     ]);
   });
 
-  it("operação entre matrizes também é reconhecida (não só o literal isolado)", () => {
+  it("operação entre matrizes também é reconhecida e ganha 'Ver propriedades' (Sprint V2.2.1: resultado da operação é matriz)", () => {
     const links = getCalculatorExplorations("[[1,2],[3,4]] + [[5,6],[7,8]]");
-    expect(links.map((link) => link.label)).toEqual(["Ver fórmulas relacionadas", "Exercícios semelhantes"]);
+    expect(links).toEqual([
+      {
+        icon: "🧮",
+        label: "Ver propriedades",
+        href: calculatorLink("det([[1,2],[3,4]] + [[5,6],[7,8]])"),
+      },
+      { icon: "📚", label: "Ver fórmulas relacionadas", href: formulasLink({ categoria: "algebra-linear" }) },
+      { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-linear") },
+    ]);
   });
 
-  it("escalar antes da matriz também é reconhecido ('2 * [[...]]' não começa com '[[')", () => {
+  it("escalar antes da matriz também é reconhecido ('2 * [[...]]' não começa com '[[') e ganha 'Ver propriedades'", () => {
     const links = getCalculatorExplorations("2 * [[1,2],[3,4]]");
-    expect(links.map((link) => link.label)).toEqual(["Ver fórmulas relacionadas", "Exercícios semelhantes"]);
+    expect(links.map((link) => link.label)).toEqual([
+      "Ver propriedades",
+      "Ver fórmulas relacionadas",
+      "Exercícios semelhantes",
+    ]);
   });
 
-  it("det(...)/inv(...)/transpose(...)/trace(...) e aliases PT-BR são reconhecidos sem 'Ver propriedades' (expressão já não é um literal puro)", () => {
+  it("det(...)/inv(...)/transpose(...)/trace(...) e aliases PT-BR são reconhecidos sem 'Ver propriedades' (instrução final já é uma chamada pronta)", () => {
     for (const expression of [
       "det([[1,2],[3,4]])",
       "inv([[1,2],[3,4]])",
@@ -154,5 +166,54 @@ describe("getCalculatorExplorations", () => {
         "Exercícios semelhantes",
       ]);
     }
+  });
+
+  // --- Sprint V2.2.1 (Variáveis Locais para Matrizes) --------------------
+
+  it("programa com atribuição e referência de variável na instrução final ganha 'Ver propriedades', preservando as atribuições no link", () => {
+    const links = getCalculatorExplorations("A=[[1,2],[3,4]]\nA");
+    expect(links).toEqual([
+      { icon: "🧮", label: "Ver propriedades", href: calculatorLink("A=[[1,2],[3,4]]\ndet(A)") },
+      { icon: "📚", label: "Ver fórmulas relacionadas", href: formulasLink({ categoria: "algebra-linear" }) },
+      { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-linear") },
+    ]);
+  });
+
+  it("programa com duas atribuições e uma operação na instrução final ganha 'Ver propriedades' com as DUAS atribuições preservadas", () => {
+    const links = getCalculatorExplorations("A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA+B");
+    expect(links[0]).toEqual({
+      icon: "🧮",
+      label: "Ver propriedades",
+      href: calculatorLink("A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\ndet(A+B)"),
+    });
+  });
+
+  it("programa com atribuição e det(A) na instrução final NÃO mostra 'Ver propriedades' (já é uma chamada pronta)", () => {
+    const links = getCalculatorExplorations("A=[[1,2],[3,4]]\ndet(A)");
+    expect(links.map((link) => link.label)).toEqual(["Ver fórmulas relacionadas", "Exercícios semelhantes"]);
+  });
+
+  it("';' também separa instruções — mesmo resultado que '\\n'", () => {
+    const withNewline = getCalculatorExplorations("A=[[1,2],[3,4]]\ndet(A)");
+    const withSemicolon = getCalculatorExplorations("A=[[1,2],[3,4]]; det(A)");
+    expect(withSemicolon).toEqual(withNewline);
+  });
+
+  it("uma matriz formatada em várias linhas (sem atribuição) continua tratada como UMA instrução só", () => {
+    const links = getCalculatorExplorations("[[1, 2],\n [3, 4]]");
+    expect(links[0]).toEqual({
+      icon: "🧮",
+      label: "Ver propriedades",
+      href: calculatorLink("det([[1, 2],\n [3, 4]])"),
+    });
+  });
+
+  it("variável indefinida na instrução final (sem 'A' no gate) não é confundida com matriz por acaso", () => {
+    // "5" sozinho não tem "[[" nem chamada de função — mesmo com uma
+    // atribuição de matriz antes, o gate (`isMatrix` na expressão inteira)
+    // ainda é true (tem "[["), então isto cai no ramo de matriz; não é o
+    // uso pretendido, mas documentado aqui para não regredir em silêncio.
+    const links = getCalculatorExplorations("A=[[1,2],[3,4]]\n5");
+    expect(links.map((link) => link.label)).toContain("Ver fórmulas relacionadas");
   });
 });

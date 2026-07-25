@@ -556,3 +556,48 @@ describe("ResultPanel — matrizes (Sprint V2.2)", () => {
     expect(screen.getByRole("link", { name: "Ver fórmulas relacionadas" })).toBeInTheDocument();
   });
 });
+
+describe("ResultPanel — variáveis locais de matriz (Sprint V2.2.1)", () => {
+  it("renderiza um programa multi-linha (atribuições + expressão final) sem quebrar, expressão preservada verbatim", async () => {
+    const expression = "A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA*B";
+    const { container } = render(
+      <ResultPanel
+        status="success"
+        expression={expression}
+        result="[[19, 22], [43, 50]]"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBeGreaterThan(0));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    // Eco da expressão (topo) mostra as DUAS matrizes definidas via
+    // atribuição; o resultado (embaixo) é a matriz final do produto —
+    // pelo menos 2 blocos "\begin{bmatrix}" no total.
+    expect(annotations.filter((latex) => latex?.includes("\\begin{bmatrix}")).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("bloco Explorar de um programa com variável na expressão final mostra 'Ver propriedades' com as atribuições preservadas no link", async () => {
+    render(
+      <ResultPanel
+        status="success"
+        expression={"A=[[1,2],[3,4]]\nA"}
+        result="[[1, 2], [3, 4]]"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    const link = screen.getByRole("link", { name: "Ver propriedades" });
+    const href = decodeURIComponent(link.getAttribute("href") ?? "");
+    expect(href).toContain("A=[[1,2],[3,4]]");
+    expect(href).toContain("det(A)");
+  });
+});
