@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useId, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { PageShell } from "@/components/layout/PageShell";
 import { MathInput } from "@/components/math-input/MathInput";
@@ -65,31 +65,75 @@ export function CalculatorWorkspace() {
     inputRef.current?.setSelectionRange(position, position);
   }, [expression]);
 
-  async function refreshHistory() {
+  const refreshHistory = useCallback(async () => {
     try {
       setHistory(await apiClient.getHistory());
     } catch {
       // histórico é secundário
     }
-  }
+  }, []);
 
-  async function solve(value: string) {
-    if (value.trim().length === 0) return;
-    setStatus("loading");
-    setResult(null);
-    setApprox(null);
-    setErrorMessage(null);
-    setSolvedExpression(value);
-    try {
-      const response = await apiClient.solve(value);
-      setResult(response.result);
-      setApprox(response.approx);
-      setStatus("success");
-      await refreshHistory();
-    } catch (cause) {
-      const apiError = cause instanceof ApiError ? cause : new ApiError("network_error");
-      setErrorMessage(friendlyMessage(apiError));
-      setStatus("error");
+  const solve = useCallback(
+    async (value: string) => {
+      if (value.trim().length === 0) return;
+      setStatus("loading");
+      setResult(null);
+      setApprox(null);
+      setErrorMessage(null);
+      setSolvedExpression(value);
+      try {
+        const response = await apiClient.solve(value);
+        setResult(response.result);
+        setApprox(response.approx);
+        setStatus("success");
+        await refreshHistory();
+      } catch (cause) {
+        const apiError = cause instanceof ApiError ? cause : new ApiError("network_error");
+        setErrorMessage(friendlyMessage(apiError));
+        setStatus("error");
+      }
+    },
+    [refreshHistory]
+  );
+
+  // Investigação "Ver propriedades" (pós-Sprint V2.3): `useState(() =>
+  // searchParams.get("expression") ?? "")` acima só roda no PRIMEIRO
+  // mount — um link que aponta pra ESTA MESMA rota (ex. "Ver
+  // propriedades" de `data/connections.ts`, sempre clicado a partir de
+  // `/calculadora`) troca a query string sem desmontar `CalculatorWorkspace`
+  // (Next.js App Router preserva a instância numa navegação que só muda
+  // parâmetros da mesma página), então o inicializador nunca roda de novo
+  // e a tela parecia "não fazer nada" ao clicar.
+  //
+  // Ajuste direto no CORPO DO RENDER (nunca dentro de um `useEffect`),
+  // mesmo padrão já usado em `ProgressiveMathResult`/`RouteTransition`
+  // neste projeto para "resetar estado quando uma prop muda": comparar
+  // contra o último valor já processado e, só quando muda de verdade,
+  // ajustar o estado. `solve` chamado direto aqui (não num efeito) é
+  // deliberado: `solve` seta vários estados de forma síncrona antes do
+  // primeiro `await` (pro "Resolvendo..." aparecer na hora, mesmo em
+  // `handleSubmit`) — chamar isso de dentro de um `useEffect` dispara o
+  // lint `react-hooks/set-state-in-effect` (cascata de renders); ajustar
+  // no corpo do render é o padrão que este projeto já usa pra evitar
+  // exatamente isso.
+  const deepLinkExpression = searchParams.get("expression");
+  const deepLinkAutoSolve = searchParams.get("autoSolve") === "1";
+  const [previousDeepLinkExpression, setPreviousDeepLinkExpression] = useState<string | null>(null);
+  if (deepLinkExpression !== null && deepLinkExpression !== previousDeepLinkExpression) {
+    setPreviousDeepLinkExpression(deepLinkExpression);
+    // Sempre sincroniza o campo com o que está sendo resolvido — mesmo em
+    // `autoSolve`, onde `solve()` não mexe em `expression` sozinho
+    // (só quem chama `solve` decide o que aparece no campo, ver
+    // `handleSubmit`/`fillExpression`); sem isso, o resultado mudaria sem
+    // o campo de texto acompanhar.
+    setExpression(deepLinkExpression);
+    if (deepLinkAutoSolve) {
+      solve(deepLinkExpression);
+    } else {
+      setStatus("idle");
+      setResult(null);
+      setApprox(null);
+      setErrorMessage(null);
     }
   }
 

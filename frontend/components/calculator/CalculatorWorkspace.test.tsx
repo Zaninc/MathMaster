@@ -183,6 +183,85 @@ describe("CalculatorWorkspace", () => {
     expect(apiClient.solve).not.toHaveBeenCalled();
   });
 
+  /**
+   * Investigação "Ver propriedades" (pós-Sprint V2.3) — regressão do bug
+   * real: `useState(() => searchParams.get("expression") ?? "")` só roda
+   * no PRIMEIRO mount. Um link como "Ver propriedades" aponta pra ESTA
+   * MESMA rota (`/calculadora?expression=...`), então clicar nele troca
+   * só a query string SEM desmontar `CalculatorWorkspace` — sem a
+   * correção, o campo/resultado nunca reagiam à nova query. `rerender`
+   * simula exatamente essa navegação intra-página (o mock de
+   * `useSearchParams` muda de valor SEM o componente desmontar, igual ao
+   * App Router faria de verdade).
+   */
+  describe("navegação intra-página via query string (ex. 'Ver propriedades')", () => {
+    it("uma query string NOVA (após o mount) atualiza o campo, mesmo sem desmontar o componente", () => {
+      searchParamsMock.mockReturnValue(new URLSearchParams("expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)"));
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+
+      const { rerender } = render(<CalculatorWorkspace />);
+      expect(screen.getByLabelText("Expressão matemática")).toHaveValue("det([[1,2],[3,4]])");
+
+      searchParamsMock.mockReturnValue(
+        new URLSearchParams("expression=transpose(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)")
+      );
+      rerender(<CalculatorWorkspace />);
+
+      expect(screen.getByLabelText("Expressão matemática")).toHaveValue("transpose([[1,2],[3,4]])");
+    });
+
+    it("query string com autoSolve=1 resolve automaticamente ao chegar (ex. 'Ver propriedades')", async () => {
+      searchParamsMock.mockReturnValue(new URLSearchParams());
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({
+        expression: "det([[1,2],[3,4]])",
+        result: "-2",
+        approx: null,
+      });
+
+      const { rerender } = render(<CalculatorWorkspace />);
+      expect(apiClient.solve).not.toHaveBeenCalled();
+
+      searchParamsMock.mockReturnValue(
+        new URLSearchParams("expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)&autoSolve=1")
+      );
+      rerender(<CalculatorWorkspace />);
+
+      expect(screen.getByLabelText("Expressão matemática")).toHaveValue("det([[1,2],[3,4]])");
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith("det([[1,2],[3,4]])"));
+      expect((await screen.findAllByText("-2")).length).toBeGreaterThan(0);
+    });
+
+    it("sem autoSolve, uma query string nova só pré-preenche — não resolve sozinha", () => {
+      searchParamsMock.mockReturnValue(new URLSearchParams());
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+
+      const { rerender } = render(<CalculatorWorkspace />);
+
+      searchParamsMock.mockReturnValue(new URLSearchParams("expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)"));
+      rerender(<CalculatorWorkspace />);
+
+      expect(screen.getByLabelText("Expressão matemática")).toHaveValue("det([[1,2],[3,4]])");
+      expect(apiClient.solve).not.toHaveBeenCalled();
+    });
+
+    it("re-renderizar com a MESMA query string não reprocessa (evita loop/nova chamada)", async () => {
+      searchParamsMock.mockReturnValue(
+        new URLSearchParams("expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)&autoSolve=1")
+      );
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({ expression: "det(...)", result: "-2", approx: null });
+
+      const { rerender } = render(<CalculatorWorkspace />);
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledTimes(1));
+
+      rerender(<CalculatorWorkspace />);
+      rerender(<CalculatorWorkspace />);
+
+      expect(apiClient.solve).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("preenche o campo ao clicar num item do histórico", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([
       { expression: "2+2", result: "4", approx: null, timestamp: "2026-01-01T00:00:00Z" },

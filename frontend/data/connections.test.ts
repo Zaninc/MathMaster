@@ -16,6 +16,24 @@ describe("URL helpers", () => {
     expect(calculatorLink("x² - 4 = 0")).toBe("/calculadora?expression=x%C2%B2%20-%204%20%3D%200");
   });
 
+  /**
+   * Investigação "Ver propriedades" (pós-Sprint V2.3): `autoSolve` é
+   * opt-in — omitido ou `false`, o href continua BYTE A BYTE igual a
+   * antes (nenhum outro consumidor de `calculatorLink` no app hoje passa
+   * essa opção). Só `true` acrescenta o marcador.
+   */
+  it("calculatorLink com autoSolve acrescenta o marcador, sem afetar chamadas sem a opção", () => {
+    expect(calculatorLink("det([[1,2],[3,4]])", { autoSolve: true })).toBe(
+      "/calculadora?expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)&autoSolve=1"
+    );
+    expect(calculatorLink("det([[1,2],[3,4]])", { autoSolve: false })).toBe(
+      "/calculadora?expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)"
+    );
+    expect(calculatorLink("det([[1,2],[3,4]])")).toBe(
+      "/calculadora?expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)"
+    );
+  });
+
   it("graphsLink codifica a função", () => {
     expect(graphsLink("x^2-4")).toBe("/graficos?fn=x%5E2-4");
   });
@@ -122,7 +140,11 @@ describe("getCalculatorExplorations", () => {
   it("literal de matriz sugere propriedades, fórmulas e exercícios de Álgebra Linear", () => {
     const links = getCalculatorExplorations("[[1,2],[3,4]]");
     expect(links).toEqual([
-      { icon: "🧮", label: "Ver propriedades", href: calculatorLink("det([[1,2],[3,4]])") },
+      {
+        icon: "🧮",
+        label: "Ver propriedades",
+        href: calculatorLink("det([[1,2],[3,4]])", { autoSolve: true }),
+      },
       { icon: "📚", label: "Ver fórmulas relacionadas", href: formulasLink({ categoria: "algebra-linear" }) },
       { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-linear") },
     ]);
@@ -134,7 +156,7 @@ describe("getCalculatorExplorations", () => {
       {
         icon: "🧮",
         label: "Ver propriedades",
-        href: calculatorLink("det([[1,2],[3,4]] + [[5,6],[7,8]])"),
+        href: calculatorLink("det([[1,2],[3,4]] + [[5,6],[7,8]])", { autoSolve: true }),
       },
       { icon: "📚", label: "Ver fórmulas relacionadas", href: formulasLink({ categoria: "algebra-linear" }) },
       { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-linear") },
@@ -150,15 +172,11 @@ describe("getCalculatorExplorations", () => {
     ]);
   });
 
-  it("det(...)/inv(...)/transpose(...)/trace(...) e aliases PT-BR são reconhecidos sem 'Ver propriedades' (instrução final já é uma chamada pronta)", () => {
+  it("det(...)/trace(...) e aliases PT-BR são reconhecidos sem 'Ver propriedades' (resultado já é escalar, compor det(det(...)) não faz sentido)", () => {
     for (const expression of [
       "det([[1,2],[3,4]])",
-      "inv([[1,2],[3,4]])",
-      "transpose([[1,2],[3,4]])",
       "trace([[1,2],[3,4]])",
       "determinante([[1,2],[3,4]])",
-      "inversa([[1,2],[3,4]])",
-      "transposta([[1,2],[3,4]])",
       "traço([[1,2],[3,4]])",
     ]) {
       const links = getCalculatorExplorations(expression);
@@ -169,12 +187,43 @@ describe("getCalculatorExplorations", () => {
     }
   });
 
+  /**
+   * Investigação "Ver propriedades" (pós-Sprint V2.3): diferente de
+   * det(...)/trace(...) acima, `inv(...)`/`transpose(...)` PRODUZEM uma
+   * matriz — "Ver propriedades" continua fazendo sentido para eles
+   * (compor "det(inv(A))"/"det(transpose(A))" é um cálculo diferente e
+   * útil, não uma composição redundante como "det(det(A))"). A versão
+   * anterior desta regra tratava os quatro nomes igual, escondendo o
+   * botão errado para estes dois — corrigido em
+   * `SCALAR_MATRIX_PROPERTY_CALL_PATTERN`.
+   */
+  it("inv(...)/transpose(...) e aliases PT-BR CONTINUAM mostrando 'Ver propriedades' (resultado é matriz, não escalar)", () => {
+    for (const expression of [
+      "inv([[1,2],[3,4]])",
+      "transpose([[1,2],[3,4]])",
+      "inversa([[1,2],[3,4]])",
+      "transposta([[1,2],[3,4]])",
+    ]) {
+      const links = getCalculatorExplorations(expression);
+      expect(links.map((link) => link.label), expression).toEqual([
+        "Ver propriedades",
+        "Ver fórmulas relacionadas",
+        "Exercícios semelhantes",
+      ]);
+      expect(links[0].href, expression).toBe(calculatorLink(`det(${expression})`, { autoSolve: true }));
+    }
+  });
+
   // --- Sprint V2.2.1 (Variáveis Locais para Matrizes) --------------------
 
   it("programa com atribuição e referência de variável na instrução final ganha 'Ver propriedades', preservando as atribuições no link", () => {
     const links = getCalculatorExplorations("A=[[1,2],[3,4]]\nA");
     expect(links).toEqual([
-      { icon: "🧮", label: "Ver propriedades", href: calculatorLink("A=[[1,2],[3,4]]\ndet(A)") },
+      {
+        icon: "🧮",
+        label: "Ver propriedades",
+        href: calculatorLink("A=[[1,2],[3,4]]\ndet(A)", { autoSolve: true }),
+      },
       { icon: "📚", label: "Ver fórmulas relacionadas", href: formulasLink({ categoria: "algebra-linear" }) },
       { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-linear") },
     ]);
@@ -185,7 +234,7 @@ describe("getCalculatorExplorations", () => {
     expect(links[0]).toEqual({
       icon: "🧮",
       label: "Ver propriedades",
-      href: calculatorLink("A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\ndet(A+B)"),
+      href: calculatorLink("A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\ndet(A+B)", { autoSolve: true }),
     });
   });
 
@@ -205,7 +254,7 @@ describe("getCalculatorExplorations", () => {
     expect(links[0]).toEqual({
       icon: "🧮",
       label: "Ver propriedades",
-      href: calculatorLink("det([[1, 2],\n [3, 4]])"),
+      href: calculatorLink("det([[1, 2],\n [3, 4]])", { autoSolve: true }),
     });
   });
 

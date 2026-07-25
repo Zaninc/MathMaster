@@ -8,8 +8,24 @@ export interface RelatedLink {
   href: string;
 }
 
-export function calculatorLink(expression: string): string {
-  return `/calculadora?expression=${encodeURIComponent(expression)}`;
+/**
+ * `options.autoSolve` (investigação "Ver propriedades", pós-Sprint V2.3):
+ * quando `true`, adiciona `&autoSolve=1` — `CalculatorWorkspace` resolve a
+ * expressão sozinho ao detectar esse marcador, em vez do comportamento
+ * padrão de só pré-preencher o campo (todo outro uso de `calculatorLink`,
+ * sem a opção, continua idêntico a antes — `undefined`/omitido nunca
+ * adiciona o parâmetro). Reservado para o link de "Ver propriedades"
+ * (`buildMatrixPropertiesLink`): sem isso, o usuário chegava com
+ * `det(...)` só escrito no campo, precisando clicar "Resolver" de novo —
+ * reforçava a sensação de "não levou a lugar nenhum" descrita na
+ * investigação. String literal `${encodeURIComponent(expression)}`
+ * preservada (não migrada para `URLSearchParams`, que codifica espaço
+ * como "+" em vez de "%20" — mudaria o contrato já testado de todo
+ * chamador existente).
+ */
+export function calculatorLink(expression: string, options?: { autoSolve?: boolean }): string {
+  const base = `/calculadora?expression=${encodeURIComponent(expression)}`;
+  return options?.autoSolve ? `${base}&autoSolve=1` : base;
 }
 
 export function graphsLink(fn: string): string {
@@ -257,16 +273,24 @@ export function isComplex(expression: string): boolean {
 
 /**
  * Sprint V2.2.1 (Variáveis Locais para Matrizes) — a expressão INTEIRA já
- * É uma chamada pronta a det/inv/transpose/trace (canônico ou alias
- * PT-BR), ex. "det(A)". Usado para decidir quando OMITIR "Ver
- * propriedades": compor "det(det(A))" não faz sentido — a propriedade já
- * é o resultado pedido.
+ * É uma chamada pronta a det/trace (canônico ou alias PT-BR), ex.
+ * "det(A)". Usado para decidir quando OMITIR "Ver propriedades": compor
+ * "det(det(A))" não faz sentido — a propriedade já é o resultado pedido
+ * (um escalar).
+ *
+ * Correção (investigação "Ver propriedades", pós-Sprint V2.3): SÓ
+ * det/trace entram aqui — inv/transpose foram removidos deliberadamente.
+ * A versão anterior tratava os quatro igual, escondendo "Ver
+ * propriedades" também para "inv(A)"/"transpose(A)", mesmo o RESULTADO
+ * deles sendo uma matriz (não um escalar): "det(inv(A))"/"det(transpose(A))"
+ * são cálculos diferentes e úteis, não uma composição redundante como
+ * "det(det(A))" — ver `isMatrixPropertyCall` sendo chamado só para decidir
+ * OMISSÃO, nunca para decidir se `isMatrix` reconhece a expressão.
  */
-const MATRIX_PROPERTY_CALL_PATTERN =
-  /^(det|inv|transpose|trace|determinante|inversa|transposta|traço)\s*\(.*\)$/i;
+const SCALAR_MATRIX_PROPERTY_CALL_PATTERN = /^(det|trace|determinante|traço)\s*\(.*\)$/i;
 
 function isMatrixPropertyCall(statement: string): boolean {
-  return MATRIX_PROPERTY_CALL_PATTERN.test(statement.trim());
+  return SCALAR_MATRIX_PROPERTY_CALL_PATTERN.test(statement.trim());
 }
 
 /**
@@ -314,13 +338,21 @@ function extractFinalStatement(expression: string): string {
  * sequência de atribuições, só envolvendo a instrução final em
  * "det(...)" — preserva as variáveis já definidas, para o link continuar
  * resolvível (ex. "A=[[1,2],[3,4]]\nA" -> "A=[[1,2],[3,4]]\ndet(A)").
+ *
+ * `{ autoSolve: true }` (investigação pós-Sprint V2.3): sem isso, o link
+ * só pré-preenche o campo — o usuário chegava em `/calculadora` com
+ * `det(...)` escrito, mas nada calculado, precisando clicar "Resolver"
+ * de novo. Ver `CalculatorWorkspace.tsx` para onde o marcador é
+ * consumido.
  */
 function buildMatrixPropertiesLink(expression: string): string {
   const statements = splitMatrixStatements(expression);
-  if (statements.length === 0) return calculatorLink(`det(${expression.trim()})`);
+  if (statements.length === 0) {
+    return calculatorLink(`det(${expression.trim()})`, { autoSolve: true });
+  }
   const finalStatement = statements[statements.length - 1];
   const program = [...statements.slice(0, -1), `det(${finalStatement})`].join("\n");
-  return calculatorLink(program);
+  return calculatorLink(program, { autoSolve: true });
 }
 
 /**
