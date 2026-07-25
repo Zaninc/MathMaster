@@ -10,7 +10,13 @@
  * acrescentou mais 17 fórmulas (29→46), sempre ao final do bloco da
  * categoria correspondente — preserva a ordem visual das já existentes.
  */
-export type FormulaCategoryId = "algebra" | "geometria" | "trigonometria" | "calculo" | "somatorios";
+export type FormulaCategoryId =
+  | "algebra"
+  | "geometria"
+  | "trigonometria"
+  | "calculo"
+  | "somatorios"
+  | "algebra-linear";
 
 export const FORMULA_CATEGORY_LABELS: Record<FormulaCategoryId, string> = {
   algebra: "Álgebra",
@@ -18,6 +24,7 @@ export const FORMULA_CATEGORY_LABELS: Record<FormulaCategoryId, string> = {
   trigonometria: "Trigonometria",
   calculo: "Cálculo",
   somatorios: "Somatórios",
+  "algebra-linear": "Álgebra Linear",
 };
 
 export interface FormulaEntry {
@@ -336,5 +343,42 @@ export const FORMULAS: FormulaEntry[] = [
     title: "Soma de PG finita",
     latex: String.raw`S_n = \frac{a_1(q^n-1)}{q-1},\; q \neq 1`,
     category: "somatorios",
+  },
+  // Sprint V2.2 — Motor de Matrizes, ordem pedida pelo Theo.
+  {
+    id: "multiplicacao-matrizes",
+    title: "Multiplicação de matrizes",
+    latex: String.raw`(AB)_{ij} = \sum_{k=1}^{n} a_{ik}\,b_{kj}`,
+    category: "algebra-linear",
+  },
+  {
+    id: "determinante-matriz-2x2",
+    title: "Determinante (matriz 2x2)",
+    latex: String.raw`\det\begin{bmatrix}a&b\\c&d\end{bmatrix} = ad-bc`,
+    category: "algebra-linear",
+  },
+  {
+    id: "inversa-matriz-2x2",
+    title: "Inversa (matriz 2x2)",
+    latex: String.raw`\begin{bmatrix}a&b\\c&d\end{bmatrix}^{-1} = \frac{1}{ad-bc}\begin{bmatrix}d&-b\\-c&a\end{bmatrix}`,
+    category: "algebra-linear",
+  },
+  {
+    id: "transposta-matriz",
+    title: "Transposta de uma matriz",
+    latex: String.raw`\begin{bmatrix}a&b\\c&d\end{bmatrix}^{T} = \begin{bmatrix}a&c\\b&d\end{bmatrix}`,
+    category: "algebra-linear",
+  },
+  {
+    id: "matriz-identidade",
+    title: "Matriz identidade",
+    latex: String.raw`I_2 = \begin{bmatrix}1&0\\0&1\end{bmatrix}`,
+    category: "algebra-linear",
+  },
+  {
+    id: "traco-matriz",
+    title: "Traço de uma matriz",
+    latex: String.raw`\operatorname{tr}(A) = \sum_{i=1}^{n} a_{ii}`,
+    category: "algebra-linear",
   },
 ];

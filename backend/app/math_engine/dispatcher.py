@@ -17,6 +17,7 @@ from .logarithms.dispatcher import (
     is_logarithm_domain_expression,
     solve_logarithm_text,
 )
+from .matrix.dispatcher import is_matrix_domain_expression, solve_matrix_text
 from .parser.normalize import normalize_expression
 from .safe_parsing import safe_parse_expr
 from .summation.dispatcher import (
@@ -67,6 +68,15 @@ def solve_expression(expression: str) -> str:
     # inteiro. Ver docstring de `summation/dispatcher.py`.
     if is_summation_domain_expression(expression):
         return solve_summation_text(expression)
+
+    # Sprint V2.2 — precisa vir antes de calculus/functions/trigonometry/
+    # logarithms/equations pelo mesmo motivo que já justifica summation vir
+    # antes delas: o argumento de "det(...)"/"inv(...)"/etc., ou o lado
+    # direito de uma multiplicação por escalar, pode conter livremente
+    # números que essas áreas casariam por conta própria. Ver docstring de
+    # `matrix/dispatcher.py`.
+    if is_matrix_domain_expression(expression):
+        return solve_matrix_text(expression)
 
     # Sprint 12 — precisa vir antes de functions/trigonometry/logarithms:
     # essas áreas casam "sin("/"log(" em qualquer posição do texto, o que

@@ -116,6 +116,20 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(key!.ariaLabel).toBeDefined();
   });
 
+  it("tecla de matriz (Álgebra) insere o template 2x2 com cursor no primeiro elemento", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    const key = algebra?.keys.find((candidate) => candidate.label === "[[ ]]");
+    expect(key).toBeDefined();
+    expect(key!.insert).toBe("[[,],[,]]");
+    expect(key!.cursorOffset).toBe(2);
+    // Posição do cursor cai exatamente entre "[[" e a primeira vírgula —
+    // o primeiro slot de elemento vazio.
+    expect(key!.insert.slice(0, key!.cursorOffset)).toBe("[[");
+    expect(key!.insert[key!.cursorOffset]).toBe(",");
+    expect(key!.latex).toContain("\\begin{bmatrix}");
+    expect(key!.ariaLabel).toBeDefined();
+  });
+
   it("nenhuma tecla insere um operador cru sem operandos", () => {
     for (const category of KEYBOARD_CATEGORIES) {
       for (const key of category.keys) {

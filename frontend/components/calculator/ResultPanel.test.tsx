@@ -463,3 +463,96 @@ describe("ResultPanel — alternância exato/aproximado", () => {
     expect(screen.queryByRole("button", { name: "Resultado aproximado" })).not.toBeInTheDocument();
   });
 });
+
+describe("ResultPanel — matrizes (Sprint V2.2)", () => {
+  it("renderiza a expressão e o resultado de uma matriz literal como \\begin{bmatrix}, sem duplicar", async () => {
+    const { container } = render(
+      <ResultPanel
+        status="success"
+        expression="[[1,2],[3,4]]"
+        result="[[1, 2], [3, 4]]"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    // Exatamente dois blocos matemáticos (expressão + resultado), cada um
+    // com \begin{bmatrix} — nunca um terceiro nó nem uma leitura como
+    // tupla de dois vetores-linha (regressão do bug de `pairToLatex`).
+    expect(annotations.filter((latex) => latex?.includes("\\begin{bmatrix}"))).toHaveLength(2);
+    expect(annotations.some((latex) => latex?.includes("\\right)"))).toBe(false);
+  });
+
+  it("renderiza o resultado escalar de det(...) normalmente (não é lido como matriz)", async () => {
+    const { container } = render(
+      <ResultPanel
+        status="success"
+        expression="det([[1,2],[3,4]])"
+        result="-2"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull());
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    // O RESULTADO (o segmento, não o eco da expressão "det([[...]])" no
+    // topo — esse legitimamente contém "\begin{bmatrix}", já que o INPUT
+    // tem uma matriz dentro) é o escalar limpo "-2", nunca uma matriz.
+    expect(annotations.some((latex) => latex === "-2")).toBe(true);
+  });
+
+  it("bloco Explorar de uma matriz literal mostra 'Ver propriedades', 'Ver fórmulas relacionadas' e 'Exercícios semelhantes'", () => {
+    render(
+      <ResultPanel
+        status="success"
+        expression="[[1,2],[3,4]]"
+        result="[[1, 2], [3, 4]]"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    expect(screen.getByRole("link", { name: "Ver propriedades" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/calculadora?expression=")
+    );
+    expect(screen.getByRole("link", { name: "Ver fórmulas relacionadas" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("categoria=algebra-linear")
+    );
+    expect(screen.getByRole("link", { name: "Exercícios semelhantes" })).toHaveAttribute(
+      "href",
+      "/aprendizado?topico=algebra-linear"
+    );
+  });
+
+  it("bloco Explorar de det(...) não mostra 'Ver propriedades' (expressão já não é um literal puro)", () => {
+    render(
+      <ResultPanel
+        status="success"
+        expression="det([[1,2],[3,4]])"
+        result="-2"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    expect(screen.queryByRole("link", { name: "Ver propriedades" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ver fórmulas relacionadas" })).toBeInTheDocument();
+  });
+});

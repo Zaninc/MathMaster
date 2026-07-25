@@ -114,6 +114,24 @@ export const FORMULA_CONNECTIONS: Partial<Record<string, RelatedLink[]>> = {
   "derivada-tangente": [{ icon: "📈", label: "Visualizar nos gráficos", href: graphsLink("tan(x)") }],
   "derivada-exponencial": [{ icon: "📈", label: "Visualizar nos gráficos", href: graphsLink("exp(x)") }],
   "derivada-log-natural": [{ icon: "📈", label: "Visualizar nos gráficos", href: graphsLink("log(x)") }],
+  // Sprint V2.2 — Motor de Matrizes.
+  "multiplicacao-matrizes": [
+    { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("[[1,2],[3,4]]*[[5,6],[7,8]]") },
+    { icon: "📝", label: "Exercícios relacionados", href: exercisesLink("algebra-linear") },
+  ],
+  "determinante-matriz-2x2": [
+    { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("det([[1,2],[3,4]])") },
+    { icon: "📝", label: "Exercícios relacionados", href: exercisesLink("algebra-linear") },
+  ],
+  "inversa-matriz-2x2": [
+    { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("inv([[1,2],[3,4]])") },
+    { icon: "📝", label: "Exercícios relacionados", href: exercisesLink("algebra-linear") },
+  ],
+  "transposta-matriz": [
+    { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("transpose([[1,2],[3,4]])") },
+  ],
+  "matriz-identidade": [{ icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("[[1,0],[0,1]]") }],
+  "traco-matriz": [{ icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("trace([[1,2],[3,4]])") }],
 };
 
 export function getFormulaConnections(formulaId: string): RelatedLink[] {
@@ -181,6 +199,44 @@ function isSummation(expression: string): boolean {
 }
 
 /**
+ * Sprint V2.2 (Motor de Matrizes) — mesmo critério do backend
+ * (`matrix/dispatcher.py:is_matrix_domain_expression`): "[[" em qualquer
+ * posição (uma matriz pode vir depois de um escalar, "2 * [[1,2],[3,4]]")
+ * ou uma chamada de função de matriz conhecida, canônica ou alias PT-BR.
+ */
+const MATRIX_FUNCTION_PATTERN =
+  /\b(det|inv|transpose|trace|determinante|inversa|transposta|traço)\s*\(/i;
+
+function isMatrix(expression: string): boolean {
+  return expression.includes("[[") || MATRIX_FUNCTION_PATTERN.test(expression);
+}
+
+/**
+ * "[[1,2],[3,4]]" -> a mesma string, só quando a expressão INTEIRA já é um
+ * literal de matriz puro (sem operação em cima) — mesmo raciocínio
+ * conservador de `quadraticLeftHandSide`: melhor omitir a ação "Ver
+ * propriedades" do que compor um `det(...)` sobre uma expressão que já é
+ * ela mesma "det(...)"/"inv(...)"/uma soma de matrizes/etc. Bracket-
+ * matching real (não só `startsWith`/`endsWith`, que aceitaria por engano
+ * "[[1,2],[3,4]] + [[5,6],[7,8]]" — também começa com "[[" e termina com
+ * "]]") — o colchete de abertura precisa fechar exatamente no ÚLTIMO
+ * caractere da expressão.
+ */
+function matrixLiteralFromExpression(expression: string): string | null {
+  const trimmed = expression.trim();
+  if (!trimmed.startsWith("[")) return null;
+  let depth = 0;
+  for (let i = 0; i < trimmed.length; i++) {
+    if (trimmed[i] === "[") depth += 1;
+    else if (trimmed[i] === "]") {
+      depth -= 1;
+      if (depth === 0) return i === trimmed.length - 1 ? trimmed : null;
+    }
+  }
+  return null;
+}
+
+/**
  * `x - a` de uma equação "x - a = 0" para virar uma função plotável — só
  * quando o lado direito é exatamente "0" (o único caso inequívoco); em
  * qualquer outra forma, a sugestão de gráfico é omitida (melhor não
@@ -211,6 +267,25 @@ export function getCalculatorExplorations(expression: string): RelatedLink[] {
       { icon: "📚", label: "Ver fórmula relacionada", href: formulasLink({ categoria: "somatorios" }) },
       { icon: "📝", label: "Praticar exercícios semelhantes", href: exercisesLink("somatorios") },
     ];
+  }
+
+  // Checado logo depois de `isSummation` — mesma posição do Motor de
+  // Matrizes na cascata do backend (`math_engine/dispatcher.py`: matrix
+  // entra depois de summation, antes de calculus/functions/trigonometry/
+  // logarithms/equations).
+  if (isMatrix(expression)) {
+    const links: RelatedLink[] = [];
+    const literal = matrixLiteralFromExpression(expression);
+    if (literal) {
+      links.push({ icon: "🧮", label: "Ver propriedades", href: calculatorLink(`det(${literal})`) });
+    }
+    links.push({
+      icon: "📚",
+      label: "Ver fórmulas relacionadas",
+      href: formulasLink({ categoria: "algebra-linear" }),
+    });
+    links.push({ icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-linear") });
+    return links;
   }
 
   if (isQuadraticEquation(expression)) {

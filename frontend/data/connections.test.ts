@@ -115,4 +115,44 @@ describe("getCalculatorExplorations", () => {
     const links = getCalculatorExplorations("Σ(i=1..5) sin(i)^2 + cos(i)^2");
     expect(links.map((link) => link.label)).toEqual(["Ver fórmula relacionada", "Praticar exercícios semelhantes"]);
   });
+
+  // --- Sprint V2.2 (Motor de Matrizes) ---------------------------------
+
+  it("literal de matriz sugere propriedades, fórmulas e exercícios de Álgebra Linear", () => {
+    const links = getCalculatorExplorations("[[1,2],[3,4]]");
+    expect(links).toEqual([
+      { icon: "🧮", label: "Ver propriedades", href: calculatorLink("det([[1,2],[3,4]])") },
+      { icon: "📚", label: "Ver fórmulas relacionadas", href: formulasLink({ categoria: "algebra-linear" }) },
+      { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-linear") },
+    ]);
+  });
+
+  it("operação entre matrizes também é reconhecida (não só o literal isolado)", () => {
+    const links = getCalculatorExplorations("[[1,2],[3,4]] + [[5,6],[7,8]]");
+    expect(links.map((link) => link.label)).toEqual(["Ver fórmulas relacionadas", "Exercícios semelhantes"]);
+  });
+
+  it("escalar antes da matriz também é reconhecido ('2 * [[...]]' não começa com '[[')", () => {
+    const links = getCalculatorExplorations("2 * [[1,2],[3,4]]");
+    expect(links.map((link) => link.label)).toEqual(["Ver fórmulas relacionadas", "Exercícios semelhantes"]);
+  });
+
+  it("det(...)/inv(...)/transpose(...)/trace(...) e aliases PT-BR são reconhecidos sem 'Ver propriedades' (expressão já não é um literal puro)", () => {
+    for (const expression of [
+      "det([[1,2],[3,4]])",
+      "inv([[1,2],[3,4]])",
+      "transpose([[1,2],[3,4]])",
+      "trace([[1,2],[3,4]])",
+      "determinante([[1,2],[3,4]])",
+      "inversa([[1,2],[3,4]])",
+      "transposta([[1,2],[3,4]])",
+      "traço([[1,2],[3,4]])",
+    ]) {
+      const links = getCalculatorExplorations(expression);
+      expect(links.map((link) => link.label), expression).toEqual([
+        "Ver fórmulas relacionadas",
+        "Exercícios semelhantes",
+      ]);
+    }
+  });
 });

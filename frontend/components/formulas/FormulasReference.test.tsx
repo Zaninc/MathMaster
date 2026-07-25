@@ -25,7 +25,7 @@ describe("FormulasReference", () => {
     render(<FormulasReference />);
 
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
-    expect(headings).toEqual(["Álgebra", "Geometria", "Trigonometria", "Cálculo", "Somatórios"]);
+    expect(headings).toEqual(["Álgebra", "Geometria", "Trigonometria", "Cálculo", "Somatórios", "Álgebra Linear"]);
 
     const filterGroup = screen.getByRole("group", { name: "Filtro de categoria" });
     expect(within(filterGroup).getByRole("button", { name: "Todas" })).toHaveAttribute("aria-pressed", "true");
@@ -68,7 +68,7 @@ describe("FormulasReference", () => {
 
     fireEvent.click(within(filterGroup).getByRole("button", { name: "Todas" }));
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
-    expect(headings).toEqual(["Álgebra", "Geometria", "Trigonometria", "Cálculo", "Somatórios"]);
+    expect(headings).toEqual(["Álgebra", "Geometria", "Trigonometria", "Cálculo", "Somatórios", "Álgebra Linear"]);
   });
 
   it("a busca filtra em tempo real por nome, categoria e símbolo", () => {
@@ -139,7 +139,7 @@ describe("FormulasReference", () => {
       const filterGroup = screen.getByRole("group", { name: "Filtro de categoria" });
       expect(within(filterGroup).getByRole("button", { name: "Todas" })).toHaveAttribute("aria-pressed", "true");
       const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
-      expect(headings).toEqual(["Álgebra", "Geometria", "Trigonometria", "Cálculo", "Somatórios"]);
+      expect(headings).toEqual(["Álgebra", "Geometria", "Trigonometria", "Cálculo", "Somatórios", "Álgebra Linear"]);
     });
 
     it("pré-preenche a busca a partir de ?q=", () => {

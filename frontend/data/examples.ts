@@ -16,6 +16,15 @@ export const QUICK_EXAMPLES: QuickExample[] = [
   { label: "circunferencia((0,0),5)", expression: "circunferencia((0,0),5)" },
   // Sprint V2.1 — somatório finito, sintaxe principal Σ(var=inf..sup) expr.
   { label: "Σ(i=1..10) i", expression: "Σ(i=1..10) i" },
+  // Sprint V2.2 — Motor de Matrizes.
+  { label: "[[1,2],[3,4]]", expression: "[[1,2],[3,4]]" },
+  { label: "det([[1,2],[3,4]])", expression: "det([[1,2],[3,4]])" },
+  { label: "inv([[2,0],[0,2]])", expression: "inv([[2,0],[0,2]])" },
+  { label: "transpose([[1,2,3],[4,5,6]])", expression: "transpose([[1,2,3],[4,5,6]])" },
+  {
+    label: "[[1,2],[3,4]]*[[5,6],[7,8]]",
+    expression: "[[1,2],[3,4]]*[[5,6],[7,8]]",
+  },
 ];
 
 export interface QuickShortcut {

@@ -89,6 +89,15 @@ const FUNCTION_LATEX: Record<string, string> = {
 /** Só o alfabeto que o mathjs entende sobra depois da transliteração. */
 const SAFE_CHARSET = /^[0-9A-Za-z_+\-*/^.,()[\]<>=!\s]*$/;
 
+// Sprint V2.2 (Motor de Matrizes) — "traço(" é o único alias PT-BR de
+// matriz com caractere fora do ASCII ("ç"); os outros três
+// (determinante/inversa/transposta) já são puro ASCII e não precisam
+// disso. Reescrito para o nome canônico ANTES da checagem de
+// `SAFE_CHARSET` (que rejeitaria "ç") — mesmo espírito de `_apply_aliases`
+// em `parser/normalize.py` no backend: só na forma de chamada de função
+// (nome seguido de "("), nunca substring solta.
+const _TRAÇO_ALIAS_PATTERN = /\btraço\s*\(/g;
+
 /** Palavra pura ("crescente", "vertical") nunca é fórmula — fica texto. */
 const BARE_WORD = /^[A-Za-z]{3,}$/;
 
@@ -121,7 +130,8 @@ function transliterate(text: string): string | null {
     .replace(/÷/g, "/")
     .replace(/≤/g, "<=")
     .replace(/≥/g, ">=")
-    .replace(/≠/g, "!=");
+    .replace(/≠/g, "!=")
+    .replace(_TRAÇO_ALIAS_PATTERN, "trace(");
 
   out = out
     .replace(/√\s*\(/g, "sqrt(")
@@ -159,9 +169,28 @@ function args(node: MathNode): MathNode[] {
 }
 
 /**
+ * Sprint V2.2 (Motor de Matrizes) — aliases PT-BR de função de matriz.
+ * O mathjs já entende nativamente "[[1,2],[3,4]]" como matriz (ArrayNode) e
+ * já sabe renderizar `det`/`inv`/`transpose`/`trace` com a notação bonita
+ * própria (`\det(...)`, `^{-1}`, `^\top`, `\mathrm{tr}(...)`) — os três
+ * aliases puramente ASCII (nomes que o mathjs não reconhece) precisam de um
+ * caso aqui, reproduzindo BYTE A BYTE o que o serializer default já produz
+ * para o nome canônico correspondente (ver `to-latex.test.ts`, que compara
+ * os dois diretamente). "traço" (com "ç") não entra aqui — é reescrito
+ * direto para "trace(" em `transliterate()`, porque "ç" cairia na
+ * whitelist de caracteres do Tier 1 antes mesmo de chegar a este handler.
+ */
+const MATRIX_ALIAS_LATEX: Record<string, (arg: string) => string> = {
+  determinante: (arg) => `\\det\\left(${arg}\\right)`,
+  inversa: (arg) => `\\left(${arg}\\right)^{-1}`,
+  transposta: (arg) => `\\left(${arg}\\right)^\\top`,
+};
+
+/**
  * Handler passado ao `toTex` do mathjs — cobre só o vocabulário do produto
  * e os wrappers de cálculo; todo o resto (frações, raízes, potências,
- * trigonometria canônica) fica com o serializer default do mathjs.
+ * trigonometria canônica, matrizes) fica com o serializer default do
+ * mathjs.
  */
 function productHandler(node: MathNode, options: TexOptions): string | undefined {
   if (node.type === "SymbolNode") {
@@ -183,6 +212,10 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
   if (name !== null && name in FUNCTION_LATEX) {
     const rendered = nodeArgs.map((arg) => texOf(arg, options)).join(",\\,");
     return `${FUNCTION_LATEX[name]}\\left(${rendered}\\right)`;
+  }
+
+  if (name !== null && name in MATRIX_ALIAS_LATEX && nodeArgs.length === 1) {
+    return MATRIX_ALIAS_LATEX[name](texOf(nodeArgs[0], options));
   }
 
   // exp() renderiza como "e elevado" — a linguagem visual do produto
@@ -324,15 +357,31 @@ async function pairToLatex(text: string): Promise<string | null> {
 
 const PERIODIC_SUFFIX = /^(.*),\s*([a-z])\s*∈\s*ℤ$/;
 
+// Sprint V2.2 (Motor de Matrizes) — mesmo marcador léxico do backend
+// (`matrix/dispatcher.py:_MATRIX_LITERAL_MARKER`): "[[" é inequívoco,
+// nenhuma outra forma do catálogo usa colchete duplo.
+const MATRIX_LITERAL_PREFIX = "[[";
+
 /**
  * Valor matemático em qualquer forma do catálogo do backend, da mais
  * estruturada para a mais simples (classify-first, primeira que casar):
- * " ou " -> ", k ∈ ℤ" -> "∪" -> " e " -> lista de igualdades -> tupla/
- * intervalo -> expressão/equação.
+ * " ou " -> ", k ∈ ℤ" -> "∪" -> " e " -> lista de igualdades -> matriz ->
+ * tupla/intervalo -> expressão/equação.
  */
 export async function valueToLatex(text: string): Promise<string | null> {
   const trimmed = text.trim();
   if (trimmed in SET_GLYPH_LATEX) return SET_GLYPH_LATEX[trimmed];
+
+  // Precisa vir ANTES de `pairToLatex`: o regex de tupla/intervalo aceita
+  // "[...]" com exatamente duas partes separadas por vírgula de nível
+  // mais alto — uma matriz de exatamente duas linhas ("[[1,2],[3,4]]")
+  // colidiria com essa forma e seria lida como uma tupla de dois
+  // vetores-linha em vez de uma matriz 2x2 (o mathjs já sabe renderizar
+  // matrizes nativamente, incluindo dentro de `det(...)`/`inv(...)`/etc.,
+  // então basta cair direto no pipeline de expressão).
+  if (trimmed.startsWith(MATRIX_LITERAL_PREFIX)) {
+    return expressionToLatex(trimmed);
+  }
 
   const alternatives = splitTopLevel(trimmed, " ou ");
   if (alternatives.length > 1) {

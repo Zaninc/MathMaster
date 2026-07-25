@@ -87,6 +87,17 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
       { label: "≤", insert: "≤", cursorOffset: 1, ariaLabel: "Inserir menor ou igual" },
       { label: "≥", insert: "≥", cursorOffset: 1, ariaLabel: "Inserir maior ou igual" },
       { label: "≠", insert: "≠", cursorOffset: 1, ariaLabel: "Inserir diferente" },
+      {
+        // Sprint V2.2 (Motor de Matrizes) — insere o template de uma matriz
+        // 2x2 vazia; cursorOffset=2 posiciona o cursor logo depois de "[[",
+        // no primeiro elemento (mesma lógica de "a/b": cursor dentro do
+        // primeiro slot vazio, nunca depois do template inteiro).
+        label: "[[ ]]",
+        insert: "[[,],[,]]",
+        cursorOffset: 2,
+        ariaLabel: "Inserir matriz 2x2",
+        latex: "\\begin{bmatrix}\\square&\\square\\\\\\square&\\square\\end{bmatrix}",
+      },
     ],
   },
   {

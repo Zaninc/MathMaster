@@ -189,6 +189,23 @@ describe("HistoryPanel", () => {
     });
   });
 
+  it("mostra um item de matriz como \\begin{bmatrix}, sem duplicar expressão/resultado (Sprint V2.2)", async () => {
+    const { container } = render(
+      <HistoryPanel
+        items={[item("[[1,2],[3,4]]", "[[1, 2], [3, 4]]", "2026-01-01T00:00:00Z")]}
+        hiddenTimestamps={new Set()}
+        onSelect={NOOP}
+        onHide={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    expect(annotations.filter((latex) => latex?.includes("\\begin{bmatrix}"))).toHaveLength(2);
+  });
+
   it("filtra itens ocultos", () => {
     render(
       <HistoryPanel

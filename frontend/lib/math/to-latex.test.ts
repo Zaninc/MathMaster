@@ -59,6 +59,52 @@ describe("expressionToLatex", () => {
     expect(await expressionToLatex("tg(x)")).toContain("\\operatorname{tg}");
   });
 
+  // --- Sprint V2.2 (Motor de Matrizes) — mathjs já entende "[[...]]"
+  // nativamente como matriz; só os aliases PT-BR de função precisam de um
+  // caso dedicado (ver `MATRIX_ALIAS_LATEX`).
+
+  it("converte um literal de matriz para \\begin{bmatrix}", async () => {
+    const latex = normalized(await expressionToLatex("[[1,2],[3,4]]"));
+    expect(latex).toContain("\\begin{bmatrix}");
+    expect(latex).toContain("\\end{bmatrix}");
+    expect(latex).toContain("1&2");
+    expect(latex).toContain("3&4");
+  });
+
+  it("converte operações entre matrizes (soma, escalar, potência)", async () => {
+    expect(normalized(await expressionToLatex("[[1,2],[3,4]] + [[5,6],[7,8]]"))).toContain(
+      "\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}+\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}"
+    );
+    expect(normalized(await expressionToLatex("2 * [[1,2],[3,4]]"))).toContain(
+      "2\\cdot\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}"
+    );
+    expect(normalized(await expressionToLatex("[[1,2],[3,4]] ^ 2"))).toContain("^{2}");
+  });
+
+  it("converte det/inv/transpose/trace com a notação nativa do mathjs", async () => {
+    expect(await expressionToLatex("det([[1,2],[3,4]])")).toContain("\\det");
+    expect(normalized(await expressionToLatex("inv([[1,2],[3,4]])"))).toContain("^{-1}");
+    expect(normalized(await expressionToLatex("transpose([[1,2],[3,4]])"))).toContain(
+      "^\\top"
+    );
+    expect(await expressionToLatex("trace([[1,2],[3,4]])")).toContain("\\mathrm{tr}");
+  });
+
+  it("converte os aliases PT-BR de matriz com a MESMA notação dos nomes canônicos", async () => {
+    expect(await expressionToLatex("determinante([[1,2],[3,4]])")).toBe(
+      await expressionToLatex("det([[1,2],[3,4]])")
+    );
+    expect(await expressionToLatex("inversa([[1,2],[3,4]])")).toBe(
+      await expressionToLatex("inv([[1,2],[3,4]])")
+    );
+    expect(await expressionToLatex("transposta([[1,2],[3,4]])")).toBe(
+      await expressionToLatex("transpose([[1,2],[3,4]])")
+    );
+    expect(await expressionToLatex("traço([[1,2],[3,4]])")).toBe(
+      await expressionToLatex("trace([[1,2],[3,4]])")
+    );
+  });
+
   it("converte equações lado a lado, incluindo subscritos de solução", async () => {
     expect(normalized(await expressionToLatex("x = 100"))).toBe("x=100");
     expect(normalized(await expressionToLatex("x₁ = -2"))).toContain("x_{1}");
@@ -156,6 +202,39 @@ describe("valueToLatex", () => {
     expect(await valueToLatex("ℝ")).toBe("\\mathbb{R}");
     expect(await valueToLatex("ℤ")).toBe("\\mathbb{Z}");
   });
+
+  // --- Sprint V2.2 (Motor de Matrizes) ---------------------------------
+
+  it("converte um resultado de matriz literal para \\begin{bmatrix}", async () => {
+    const latex = normalized(await valueToLatex("[[1, 2], [3, 4]]"));
+    expect(latex).toContain("\\begin{bmatrix}");
+    expect(latex).toContain("1&2");
+    expect(latex).toContain("3&4");
+  });
+
+  it("REGRESSÃO: uma matriz de exatamente DUAS linhas não é lida como tupla de dois vetores-linha", async () => {
+    // `pairToLatex` (tupla/intervalo) casa "[...]" com exatamente duas
+    // partes separadas por vírgula de nível mais alto — sem o guard de
+    // "[[" em `valueToLatex`, "[[1, 2], [3, 4]]" colidiria com essa forma
+    // (2 partes: "[1, 2]" e "[3, 4]") e viraria "(vetor, vetor)" em vez de
+    // uma matriz 2x2 de verdade.
+    const latex = normalized(await valueToLatex("[[1, 2], [3, 4]]"));
+    expect(latex).not.toContain("\\right)");
+    expect(latex).not.toContain(",\\;");
+    expect(latex).toContain("\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}");
+  });
+
+  it("converte uma matriz resultado de mais de duas linhas (nunca colidiu, mas continua correto)", async () => {
+    const latex = normalized(await valueToLatex("[[1, 0, 0], [0, 1, 0], [0, 0, 1]]"));
+    expect(latex).toContain("\\begin{bmatrix}");
+    expect(latex).toContain("1&0&0");
+  });
+
+  it("um intervalo genuíno de colchete simples continua funcionando (sem colisão com o guard de matriz)", async () => {
+    const latex = normalized(await valueToLatex("[0, 5]"));
+    expect(latex).toContain("\\left[");
+    expect(latex).toContain("\\right]");
+  });
 });
 
 describe("resultToLatex", () => {
@@ -206,6 +285,20 @@ describe("resultToLatex", () => {
     expect(segments![1].latex).toContain("\\infty");
     expect(segments![2].latex).toBeNull();
     expect(segments![2].text).toBe("crescente");
+  });
+
+  it("converte um resultado de matriz (Sprint V2.2) como segmento único sem rótulo, sem duplicar", async () => {
+    const segments = await resultToLatex("[[1, 2], [3, 4]]");
+    expect(segments).toHaveLength(1);
+    expect(segments![0].label).toBeNull();
+    expect(normalized(segments![0].latex)).toContain("\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}");
+  });
+
+  it("converte um resultado escalar de det(...) normalmente (não é reconhecido como matriz)", async () => {
+    const segments = await resultToLatex("-2");
+    expect(segments).toHaveLength(1);
+    expect(segments![0].latex).not.toBeNull();
+    expect(segments![0].latex).not.toContain("bmatrix");
   });
 });
 
@@ -282,6 +375,18 @@ describe("inputToLatex (echo da expressão digitada)", () => {
   it("cabeçalho incompleto (ainda digitando) devolve null — Tier 2 assume o preview", async () => {
     expect(await inputToLatex("Σ(i=1..")).toBeNull();
     expect(await inputToLatex("Σ(i=1..10)")).toBeNull();
+  });
+
+  // --- Sprint V2.2 (Motor de Matrizes) ---------------------------------
+
+  it("converte o echo de um literal de matriz digitado", async () => {
+    const latex = normalized(await inputToLatex("[[1,2],[3,4]]"));
+    expect(latex).toContain("\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}");
+  });
+
+  it("converte o echo de uma expressão de matriz com escalar à esquerda", async () => {
+    const latex = normalized(await inputToLatex("2 * [[1,2],[3,4]]"));
+    expect(latex).toContain("\\begin{bmatrix}");
   });
 });
 
@@ -462,6 +567,23 @@ describe("previewLatex (pipeline único da pré-visualização e do histórico)"
     expect(normalized(await previewLatex("Σ(i=1..10) i"))).toContain("\\sum_{i=1}^{10}");
 
     for (const input of ["Σ(i=1..", "Σ(i=1..10)", "Σ("]) {
+      const latex = await previewLatex(input);
+      expect(latex, input).not.toBeNull();
+      assertRendersSafely(latex as string, input);
+    }
+  });
+
+  // --- Sprint V2.2 (Motor de Matrizes) ---------------------------------
+
+  it("mostra a matriz renderizada assim que o literal fica completo", async () => {
+    const latex = await previewLatex("[[1,2],[3,4]]");
+    expect(latex).not.toBeNull();
+    expect(latex).toContain("\\begin{bmatrix}");
+    assertRendersSafely(latex as string, "[[1,2],[3,4]]");
+  });
+
+  it("digitação incompleta de matriz nunca lança e sempre renderiza em segurança (Tier 2)", async () => {
+    for (const input of ["[[1,2],[3,", "[[1,2],", "[["]) {
       const latex = await previewLatex(input);
       expect(latex, input).not.toBeNull();
       assertRendersSafely(latex as string, input);
