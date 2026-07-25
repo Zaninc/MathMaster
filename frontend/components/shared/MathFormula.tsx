@@ -91,20 +91,33 @@ export const MathFormula = forwardRef<HTMLElement, MathFormulaProps>(function Ma
     // wrapper NUNCA leva `overflow-y-hidden`/`overflow-y-*` — a
     // especificação CSS força os dois eixos de overflow a um valor
     // não-`visible` quando qualquer um dos dois é explicitamente definido
-    // (ex. `overflow-x: auto` sozinho já basta para isso), então nem
-    // "esquecer" overflow-y aqui garante `visible` de verdade. A defesa
-    // real é estrutural: o HTML do KaTeX nunca é filho DIRETO deste
-    // wrapper (que tem overflow-x-auto) — vai num wrapper interno comum,
-    // sem NENHUMA propriedade de overflow própria, cuja altura em fluxo
-    // normal (`height: auto`) já contém o conteúdo por inteiro. Isso é o
-    // que de fato impede o corte vertical, não a escolha exata da palavra-
-    // chave de overflow-y no wrapper externo.
+    // (ex. `overflow-x: auto` sozinho já basta para isso; confirmado com
+    // Chrome real: `getComputedStyle(wrapper).overflowY` já vem "auto"
+    // mesmo sem NUNCA declarar overflow-y aqui), então nem "esquecer"
+    // overflow-y neste wrapper nem declará-lo `visible` explicitamente
+    // evita esse cômputo forçado. A defesa real é estrutural: o HTML do
+    // KaTeX nunca é filho DIRETO deste wrapper (que tem overflow-x-auto)
+    // — vai num wrapper interno comum, sem NENHUMA propriedade de
+    // overflow própria.
+    //
+    // `py-2` no wrapper interno (não `py-1`): mesmo raciocínio do `pr-1`
+    // horizontal acima, só que no eixo vertical — confirmado empiricamente
+    // (Chrome real, KaTeX renderizado de verdade) que o "vlist"/strut
+    // interno do KaTeX para matrizes com fração ou 3+ linhas ultrapassa a
+    // altura calculada em fluxo normal por ~2-3px; como o overflow-y deste
+    // wrapper está forçado a "auto" (nunca "visible" de verdade, ver
+    // acima), esses poucos pixels de sobra CONTAM como overflow real e
+    // disparam uma barra de rolagem vertical falsa. `py-2` (8px de cada
+    // lado) absorve essa folga de sobra sem mascarar overflow genuíno —
+    // testado com `[[1,2,3],[4,5,6]]` transposta (3 linhas) e
+    // `inv([[2,0],[0,2]])` (frações), `py-1` (4px) não bastava, `py-2`
+    // zera a diferença entre `scrollHeight`/`clientHeight` nos dois casos.
     return (
       <div
         ref={ref as React.Ref<HTMLDivElement>}
         className={`max-w-full overflow-x-auto pr-1 [&_.katex-display]:my-0 ${className ?? ""}`.trim()}
       >
-        <div className="py-1" dangerouslySetInnerHTML={{ __html: html }} />
+        <div className="py-2" dangerouslySetInnerHTML={{ __html: html }} />
       </div>
     );
   }
@@ -113,17 +126,19 @@ export const MathFormula = forwardRef<HTMLElement, MathFormulaProps>(function Ma
     // `display:block` via classe (não a tag) continua HTML válido dentro
     // de um `<p>` — só a TAG importa para o modelo de conteúdo, não o
     // `display` computado. Mesma correção estrutural do `displayMode`
-    // acima (wrapper interno sem overflow próprio) — `inline-block` no
-    // interno (em vez de `block`) porque este é o caminho INLINE do
-    // componente: precisa continuar participando da linha de texto ao
-    // redor (ex. o rótulo "Resultado:" antes dele), só ganhando sua
-    // própria caixa de bloco para o `py-1` ter efeito visual real.
+    // acima (wrapper interno sem overflow próprio, `py-2` absorvendo a
+    // folga vertical de ~2-3px do KaTeX, ver comentário lá) —
+    // `inline-block` no interno (em vez de `block`) porque este é o
+    // caminho INLINE do componente: precisa continuar participando da
+    // linha de texto ao redor (ex. o rótulo "Resultado:" antes dele), só
+    // ganhando sua própria caixa de bloco para o `py-2` ter efeito visual
+    // real.
     return (
       <span
         ref={ref as React.Ref<HTMLSpanElement>}
         className={`block max-w-full overflow-x-auto pr-1 align-middle [&_.katex-display]:my-0 ${className ?? ""}`.trim()}
       >
-        <span className="inline-block py-1" dangerouslySetInnerHTML={{ __html: html }} />
+        <span className="inline-block py-2" dangerouslySetInnerHTML={{ __html: html }} />
       </span>
     );
   }

@@ -180,5 +180,34 @@ describe("MathFormula", () => {
       const display = render(<MathFormula formula={formula} displayMode />);
       expect(display.container.querySelector(".katex .mtable")).not.toBeNull();
     });
+
+    /**
+     * Regressão de uma barra de rolagem vertical FALSA (não corte): mesmo
+     * sem `overflow-y-hidden`, o wrapper externo (overflow-x-auto) tem seu
+     * overflow-y computado como "auto" pela especificação CSS (mistura de
+     * eixos), então uns poucos pixels de folga do "vlist"/strut interno do
+     * KaTeX em matrizes com fração ou 3+ linhas já contam como overflow
+     * real e disparam uma barra vertical indevida. Confirmado empiricamente
+     * (Chrome headless real, KaTeX renderizado de verdade, não jsdom — que
+     * não faz layout de caixa real): `py-1` (4px) no wrapper interno NÃO
+     * fecha essa folga para `transpose([[1,2,3],[4,5,6]])` (3 linhas,
+     * scrollHeight 89 vs clientHeight 86) nem para `inv([[2,0],[0,2]])`
+     * (frações, 62 vs 60); `py-2` (8px) fecha nos dois casos
+     * (scrollHeight === clientHeight). jsdom não mede layout real, então
+     * este teste só verifica a CLASSE (regressão de reverter para `py-1`
+     * por engano) — a validação de pixel foi feita fora da suíte, num
+     * repro HTML isolado com KaTeX real.
+     */
+    it("o wrapper interno usa py-2 (não py-1) — folga vertical validada empiricamente para matrizes com fração/3+ linhas", () => {
+      const scrollable = render(<MathFormula formula="x^2" scrollable />);
+      const scrollableInner = scrollable.container.querySelector(".katex")?.parentElement;
+      expect(scrollableInner?.className).toContain("py-2");
+      expect(scrollableInner?.className).not.toContain("py-1");
+
+      const display = render(<MathFormula formula="x^2" displayMode />);
+      const displayInner = display.container.querySelector(".katex-display")?.parentElement;
+      expect(displayInner?.className).toContain("py-2");
+      expect(displayInner?.className).not.toContain("py-1");
+    });
   });
 });
