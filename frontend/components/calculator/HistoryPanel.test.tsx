@@ -117,8 +117,12 @@ describe("HistoryPanel", () => {
 
     await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull());
 
+    // Correção de layout (card cortando matrizes/somas longas): o HTML do
+    // KaTeX não é mais filho DIRETO do wrapper com `overflow-x-auto` — vai
+    // num wrapper interno sem overflow próprio (ver `MathFormula.tsx`), um
+    // nível a mais que antes.
     const formulaWrappers = Array.from(container.querySelectorAll(".katex")).map(
-      (node) => node.parentElement
+      (node) => node.parentElement?.parentElement
     );
     expect(formulaWrappers.length).toBeGreaterThan(0);
     for (const wrapper of formulaWrappers) {
@@ -161,7 +165,12 @@ describe("HistoryPanel", () => {
 
       // A expressão (1º ProgressiveMathResult) nunca recebe approx — só o
       // segmento do RESULTADO (2º KaTeX renderizado) é relevante aqui.
-      const wrappers = Array.from(container.querySelectorAll(".katex")).map((node) => node.parentElement);
+      // `.parentElement.parentElement` (não só `.parentElement`): o wrapper
+      // com a ref/overflow-x-auto que `useIsOverflowing` observa é o AVÔ do
+      // `.katex` agora, não o pai (ver `MathFormula.tsx`).
+      const wrappers = Array.from(container.querySelectorAll(".katex")).map(
+        (node) => node.parentElement?.parentElement
+      );
       expect(wrappers.length).toBeGreaterThanOrEqual(2);
       forceOverflow(wrappers[1]!);
       act(() => {

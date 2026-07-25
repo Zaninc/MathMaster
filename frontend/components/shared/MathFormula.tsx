@@ -86,27 +86,45 @@ export const MathFormula = forwardRef<HTMLElement, MathFormulaProps>(function Ma
     // `overflow-x-auto` mostrar uma barra permanente e falsa. A folga
     // absorve esse ruído sem mascarar overflow real (confirmado com uma
     // matriz 5x5 genuinamente larga, que continua rolando normalmente).
+    //
+    // Correção (card cortando o alto/baixo de matrizes/frações): este
+    // wrapper NUNCA leva `overflow-y-hidden`/`overflow-y-*` — a
+    // especificação CSS força os dois eixos de overflow a um valor
+    // não-`visible` quando qualquer um dos dois é explicitamente definido
+    // (ex. `overflow-x: auto` sozinho já basta para isso), então nem
+    // "esquecer" overflow-y aqui garante `visible` de verdade. A defesa
+    // real é estrutural: o HTML do KaTeX nunca é filho DIRETO deste
+    // wrapper (que tem overflow-x-auto) — vai num wrapper interno comum,
+    // sem NENHUMA propriedade de overflow própria, cuja altura em fluxo
+    // normal (`height: auto`) já contém o conteúdo por inteiro. Isso é o
+    // que de fato impede o corte vertical, não a escolha exata da palavra-
+    // chave de overflow-y no wrapper externo.
     return (
       <div
         ref={ref as React.Ref<HTMLDivElement>}
-        className={`max-w-full overflow-x-auto overflow-y-hidden pr-1 [&_.katex-display]:my-0 ${className ?? ""}`.trim()}
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
+        className={`max-w-full overflow-x-auto pr-1 [&_.katex-display]:my-0 ${className ?? ""}`.trim()}
+      >
+        <div className="py-1" dangerouslySetInnerHTML={{ __html: html }} />
+      </div>
     );
   }
 
   if (scrollable) {
     // `display:block` via classe (não a tag) continua HTML válido dentro
     // de um `<p>` — só a TAG importa para o modelo de conteúdo, não o
-    // `display` computado. `overflow-y-hidden` só corta o que mesmo assim
-    // sobrar de altura; a caixa cresce livremente para acomodar frações
-    // altas, não há `max-height` fixo aqui — mesmo padrão do `displayMode`.
+    // `display` computado. Mesma correção estrutural do `displayMode`
+    // acima (wrapper interno sem overflow próprio) — `inline-block` no
+    // interno (em vez de `block`) porque este é o caminho INLINE do
+    // componente: precisa continuar participando da linha de texto ao
+    // redor (ex. o rótulo "Resultado:" antes dele), só ganhando sua
+    // própria caixa de bloco para o `py-1` ter efeito visual real.
     return (
       <span
         ref={ref as React.Ref<HTMLSpanElement>}
-        className={`block max-w-full overflow-x-auto overflow-y-hidden pr-1 align-middle [&_.katex-display]:my-0 ${className ?? ""}`.trim()}
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
+        className={`block max-w-full overflow-x-auto pr-1 align-middle [&_.katex-display]:my-0 ${className ?? ""}`.trim()}
+      >
+        <span className="inline-block py-1" dangerouslySetInnerHTML={{ __html: html }} />
+      </span>
     );
   }
 

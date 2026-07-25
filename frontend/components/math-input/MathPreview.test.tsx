@@ -23,7 +23,10 @@ describe("MathPreview", () => {
 
     const wrapper = container.querySelector(".katex")?.closest("span.overflow-x-auto");
     expect(wrapper).not.toBeNull();
-    expect(wrapper).toHaveClass("block", "max-w-full", "overflow-x-auto", "overflow-y-hidden");
+    // Correção de layout (card cortando matrizes/frações): o wrapper NUNCA
+    // mais leva `overflow-y-hidden` — ver `MathFormula.tsx`.
+    expect(wrapper).toHaveClass("block", "max-w-full", "overflow-x-auto");
+    expect(wrapper).not.toHaveClass("overflow-y-hidden");
     // o próprio <p> nunca deve exceder a largura do container pai.
     expect(container.querySelector("p[aria-hidden='true']")).toHaveClass("max-w-full");
   });

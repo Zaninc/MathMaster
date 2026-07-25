@@ -22,11 +22,20 @@ function setBoxMetrics(node: HTMLElement, scrollWidth: number, clientWidth: numb
   Object.defineProperty(node, "clientWidth", { value: clientWidth, configurable: true });
 }
 
-/** A fórmula exata é medida diretamente — sem clone: pega o próprio wrapper renderizado por MathFormula. */
+/**
+ * A fórmula exata é medida diretamente — sem clone: pega o próprio wrapper
+ * renderizado por MathFormula, o que TEM a ref usada por `useIsOverflowing`
+ * (o wrapper com `overflow-x-auto`). Correção de layout (card cortando
+ * matrizes): o HTML do KaTeX não é mais filho DIRETO desse wrapper — vai
+ * num wrapper interno sem overflow próprio (ver `MathFormula.tsx`), então
+ * `.katex` agora é NETO do wrapper com a ref, não filho — dois níveis
+ * acima, não um.
+ */
 function exactWrapper(container: HTMLElement): HTMLElement {
   const katex = container.querySelector(".katex");
-  if (!katex?.parentElement) throw new Error("fórmula exata não encontrada");
-  return katex.parentElement;
+  const wrapper = katex?.parentElement?.parentElement;
+  if (!wrapper) throw new Error("fórmula exata não encontrada");
+  return wrapper;
 }
 
 function overflow(container: HTMLElement): void {

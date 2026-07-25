@@ -102,4 +102,83 @@ describe("MathFormula", () => {
     expect(ref.current?.tagName).toBe("CODE");
     spy.mockRestore();
   });
+
+  // --- Correção de layout (card cortando o alto/baixo de matrizes/frações
+  // em modo scrollable/displayMode): `overflow-y-hidden` clipava conteúdo
+  // KaTeX que visualmente ultrapassa a caixa calculada em fluxo normal
+  // (delimitadores de matriz, barras de fração). Nenhum dos dois wrappers
+  // com `overflow-x-auto` pode ter `overflow-y-hidden`/`overflow-y-*`
+  // nenhum — a defesa contra corte vertical passa a ser estrutural: o HTML
+  // do KaTeX nunca é filho DIRETO do wrapper com overflow-x, e sim de um
+  // wrapper interno comum, sem NENHUMA propriedade de overflow própria. ---
+
+  describe("correção de corte vertical (matrizes/frações em scrollable/displayMode)", () => {
+    it("scrollable: o wrapper externo nunca tem overflow-y-hidden nem qualquer overflow-y", () => {
+      const { container } = render(<MathFormula formula="\begin{bmatrix}1&2\\3&4\end{bmatrix}" scrollable />);
+      const outer = container.firstElementChild;
+      expect(outer?.className).not.toMatch(/overflow-y/);
+      expect(outer?.className).toContain("overflow-x-auto");
+    });
+
+    it("displayMode: o wrapper externo nunca tem overflow-y-hidden nem qualquer overflow-y", () => {
+      const { container } = render(
+        <MathFormula formula="\begin{bmatrix}1&2\\3&4\end{bmatrix}" displayMode />
+      );
+      const outer = container.firstElementChild;
+      expect(outer?.className).not.toMatch(/overflow-y/);
+      expect(outer?.className).toContain("overflow-x-auto");
+    });
+
+    it("scrollable: o HTML do KaTeX não é filho direto do wrapper externo — vai num wrapper interno sem overflow próprio", () => {
+      const { container } = render(<MathFormula formula="x^2" scrollable />);
+      const outer = container.firstElementChild;
+      const katex = container.querySelector(".katex");
+      expect(katex?.parentElement).not.toBe(outer);
+      expect(katex?.parentElement?.parentElement).toBe(outer);
+      // o wrapper interno é o pai direto do `.katex` — não pode ter
+      // NENHUMA propriedade de overflow própria (visible é o padrão).
+      expect(katex?.parentElement?.className).not.toMatch(/overflow/);
+      expect(katex?.parentElement?.className).toContain("inline-block");
+    });
+
+    it("displayMode: o wrapper interno (pai de .katex-display) não é o wrapper externo e não tem overflow próprio", () => {
+      const { container } = render(<MathFormula formula="x^2" displayMode />);
+      const outer = container.firstElementChild;
+      // Em displayMode o próprio KaTeX insere um `.katex-display` (span) em
+      // volta de `.katex` — o wrapper INTERNO deste componente é o pai
+      // desse `.katex-display`, não o pai direto de `.katex`.
+      const katexDisplay = container.querySelector(".katex-display");
+      const inner = katexDisplay?.parentElement;
+      expect(inner).not.toBe(outer);
+      expect(inner?.parentElement).toBe(outer);
+      expect(inner?.className).not.toMatch(/overflow/);
+    });
+
+    it("preserva a folga pr-1 (evita falso overflow horizontal por arredondamento sub-pixel) nos dois modos", () => {
+      const scrollable = render(<MathFormula formula="x^2" scrollable />);
+      expect(scrollable.container.firstElementChild?.className).toContain("pr-1");
+
+      const display = render(<MathFormula formula="x^2" displayMode />);
+      expect(display.container.firstElementChild?.className).toContain("pr-1");
+    });
+
+    it("a ref continua apontando para o wrapper EXTERNO (overflow-x-auto) — useIsOverflowing mede scrollWidth/clientWidth nele", () => {
+      const scrollableRef = createRef<HTMLElement>();
+      render(<MathFormula formula="x^2" scrollable ref={scrollableRef} />);
+      expect(scrollableRef.current?.className).toContain("overflow-x-auto");
+
+      const displayRef = createRef<HTMLElement>();
+      render(<MathFormula formula="x^2" displayMode ref={displayRef} />);
+      expect(displayRef.current?.className).toContain("overflow-x-auto");
+    });
+
+    it("uma matriz 2x2 renderiza o mtable completo (sem nó ausente) em scrollable e displayMode", () => {
+      const formula = "\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}";
+      const scrollable = render(<MathFormula formula={formula} scrollable />);
+      expect(scrollable.container.querySelector(".katex .mtable")).not.toBeNull();
+
+      const display = render(<MathFormula formula={formula} displayMode />);
+      expect(display.container.querySelector(".katex .mtable")).not.toBeNull();
+    });
+  });
 });

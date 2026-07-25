@@ -240,3 +240,146 @@ describe("QuickCalculator — resultado em KaTeX (correção pós-Sprint V2.3)",
     await waitFor(() => expect(annotationsOf(container).some((latex) => latex === expectedLatex)).toBe(true));
   });
 });
+
+/**
+ * Ajuste de layout (card cortando matrizes 2x2 no card verde): o card de
+ * resultado nunca deve ter uma classe de altura FIXA nem `overflow-y-hidden`
+ * própria — precisa crescer com `height: auto` conforme o conteúdo KaTeX
+ * real (matrizes, frações). `MathFormula`/`ProgressiveMathResult` (não
+ * tocados) já cuidam do `overflow-x-auto` horizontal por conta própria.
+ */
+describe("QuickCalculator — layout do card de resultado (correção de corte vertical)", () => {
+  afterEach(() => {
+    vi.mocked(apiClient.solve).mockReset();
+  });
+
+  function resultCard(container: HTMLElement): HTMLElement {
+    const label = Array.from(container.querySelectorAll("span")).find(
+      (node) => node.textContent === "Resultado"
+    );
+    const card = label?.parentElement;
+    expect(card, "card de resultado não encontrado").toBeTruthy();
+    return card as HTMLElement;
+  }
+
+  /** Classe Tailwind de altura FIXA (ex. "h-16") — exclui "min-h-*"/"max-h-*", que são o oposto do que este teste proíbe. */
+  function hasFixedHeightClass(element: HTMLElement): boolean {
+    return element.className.split(/\s+/).some((token) => /^h-\d/.test(token));
+  }
+
+  it("o card não tem altura fixa nem overflow-y-hidden própria (cresce com o conteúdo naturalmente)", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "inv([[2,0],[0,2]])",
+      result: "[[1/2, 0], [0, 1/2]]",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("inv([[2,0],[0,2]])");
+
+    await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull());
+    const card = resultCard(container);
+
+    expect(hasFixedHeightClass(card)).toBe(false);
+    expect(card.className).not.toMatch(/\bmax-h-/);
+    expect(card.className).not.toMatch(/overflow-y-hidden/);
+  });
+
+  it("o wrapper do KaTeX (MathFormula, componente compartilhado) nunca tem overflow-y-hidden", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "inv([[2,0],[0,2]])",
+      result: "[[1/2, 0], [0, 1/2]]",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("inv([[2,0],[0,2]])");
+
+    await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull());
+    // Escopado ao card de resultado (não aos exemplos, cujo KaTeX é modo
+    // "plain" — sem wrapper de overflow nenhum, por design; ver `MathFormula.tsx`).
+    const card = resultCard(container);
+    const katexWrappers = Array.from(card.querySelectorAll(".katex")).map(
+      (node) => node.parentElement?.parentElement
+    );
+    expect(katexWrappers.length).toBeGreaterThan(0);
+    for (const wrapper of katexWrappers) {
+      expect(wrapper?.className).not.toMatch(/overflow-y-hidden/);
+      expect(wrapper?.className).toContain("overflow-x-auto");
+    }
+  });
+
+  it("matriz 2x2 com frações (inv) renderiza sem nenhum nó KaTeX truncado/ausente", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "inv([[2,0],[0,2]])",
+      result: "[[1/2, 0], [0, 1/2]]",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("inv([[2,0],[0,2]])");
+
+    await waitFor(() =>
+      expect(
+        Array.from(container.querySelectorAll("annotation")).some((node) =>
+          node.textContent?.includes("\\begin{bmatrix}")
+        )
+      ).toBe(true)
+    );
+    // O mtable (linhas/colunas reais da matriz) tem que estar presente no
+    // HTML renderizado — não só na anotação MathML crua.
+    expect(container.querySelector(".katex .mtable")).not.toBeNull();
+  });
+
+  it("multiplicação de matrizes 2x2 (resultado maior) também renderiza o mtable completo", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "[[1,2],[3,4]]*[[5,6],[7,8]]",
+      result: "[[19, 22], [43, 50]]",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("[[1,2],[3,4]]*[[5,6],[7,8]]");
+
+    await waitFor(() => expect(container.querySelector(".katex .mtable")).not.toBeNull());
+  });
+
+  it("matriz 3x2 (transpose) continua funcionando normalmente (não regride)", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "transpose([[1,2,3],[4,5,6]])",
+      result: "[[1, 4], [2, 5], [3, 6]]",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("transpose([[1,2,3],[4,5,6]])");
+
+    await waitFor(() => expect(container.querySelector(".katex .mtable")).not.toBeNull());
+  });
+
+  it("resultado simples (somatório) continua compacto: sem leading/padding extra vazando classes de altura fixa", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "Σ(i=1..10) i",
+      result: "55",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("Σ(i=1..10) i");
+
+    await waitFor(() => expect(annotationsOf(container).some((latex) => latex === "55")).toBe(true));
+    const card = resultCard(container);
+    expect(hasFixedHeightClass(card)).toBe(false);
+    expect(card.className).not.toMatch(/overflow-y-hidden/);
+  });
+
+  it("forma polar (raiz + trig + i) renderiza sem cortar nenhum símbolo", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "polar(1+i)",
+      result: "√2(cos(π/4)+i·sin(π/4))",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("polar(1+i)");
+
+    await waitFor(() => expect(container.querySelector(".katex .sqrt")).not.toBeNull());
+  });
+
+  function annotationsOf(container: HTMLElement): (string | null)[] {
+    return Array.from(container.querySelectorAll("annotation")).map((node) => node.textContent);
+  }
+});

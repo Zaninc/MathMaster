@@ -111,6 +111,15 @@ export function QuickCalculator() {
 
         <div aria-live="polite" className="mt-6">
           {status === "success" && result !== null && (
+            // O corte vertical de matrizes/frações vinha de
+            // `overflow-y-hidden` DENTRO de `MathFormula.tsx` (componente
+            // compartilhado) — corrigido lá (dois wrappers: um externo só
+            // com overflow-x-auto, um interno sem overflow próprio) para
+            // TODOS os consumidores, ResultPanel/HistoryPanel incluídos.
+            // `py-5`/`h-auto`/`min-h-16`/`leading-loose` de uma tentativa
+            // anterior (compensar aqui, sem tocar no componente
+            // compartilhado) eram redundantes depois da correção real —
+            // removidos; o card volta ao padding/altura simples de antes.
             <div className="min-w-0 w-full rounded-lg border border-success/40 bg-success/10 p-4 text-lg text-text-primary">
               <span className="mb-1 block text-sm text-text-secondary">Resultado</span>
               {segments !== null ? (
