@@ -1,10 +1,15 @@
+import { StrictMode } from "react";
+
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const searchParamsMock = vi.fn(() => new URLSearchParams());
+const routerReplaceMock = vi.fn();
+const routerPushMock = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => searchParamsMock(),
+  useRouter: () => ({ push: routerPushMock, replace: routerReplaceMock }),
 }));
 
 vi.mock("@/lib/api/client", () => ({
@@ -21,6 +26,8 @@ describe("CalculatorWorkspace", () => {
     vi.mocked(apiClient.solve).mockReset();
     vi.mocked(apiClient.getHistory).mockReset();
     searchParamsMock.mockReturnValue(new URLSearchParams());
+    routerReplaceMock.mockReset();
+    routerPushMock.mockReset();
   });
 
   it("resolve com sucesso e atualiza o histórico", async () => {
@@ -259,6 +266,150 @@ describe("CalculatorWorkspace", () => {
       rerender(<CalculatorWorkspace />);
 
       expect(apiClient.solve).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * Investigação "auto-resolve só funciona na primeira vez" (pós-Sprint
+   * V2.3): o guard antigo comparava só por "expression" — uma SEGUNDA
+   * ação idêntica (mesmo "Ver propriedades", mesma matriz) produzia a
+   * MESMA URL já registrada como processada, e o guard (corretamente,
+   * pela lógica antiga) bloqueava a segunda execução. Corrigido com
+   * `&request=<uuid>` (gerado no clique, nunca durante renderização — ver
+   * `ContextActions.tsx`): quando presente, vira a chave de
+   * deduplicação, garantindo uma execução nova a cada clique mesmo com
+   * expressão idêntica.
+   */
+  describe("identificador de solicitação (request) — cada ação é nova, mesmo com expressão idêntica", () => {
+    it("3. um segundo clique (request NOVO) resolve de novo, mesmo com a mesma expressão", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({ expression: "det(...)", result: "-2", approx: null });
+
+      const { rerender } = render(<CalculatorWorkspace />);
+
+      searchParamsMock.mockReturnValue(
+        new URLSearchParams("expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)&autoSolve=1&request=aaa")
+      );
+      rerender(<CalculatorWorkspace />);
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledTimes(1));
+
+      // Mesma expressão, request DIFERENTE — simula um segundo clique real
+      // em "Ver propriedades" (a URL só muda pelo nonce novo).
+      searchParamsMock.mockReturnValue(
+        new URLSearchParams("expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)&autoSolve=1&request=bbb")
+      );
+      rerender(<CalculatorWorkspace />);
+
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledTimes(2));
+    });
+
+    it("5. cada ação (request distinto) gera exatamente uma chamada ao /solve — nunca mais, nunca menos", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({ expression: "det(...)", result: "-2", approx: null });
+
+      const { rerender } = render(<CalculatorWorkspace />);
+      for (const request of ["r1", "r2", "r3"]) {
+        searchParamsMock.mockReturnValue(
+          new URLSearchParams(`expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)&autoSolve=1&request=${request}`)
+        );
+        rerender(<CalculatorWorkspace />);
+        // re-renderizar 2x a mais por request, simulando renders extras
+        // (StrictMode, updates não relacionados) sem re-disparar.
+        rerender(<CalculatorWorkspace />);
+        rerender(<CalculatorWorkspace />);
+      }
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledTimes(3));
+    });
+
+    it("6. depois de resolver, a URL é limpa via router.replace (request/autoSolve removidos) e isso não causa loop", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({ expression: "det(...)", result: "-2", approx: null });
+
+      const { rerender } = render(<CalculatorWorkspace />);
+
+      searchParamsMock.mockReturnValue(
+        new URLSearchParams("expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)&autoSolve=1&request=ccc")
+      );
+      rerender(<CalculatorWorkspace />);
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(routerReplaceMock).toHaveBeenCalledWith(
+          "/calculadora?expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)"
+        )
+      );
+
+      // Simula o efeito real de router.replace: a URL muda, sem autoSolve/request.
+      searchParamsMock.mockReturnValue(new URLSearchParams("expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)"));
+      rerender(<CalculatorWorkspace />);
+      rerender(<CalculatorWorkspace />);
+
+      // Nenhuma chamada extra — a limpeza da URL não reabre o guard.
+      expect(apiClient.solve).toHaveBeenCalledTimes(1);
+      expect(routerReplaceMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("8. request novo com expressão DIFERENTE continua funcionando normalmente", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockImplementation(async (value: string) => ({
+        expression: value,
+        result: value === "det([[1,2],[3,4]])" ? "-2" : "5",
+        approx: null,
+      }));
+
+      const { rerender } = render(<CalculatorWorkspace />);
+
+      searchParamsMock.mockReturnValue(
+        new URLSearchParams("expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)&autoSolve=1&request=x1")
+      );
+      rerender(<CalculatorWorkspace />);
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith("det([[1,2],[3,4]])"));
+
+      searchParamsMock.mockReturnValue(
+        new URLSearchParams("expression=trace(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)&autoSolve=1&request=x2")
+      );
+      rerender(<CalculatorWorkspace />);
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith("trace([[1,2],[3,4]])"));
+
+      expect(apiClient.solve).toHaveBeenCalledTimes(2);
+    });
+
+    it("9. erro na primeira execução não impede uma tentativa posterior (request novo)", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve)
+        .mockRejectedValueOnce(new ApiError("invalid_expression", "Falha de rede."))
+        .mockResolvedValueOnce({ expression: "det(...)", result: "-2", approx: null });
+
+      const { rerender } = render(<CalculatorWorkspace />);
+
+      searchParamsMock.mockReturnValue(
+        new URLSearchParams("expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)&autoSolve=1&request=err1")
+      );
+      rerender(<CalculatorWorkspace />);
+      expect(await screen.findByText("Falha de rede.")).toBeInTheDocument();
+
+      searchParamsMock.mockReturnValue(
+        new URLSearchParams("expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)&autoSolve=1&request=err2")
+      );
+      rerender(<CalculatorWorkspace />);
+
+      expect((await screen.findAllByText("-2")).length).toBeGreaterThan(0);
+      expect(apiClient.solve).toHaveBeenCalledTimes(2);
+    });
+
+    it("10. React StrictMode não duplica a chamada pra um único request", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({ expression: "det(...)", result: "-2", approx: null });
+      searchParamsMock.mockReturnValue(
+        new URLSearchParams("expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)&autoSolve=1&request=strict1")
+      );
+
+      render(
+        <StrictMode>
+          <CalculatorWorkspace />
+        </StrictMode>
+      );
+
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledTimes(1));
     });
   });
 

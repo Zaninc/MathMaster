@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { PageShell } from "@/components/layout/PageShell";
@@ -28,6 +28,7 @@ import { ResultPanel, type ResultStatus } from "./ResultPanel";
  */
 export function CalculatorWorkspace() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [expression, setExpression] = useState(() => searchParams.get("expression") ?? "");
   const [status, setStatus] = useState<ResultStatus>("idle");
   const [solvedExpression, setSolvedExpression] = useState("");
@@ -116,11 +117,34 @@ export function CalculatorWorkspace() {
   // lint `react-hooks/set-state-in-effect` (cascata de renders); ajustar
   // no corpo do render é o padrão que este projeto já usa pra evitar
   // exatamente isso.
+  //
+  // Bug real encontrado DEPOIS da correção acima (auto-resolve só
+  // funcionava na primeira vez): comparar só por "expression" quebra numa
+  // SEGUNDA ação idêntica — `buildMatrixPropertiesLink` sempre gera a
+  // MESMA URL estática pra mesma matriz, então o segundo clique produz
+  // exatamente o `searchParams.get("expression")` já registrado como
+  // processado, e o guard (corretamente, pela lógica antiga) bloqueava —
+  // só que "já vi essa expressão" não deveria significar "não processar
+  // de novo", deveria significar "não processar de novo ESTA MESMA
+  // navegação". Corrigido com um identificador de solicitação
+  // (`?request=<uuid>`, gerado no CLIENTE a cada clique — nunca durante
+  // renderização, ver `ContextActionPill` — nunca reaproveitado entre
+  // cliques, mesmo pra expressão idêntica): quando presente, vira a
+  // chave de deduplicação (`previousDeepLinkRequest`), garantindo uma
+  // execução nova por clique; quando ausente (todo outro consumidor de
+  // `calculatorLink`, ex. Fórmulas/Geometria, sem `request`), cai de
+  // volta pra comparar só a expressão (`previousDeepLinkExpression`),
+  // preservando 100% o comportamento de antes pra esses casos.
   const deepLinkExpression = searchParams.get("expression");
   const deepLinkAutoSolve = searchParams.get("autoSolve") === "1";
+  const deepLinkRequest = searchParams.get("request");
   const [previousDeepLinkExpression, setPreviousDeepLinkExpression] = useState<string | null>(null);
-  if (deepLinkExpression !== null && deepLinkExpression !== previousDeepLinkExpression) {
+  const [previousDeepLinkRequest, setPreviousDeepLinkRequest] = useState<string | null>(null);
+  const isNewRequest = deepLinkRequest !== null && deepLinkRequest !== previousDeepLinkRequest;
+  const isNewPlainExpression = deepLinkRequest === null && deepLinkExpression !== previousDeepLinkExpression;
+  if (deepLinkExpression !== null && (isNewRequest || isNewPlainExpression)) {
     setPreviousDeepLinkExpression(deepLinkExpression);
+    if (deepLinkRequest !== null) setPreviousDeepLinkRequest(deepLinkRequest);
     // Sempre sincroniza o campo com o que está sendo resolvido — mesmo em
     // `autoSolve`, onde `solve()` não mexe em `expression` sozinho
     // (só quem chama `solve` decide o que aparece no campo, ver
@@ -136,6 +160,37 @@ export function CalculatorWorkspace() {
       setErrorMessage(null);
     }
   }
+
+  // Limpeza da URL (preferência confirmada na investigação): depois de
+  // consumir `autoSolve`+`request`, remove os dois da URL, deixando só
+  // `?expression=...` — assim um F5/voltar não re-resolve sozinho, e o
+  // PRÓXIMO clique em "Ver propriedades" volta a acrescentar um par
+  // `autoSolve`/`request` novo. `router.replace` é uma navegação (efeito
+  // externo de verdade, não `setState` local do React) — por isso mora
+  // num `useEffect` PRÓPRIO, separado do ajuste de estado acima, e nunca
+  // dispara o lint `set-state-in-effect` (não chama nenhum setter local).
+  // A condição `deepLinkRequest === previousDeepLinkRequest` só fica
+  // verdadeira no PRÓXIMO render depois que o bloco acima já registrou o
+  // pedido como processado — nunca limpa antes de `solve` já ter sido
+  // disparado.
+  //
+  // `cleanedRequestRef` (não depender só do array de dependências do
+  // `useEffect` pra idempotência): se `router` de `next/navigation` não
+  // for uma referência perfeitamente estável em TODO cenário (confirmado
+  // que isso quebra com um mock de teste ingênuo — `useRouter: () => ({
+  // push, replace })` cria um objeto novo a cada render, forçando o
+  // efeito a rodar de novo mesmo sem nenhuma dependência "de verdade"
+  // mudar), o efeito PODE rodar mais de uma vez para o MESMO request já
+  // settled. A ref garante `router.replace` no máximo uma vez por
+  // request, não importa quantas vezes o efeito seja re-executado.
+  const cleanedRequestRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (deepLinkExpression === null || deepLinkRequest === null) return;
+    if (deepLinkRequest !== previousDeepLinkRequest) return;
+    if (cleanedRequestRef.current === deepLinkRequest) return;
+    cleanedRequestRef.current = deepLinkRequest;
+    router.replace(`/calculadora?expression=${encodeURIComponent(deepLinkExpression)}`);
+  }, [deepLinkExpression, deepLinkRequest, previousDeepLinkRequest, router]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import type { MouseEvent } from "react";
 
 import type { RelatedLink } from "@/data/connections";
 import { cn } from "@/lib/utils/cn";
@@ -35,9 +39,62 @@ interface ContextActionPillProps {
   className?: string;
 }
 
+/**
+ * Investigação "auto-resolve só funciona na primeira vez" (pós-Sprint
+ * V2.3): `link.requiresFreshRequest` (só "Ver propriedades" hoje) decide
+ * entre dois caminhos de renderização — `useRouter()` só é chamado (e só
+ * precisa de mock nos testes) pra links que realmente precisam dele, em
+ * vez de toda superfície que usa `ContextActionPill` (Fórmulas, Geometria,
+ * a maioria dos links da própria Calculadora) ganhar uma dependência de
+ * roteamento que nunca usa.
+ */
 export function ContextActionPill({ link, className }: ContextActionPillProps) {
+  if (link.requiresFreshRequest) {
+    return <FreshRequestActionPill link={link} className={className} />;
+  }
+
   return (
-    <Link href={link.href} aria-label={link.label} className={cn(CONTEXT_PILL_CLASSES, CONTEXT_PILL_IDLE_CLASSES, className)}>
+    <Link
+      href={link.href}
+      aria-label={link.label}
+      className={cn(CONTEXT_PILL_CLASSES, CONTEXT_PILL_IDLE_CLASSES, className)}
+    >
+      <span aria-hidden="true" className={CONTEXT_PILL_ICON_CLASSES}>
+        {link.icon}
+      </span>
+      <span>{link.label}</span>
+    </Link>
+  );
+}
+
+/**
+ * Gera um identificador de solicitação NOVO a cada clique — no CLIENTE,
+ * dentro do `onClick`, nunca durante renderização (evitaria valor
+ * não-determinístico numa possível SSR/re-render). `<Link href>` continua
+ * o alvo real (clique modificado — nova aba, ctrl/cmd/shift/meio-clique —
+ * nunca é interceptado, mesmo critério que o próprio `next/link` usa pra
+ * decidir entre navegação client-side e comportamento nativo do
+ * navegador; sem o `request`, a URL crua ainda funciona numa aba nova,
+ * porque `CalculatorWorkspace` resolve automaticamente numa montagem
+ * FRESCA independente do identificador).
+ */
+function FreshRequestActionPill({ link, className }: ContextActionPillProps) {
+  const router = useRouter();
+
+  function handleClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    const separator = link.href.includes("?") ? "&" : "?";
+    router.push(`${link.href}${separator}request=${crypto.randomUUID()}`);
+  }
+
+  return (
+    <Link
+      href={link.href}
+      aria-label={link.label}
+      onClick={handleClick}
+      className={cn(CONTEXT_PILL_CLASSES, CONTEXT_PILL_IDLE_CLASSES, className)}
+    >
       <span aria-hidden="true" className={CONTEXT_PILL_ICON_CLASSES}>
         {link.icon}
       </span>

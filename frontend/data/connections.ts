@@ -6,6 +6,20 @@ export interface RelatedLink {
   icon: string;
   label: string;
   href: string;
+  /**
+   * Investigação "auto-resolve só funciona na primeira vez" (pós-Sprint
+   * V2.3): quando `true`, `ContextActionPill` acrescenta um identificador
+   * de solicitação NOVO (`&request=<uuid>`) a cada clique — nunca
+   * reaproveita a mesma URL entre cliques, mesmo pra expressão idêntica.
+   * Necessário só para "Ver propriedades" (`href` de `calculatorLink`
+   * com `{ autoSolve: true }`): sem isso, uma segunda ação idêntica
+   * produzia a MESMA URL já processada por `CalculatorWorkspace`, que
+   * corretamente (mas erradamente, neste caso) tratava como "nada
+   * mudou" e não resolvia de novo. Todo outro `RelatedLink` (Fórmulas,
+   * Geometria, exercícios) omite este campo — comportamento de sempre,
+   * navegação estática direta via `next/link`.
+   */
+  requiresFreshRequest?: boolean;
 }
 
 /**
@@ -410,7 +424,12 @@ export function getCalculatorExplorations(expression: string): RelatedLink[] {
   if (isMatrix(expression)) {
     const links: RelatedLink[] = [];
     if (!isMatrixPropertyCall(finalStatement)) {
-      links.push({ icon: "🧮", label: "Ver propriedades", href: buildMatrixPropertiesLink(expression) });
+      links.push({
+        icon: "🧮",
+        label: "Ver propriedades",
+        href: buildMatrixPropertiesLink(expression),
+        requiresFreshRequest: true,
+      });
     }
     links.push({
       icon: "📚",

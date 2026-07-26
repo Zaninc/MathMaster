@@ -144,6 +144,7 @@ describe("getCalculatorExplorations", () => {
         icon: "🧮",
         label: "Ver propriedades",
         href: calculatorLink("det([[1,2],[3,4]])", { autoSolve: true }),
+        requiresFreshRequest: true,
       },
       { icon: "📚", label: "Ver fórmulas relacionadas", href: formulasLink({ categoria: "algebra-linear" }) },
       { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-linear") },
@@ -157,6 +158,7 @@ describe("getCalculatorExplorations", () => {
         icon: "🧮",
         label: "Ver propriedades",
         href: calculatorLink("det([[1,2],[3,4]] + [[5,6],[7,8]])", { autoSolve: true }),
+        requiresFreshRequest: true,
       },
       { icon: "📚", label: "Ver fórmulas relacionadas", href: formulasLink({ categoria: "algebra-linear" }) },
       { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-linear") },
@@ -211,6 +213,7 @@ describe("getCalculatorExplorations", () => {
         "Exercícios semelhantes",
       ]);
       expect(links[0].href, expression).toBe(calculatorLink(`det(${expression})`, { autoSolve: true }));
+      expect(links[0].requiresFreshRequest, expression).toBe(true);
     }
   });
 
@@ -223,6 +226,7 @@ describe("getCalculatorExplorations", () => {
         icon: "🧮",
         label: "Ver propriedades",
         href: calculatorLink("A=[[1,2],[3,4]]\ndet(A)", { autoSolve: true }),
+        requiresFreshRequest: true,
       },
       { icon: "📚", label: "Ver fórmulas relacionadas", href: formulasLink({ categoria: "algebra-linear" }) },
       { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-linear") },
@@ -235,6 +239,7 @@ describe("getCalculatorExplorations", () => {
       icon: "🧮",
       label: "Ver propriedades",
       href: calculatorLink("A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\ndet(A+B)", { autoSolve: true }),
+      requiresFreshRequest: true,
     });
   });
 
@@ -255,6 +260,7 @@ describe("getCalculatorExplorations", () => {
       icon: "🧮",
       label: "Ver propriedades",
       href: calculatorLink("det([[1, 2],\n [3, 4]])", { autoSolve: true }),
+      requiresFreshRequest: true,
     });
   });
 

@@ -1,6 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+// "Ver propriedades" (bloco Explorar de matrizes) usa `useRouter()` — ver
+// `ContextActions.tsx:FreshRequestActionPill` — nunca chamado pelos
+// outros links do Explorar, mas precisa existir no mock pro render não
+// lançar quando esses testes de matriz renderizam.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}));
+
 import { resultToLatex } from "@/lib/math/to-latex";
 
 import { ResultPanel } from "./ResultPanel";
