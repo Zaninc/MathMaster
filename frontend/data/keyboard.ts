@@ -98,6 +98,32 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
         ariaLabel: "Inserir matriz 2x2",
         latex: "\\begin{bmatrix}\\square&\\square\\\\\\square&\\square\\end{bmatrix}",
       },
+      // Fechamento da Sprint de Matrizes — det/inv/transpose já existiam no
+      // backend e na Calculadora (Explorar), só faltavam no teclado. Label
+      // visual usa a notação elegante (\det(A), A^{-1}, A^{T}), mas o texto
+      // inserido é sempre a sintaxe de função que o parser aceita
+      // (det()/inv()/transpose()) — "^-1"/"^T" NÃO são sintaxe suportada.
+      {
+        label: "det(A)",
+        insert: "det()",
+        cursorOffset: 4,
+        ariaLabel: "Inserir determinante",
+        latex: "\\det(A)",
+      },
+      {
+        label: "A⁻¹",
+        insert: "inv()",
+        cursorOffset: 4,
+        ariaLabel: "Inserir inversa",
+        latex: "A^{-1}",
+      },
+      {
+        label: "Aᵀ",
+        insert: "transpose()",
+        cursorOffset: 10,
+        ariaLabel: "Inserir transposta",
+        latex: "A^{T}",
+      },
     ],
   },
   {

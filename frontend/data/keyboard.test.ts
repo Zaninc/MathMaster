@@ -130,6 +130,54 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(key!.ariaLabel).toBeDefined();
   });
 
+  it("teclas de operações matriciais (Álgebra) aparecem na ordem [[ ]] -> det -> inversa -> transposta", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    const labels = algebra?.keys.map((key) => key.label) ?? [];
+    const matrixLabels = labels.filter((label) => ["[[ ]]", "det(A)", "A⁻¹", "Aᵀ"].includes(label));
+    expect(matrixLabels).toEqual(["[[ ]]", "det(A)", "A⁻¹", "Aᵀ"]);
+  });
+
+  it("tecla det (Álgebra) insere det() com cursor entre os parênteses e label KaTeX \\det(A)", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    const key = algebra?.keys.find((candidate) => candidate.label === "det(A)");
+    expect(key).toBeDefined();
+    expect(key!.insert).toBe("det()");
+    expect(key!.insert[key!.cursorOffset - 1]).toBe("(");
+    expect(key!.insert[key!.cursorOffset]).toBe(")");
+    expect(key!.latex).toBe("\\det(A)");
+    expect(key!.ariaLabel).toBeDefined();
+  });
+
+  it("tecla inversa (Álgebra) insere inv() com cursor entre os parênteses e label KaTeX A^{-1}", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    const key = algebra?.keys.find((candidate) => candidate.label === "A⁻¹");
+    expect(key).toBeDefined();
+    expect(key!.insert).toBe("inv()");
+    expect(key!.insert[key!.cursorOffset - 1]).toBe("(");
+    expect(key!.insert[key!.cursorOffset]).toBe(")");
+    expect(key!.latex).toBe("A^{-1}");
+    expect(key!.ariaLabel).toBeDefined();
+  });
+
+  it("tecla transposta (Álgebra) insere transpose() com cursor entre os parênteses e label KaTeX A^{T}", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    const key = algebra?.keys.find((candidate) => candidate.label === "Aᵀ");
+    expect(key).toBeDefined();
+    expect(key!.insert).toBe("transpose()");
+    expect(key!.insert[key!.cursorOffset - 1]).toBe("(");
+    expect(key!.insert[key!.cursorOffset]).toBe(")");
+    expect(key!.latex).toBe("A^{T}");
+    expect(key!.ariaLabel).toBeDefined();
+  });
+
+  it("nenhuma tecla matricial insere ^-1 ou ^T (sintaxe não suportada pelo parser)", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    for (const key of algebra?.keys ?? []) {
+      expect(key.insert).not.toContain("^-1");
+      expect(key.insert).not.toContain("^T");
+    }
+  });
+
   it("tecla i (Símbolos) insere a unidade imaginária minúscula", () => {
     const simbolos = KEYBOARD_CATEGORIES.find((category) => category.id === "simbolos");
     const key = simbolos?.keys.find((candidate) => candidate.label === "i");

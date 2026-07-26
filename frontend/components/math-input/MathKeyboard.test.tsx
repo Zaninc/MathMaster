@@ -51,4 +51,38 @@ describe("MathKeyboard", () => {
       expect.objectContaining({ insert: "log()/log()", cursorOffset: 4 })
     );
   });
+
+  it("fechamento da Sprint de Matrizes: det/inversa/transposta aparecem na aba Álgebra com label KaTeX e inserem a sintaxe de função", () => {
+    const onInsert = vi.fn();
+    render(<MathKeyboard onInsert={onInsert} />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Álgebra" }));
+
+    const det = screen.getByRole("button", { name: "Inserir determinante" });
+    const inversa = screen.getByRole("button", { name: "Inserir inversa" });
+    const transposta = screen.getByRole("button", { name: "Inserir transposta" });
+
+    // Label visual renderizada via KaTeX (mesmo mecanismo das demais teclas).
+    expect(det.querySelector(".katex")).not.toBeNull();
+    expect(inversa.querySelector(".katex")).not.toBeNull();
+    expect(transposta.querySelector(".katex")).not.toBeNull();
+
+    fireEvent.click(det);
+    expect(onInsert).toHaveBeenCalledWith(expect.objectContaining({ insert: "det()", cursorOffset: 4 }));
+
+    fireEvent.click(inversa);
+    expect(onInsert).toHaveBeenCalledWith(expect.objectContaining({ insert: "inv()", cursorOffset: 4 }));
+
+    fireEvent.click(transposta);
+    expect(onInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ insert: "transpose()", cursorOffset: 10 })
+    );
+
+    // Nunca a sintaxe não suportada (^-1 / ^T) — só a de função.
+    for (const call of onInsert.mock.calls) {
+      const inserted = (call[0] as { insert: string }).insert;
+      expect(inserted).not.toContain("^-1");
+      expect(inserted).not.toContain("^T");
+    }
+  });
 });

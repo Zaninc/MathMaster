@@ -69,6 +69,27 @@ describe("CalculatorWorkspace", () => {
     expect(screen.getByLabelText("Expressão matemática")).toHaveValue("sen()");
   });
 
+  it("fechamento da Sprint de Matrizes: det/inversa/transposta (aba Álgebra) inserem no campo multilinha com cursor entre os parênteses", () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    render(<CalculatorWorkspace />);
+    const input = screen.getByLabelText<HTMLTextAreaElement>("Expressão matemática");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Álgebra" }));
+    fireEvent.click(screen.getByRole("button", { name: "Inserir determinante" }));
+    expect(input).toHaveValue("det()");
+    expect(input.selectionStart).toBe(4);
+
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Inserir inversa" }));
+    expect(input).toHaveValue("inv()");
+    expect(input.selectionStart).toBe(4);
+
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Inserir transposta" }));
+    expect(input).toHaveValue("transpose()");
+    expect(input.selectionStart).toBe(10);
+  });
+
   it("√ insere o glifo visual √() com cursor no parêntese; completado, preview deriva do MESMO texto", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     const { container } = render(<CalculatorWorkspace />);
