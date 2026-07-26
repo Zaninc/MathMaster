@@ -11,6 +11,7 @@ import {
   isComplex,
   isLinearSystem,
   isNonlinearSystem,
+  isPolynomialOperation,
 } from "./connections";
 
 describe("URL helpers", () => {
@@ -88,6 +89,20 @@ describe("getFormulaConnections", () => {
     expect(links).toEqual([
       { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("x**2+y=5\nx-y=1") },
       { icon: "📝", label: "Exercícios relacionados", href: exercisesLink("algebra-basica") },
+    ]);
+  });
+
+  it("Sprint V2.6: grau-polinomio tem calculadora e exercícios", () => {
+    const links = getFormulaConnections("grau-polinomio");
+    expect(links).toEqual([
+      { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("grau(x⁵+2x²+1)") },
+      { icon: "📝", label: "Exercícios relacionados", href: exercisesLink("algebra-basica") },
+    ]);
+  });
+
+  it("Sprint V2.6: fatoracao-raizes tem calculadora", () => {
+    expect(getFormulaConnections("fatoracao-raizes")).toEqual([
+      { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("raízes(x³-6x²+11x-6)") },
     ]);
   });
 });
@@ -317,6 +332,32 @@ describe("getCalculatorExplorations", () => {
     expect(isComplex("i^2 = -1")).toBe(false);
   });
 
+  // --- Sprint V2.6 (Motor de Polinômios Avançados) ------------------------
+
+  it("chamada de operação de polinômio sugere fórmulas e exercícios de Álgebra", () => {
+    const links = getCalculatorExplorations("fatorar(x²-9)");
+    expect(links).toEqual([
+      { icon: "📚", label: "Ver fórmulas relacionadas", href: formulasLink({ categoria: "algebra", q: "polinomio" }) },
+      { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-basica") },
+    ]);
+  });
+
+  it("todas as sete operações (ASCII e acentuadas) são reconhecidas em qualquer posição", () => {
+    for (const call of [
+      "fatorar(x²-9)",
+      "expandir((x+2)³)",
+      "simplificar((x²-1)/(x-1))",
+      "grau(x⁵+1)",
+      "coeficientes(x³-5)",
+      "raizes(x²-9)",
+      "raízes(x²-9)",
+      "divisao(x³-1,x-1)",
+      "divisão(x³-1,x-1)",
+    ]) {
+      expect(getCalculatorExplorations(call), call).toHaveLength(2);
+    }
+  });
+
   // --- Sprint V2.4 (Sistemas Lineares) ------------------------------------
 
   it("sistema linear (quebra de linha) sugere fórmula e exercícios de Álgebra Linear, sem 'Ver propriedades'", () => {
@@ -528,5 +569,39 @@ describe("isComplex", () => {
 
   it("expressão sem nenhuma referência a i não é reconhecida", () => {
     expect(isComplex("2 + 2")).toBe(false);
+  });
+});
+
+describe("isPolynomialOperation", () => {
+  it("reconhece as sete operações, forma ASCII", () => {
+    for (const call of [
+      "fatorar(x²-9)",
+      "expandir((x+2)³)",
+      "simplificar((x²-1)/(x-1))",
+      "grau(x⁵+1)",
+      "coeficientes(x³-5)",
+      "raizes(x²-9)",
+      "divisao(x³-1,x-1)",
+    ]) {
+      expect(isPolynomialOperation(call), call).toBe(true);
+    }
+  });
+
+  it("reconhece os aliases acentuados (raízes/divisão)", () => {
+    expect(isPolynomialOperation("raízes(x²-9)")).toBe(true);
+    expect(isPolynomialOperation("divisão(x³-1,x-1)")).toBe(true);
+  });
+
+  it("reconhece a chamada em qualquer posição do texto (composta com outra operação)", () => {
+    expect(isPolynomialOperation("2*fatorar(x²-9)")).toBe(true);
+  });
+
+  it("não confunde 'raiz(' (raiz quadrada de algebra/) com 'raizes('", () => {
+    expect(isPolynomialOperation("raiz(9)")).toBe(false);
+  });
+
+  it("expressão sem nenhuma das sete operações não é reconhecida", () => {
+    expect(isPolynomialOperation("x^2 - 9")).toBe(false);
+    expect(isPolynomialOperation("2 + 2")).toBe(false);
   });
 });

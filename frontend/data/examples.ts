@@ -26,7 +26,6 @@ export const QUICK_EXAMPLES: QuickExample[] = [
   { label: "[[1,2],[3,4]]", expression: "[[1,2],[3,4]]" },
   { label: "det([[1,2],[3,4]])", expression: "det([[1,2],[3,4]])" },
   { label: "inv([[2,0],[0,2]])", expression: "inv([[2,0],[0,2]])" },
-  { label: "transpose([[1,2,3],[4,5,6]])", expression: "transpose([[1,2,3],[4,5,6]])" },
   {
     label: "[[1,2],[3,4]]*[[5,6],[7,8]]",
     expression: "[[1,2],[3,4]]*[[5,6],[7,8]]",
@@ -63,6 +62,12 @@ export const QUICK_EXAMPLES: QuickExample[] = [
   // <input> de uma linha só, "\n" seria removido na sanitização de valor
   // do HTML).
   { label: "x²+y=5; x-y=1", expression: "x²+y=5; x-y=1" },
+  // Sprint V2.6 — Motor de Polinômios Avançados. Substitui
+  // "transpose([[1,2,3],[4,5,6]])" (removida daqui): motor de matrizes já
+  // tem 5 outros exemplos na lista, e "Não aumentar demasiadamente a
+  // quantidade" (regra explícita da sprint) — a operação continua 100%
+  // suportada, só deixou de ocupar espaço na Home.
+  { label: "fatorar(x²-9)", expression: "fatorar(x²-9)" },
 ];
 
 /**
@@ -87,6 +92,10 @@ export const QUICK_EXAMPLES: QuickExample[] = [
  * Sprint V2.5 — Motor de Sistemas Polinomiais Não Lineares: motor NOVO de
  * verdade desta vez (não uma lacuna de descoberta) — mesma exceção de
  * "um exemplo por área nova" (11 → 12).
+ *
+ * Sprint V2.6 — Motor de Polinômios Avançados: motor NOVO com 7 operações
+ * distintas — 3 exemplos (não 1) para cobrir fatoração/expansão/raízes,
+ * pedido explícito do escopo da sprint (12 → 15).
  */
 export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "x² - 4 = 0", expression: "x² - 4 = 0" },
@@ -101,6 +110,9 @@ export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "|3+4i|", expression: "|3+4i|" },
   { label: "x+y=5\nx-y=1", expression: "x+y=5\nx-y=1" },
   { label: "x²+y=5\nx-y=1", expression: "x²+y=5\nx-y=1" },
+  { label: "fatorar(x²-9)", expression: "fatorar(x²-9)" },
+  { label: "expandir((x+2)³)", expression: "expandir((x+2)³)" },
+  { label: "raízes(x³-6x²+11x-6)", expression: "raízes(x³-6x²+11x-6)" },
 ];
 
 export interface QuickShortcut {

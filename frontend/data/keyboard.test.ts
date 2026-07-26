@@ -206,6 +206,75 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(key!.ariaLabel).toBeDefined();
   });
 
+  it("teclas de polinômios (Álgebra) inserem a chamada com parênteses vazios e cursor dentro deles", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    const byLabel = new Map(algebra?.keys.map((key) => [key.label, key]));
+
+    const unary: Array<[string, string]> = [
+      ["fatorar(x)", "fatorar()"],
+      ["expandir(x)", "expandir()"],
+      ["simplificar(x)", "simplificar()"],
+      ["grau(x)", "grau()"],
+      ["raízes(x)", "raizes()"],
+      ["coeficientes(x)", "coeficientes()"],
+    ];
+    for (const [label, insert] of unary) {
+      const key = byLabel.get(label);
+      expect(key, label).toBeDefined();
+      expect(key!.insert).toBe(insert);
+      expect(key!.insert[key!.cursorOffset - 1]).toBe("(");
+      expect(key!.insert[key!.cursorOffset]).toBe(")");
+      expect(key!.ariaLabel).toBeDefined();
+      expect(key!.latex).toBeDefined();
+    }
+  });
+
+  it("tecla de divisão de polinômios (Álgebra) insere o template com 2 argumentos e cursor no primeiro", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    const key = algebra?.keys.find((candidate) => candidate.label === "divisão(a,b)");
+    expect(key).toBeDefined();
+    expect(key!.insert).toBe("divisao(,)");
+    expect(key!.insert[key!.cursorOffset - 1]).toBe("(");
+    expect(key!.insert[key!.cursorOffset]).toBe(",");
+    expect(key!.ariaLabel).toBeDefined();
+    expect(key!.latex).toBeDefined();
+  });
+
+  it("teclas de polinômios (Álgebra) inserem sempre a forma ASCII (raizes/divisao, nunca acentuada)", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    const raizesKey = algebra?.keys.find((candidate) => candidate.label === "raízes(x)");
+    const divisaoKey = algebra?.keys.find((candidate) => candidate.label === "divisão(a,b)");
+    expect(raizesKey?.insert).toBe("raizes()");
+    expect(divisaoKey?.insert).toBe("divisao(,)");
+  });
+
+  it("teclas de polinômios (Álgebra) vêm depois de Sistema linear", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    const labels = algebra?.keys.map((key) => key.label) ?? [];
+    const relevantLabels = labels.filter((label) =>
+      [
+        "Sistema linear",
+        "fatorar(x)",
+        "expandir(x)",
+        "simplificar(x)",
+        "grau(x)",
+        "raízes(x)",
+        "coeficientes(x)",
+        "divisão(a,b)",
+      ].includes(label)
+    );
+    expect(relevantLabels).toEqual([
+      "Sistema linear",
+      "fatorar(x)",
+      "expandir(x)",
+      "simplificar(x)",
+      "grau(x)",
+      "raízes(x)",
+      "coeficientes(x)",
+      "divisão(a,b)",
+    ]);
+  });
+
   it("nenhuma tecla insere um operador cru sem operandos", () => {
     for (const category of KEYBOARD_CATEGORIES) {
       for (const key of category.keys) {

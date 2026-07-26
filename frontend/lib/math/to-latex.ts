@@ -212,6 +212,28 @@ const COMPLEX_ALIAS_LATEX: Record<string, (arg: string) => string> = {
 };
 
 /**
+ * Sprint V2.6 (Motor de Polinômios Avançados) — as sete operações não têm
+ * notação matemática dedicada (diferente de det/inv/conjugado/etc.), só o
+ * nome em português como `\operatorname` — mesmo tratamento tipográfico já
+ * usado para `sen`/`tg` em `FUNCTION_LATEX`. Chaves são sempre a forma
+ * ASCII (`raizes`/`divisao`, nunca `raízes`/`divisão`): as formas
+ * acentuadas ficam fora de `SAFE_CHARSET` (mesmo motivo de "traço" no
+ * Motor de Matrizes) e nunca chegam a este handler — o teclado sempre
+ * insere a forma ASCII, e a entrada acentuada digitada manualmente ainda
+ * funciona (backend aceita as duas), só cai para o fallback genérico do
+ * Tier 2 em vez desta notação dedicada.
+ */
+const POLYNOMIAL_OPERATION_LATEX: Record<string, string> = {
+  fatorar: "\\operatorname{fatorar}",
+  expandir: "\\operatorname{expandir}",
+  simplificar: "\\operatorname{simplificar}",
+  grau: "\\operatorname{grau}",
+  coeficientes: "\\operatorname{coeficientes}",
+  raizes: "\\operatorname{raízes}",
+  divisao: "\\operatorname{divisão}",
+};
+
+/**
  * Handler passado ao `toTex` do mathjs — cobre só o vocabulário do produto
  * e os wrappers de cálculo; todo o resto (frações, raízes, potências,
  * trigonometria canônica, matrizes) fica com o serializer default do
@@ -221,6 +243,23 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
   if (node.type === "SymbolNode") {
     return (node as unknown as { name?: string }).name === "Infinity" ? "\\infty" : undefined;
   }
+
+  // Sprint V2.6 (Motor de Polinômios Avançados) — `coeficientes(...)`
+  // devolve uma lista achatada ("[1, 2, 0, -5]"), sintaxe de array válida
+  // do mathjs. Sem este caso, o serializer default renderiza QUALQUER
+  // array (incl. um vetor achatado) como uma matriz COLUNA
+  // (`\begin{bmatrix}1\\2\\0\\-5\end{bmatrix}`, confirmado empiricamente)
+  // — errado para uma lista de coeficientes, que deve ler horizontalmente.
+  // Só intercepta o caso ACHATADO (nenhum item é ele mesmo um array): uma
+  // matriz literal ("[[1,2],[3,4]]", sempre um array de arrays) devolve
+  // `undefined` aqui e continua com o serializer default, 100% inalterado.
+  if (node.type === "ArrayNode") {
+    const items = (node as unknown as { items: MathNode[] }).items;
+    if (items.length === 0 || items.some((item) => item.type === "ArrayNode")) return undefined;
+    const rendered = items.map((item) => texOf(item, options)).join(",\\,");
+    return `\\left[${rendered}\\right]`;
+  }
+
   if (node.type !== "FunctionNode") return undefined;
   const name = functionName(node);
   const nodeArgs = args(node);
@@ -245,6 +284,11 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
 
   if (name !== null && name in COMPLEX_ALIAS_LATEX && nodeArgs.length === 1) {
     return COMPLEX_ALIAS_LATEX[name](texOf(nodeArgs[0], options));
+  }
+
+  if (name !== null && name in POLYNOMIAL_OPERATION_LATEX) {
+    const rendered = nodeArgs.map((arg) => texOf(arg, options)).join(",\\,");
+    return `${POLYNOMIAL_OPERATION_LATEX[name]}\\left(${rendered}\\right)`;
   }
 
   // exp() renderiza como "e elevado" — a linguagem visual do produto

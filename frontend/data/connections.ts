@@ -196,6 +196,14 @@ export const FORMULA_CONNECTIONS: Partial<Record<string, RelatedLink[]>> = {
     { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("x**2+y=5\nx-y=1") },
     { icon: "📝", label: "Exercícios relacionados", href: exercisesLink("algebra-basica") },
   ],
+  // Sprint V2.6 — Motor de Polinômios Avançados.
+  "grau-polinomio": [
+    { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("grau(x⁵+2x²+1)") },
+    { icon: "📝", label: "Exercícios relacionados", href: exercisesLink("algebra-basica") },
+  ],
+  "fatoracao-raizes": [
+    { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("raízes(x³-6x²+11x-6)") },
+  ],
 };
 
 export function getFormulaConnections(formulaId: string): RelatedLink[] {
@@ -380,6 +388,21 @@ export function isComplex(expression: string): boolean {
 }
 
 /**
+ * Sprint V2.6 (Motor de Polinômios Avançados) — mesmo critério do backend
+ * (`polynomials/dispatcher.py:is_polynomial_domain_expression`, via
+ * `parsing.match_polynomial_call`): uma chamada às sete operações
+ * (canônica ASCII ou acentuada) em qualquer posição do texto. Aceita as
+ * duas grafias (`raizes`/`raízes`, `divisao`/`divisão`) só para
+ * DETECÇÃO — o teclado sempre insere a forma ASCII (ver `data/keyboard.ts`).
+ */
+const POLYNOMIAL_FUNCTION_PATTERN =
+  /\b(fatorar|expandir|simplificar|grau|coeficientes|ra[ií]zes|divis[aã]o)\s*\(/i;
+
+export function isPolynomialOperation(expression: string): boolean {
+  return POLYNOMIAL_FUNCTION_PATTERN.test(expression);
+}
+
+/**
  * Sprint V2.2.1 (Variáveis Locais para Matrizes) — a expressão INTEIRA já
  * É uma chamada pronta a det/trace (canônico ou alias PT-BR), ex.
  * "det(A)". Usado para decidir quando OMITIR "Ver propriedades": compor
@@ -546,6 +569,21 @@ export function getCalculatorExplorations(expression: string): RelatedLink[] {
         href: formulasLink({ categoria: "numeros-complexos" }),
       },
       { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("numeros-complexos") },
+    ];
+  }
+
+  // Checado logo depois de `isComplex` — mesma posição do Motor de
+  // Polinômios Avançados na cascata do backend (`math_engine/dispatcher.py`:
+  // polynomials entra depois de complex, antes de calculus/functions/
+  // trigonometry/logarithms/equations).
+  if (isPolynomialOperation(finalStatement)) {
+    return [
+      {
+        icon: "📚",
+        label: "Ver fórmulas relacionadas",
+        href: formulasLink({ categoria: "algebra", q: "polinomio" }),
+      },
+      { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-basica") },
     ];
   }
 

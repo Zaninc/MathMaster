@@ -459,4 +459,20 @@ export const FORMULAS: FormulaEntry[] = [
     latex: String.raw`\begin{cases}x^2+y=5\\x-y=1\end{cases}`,
     category: "algebra",
   },
+  // Sprint V2.6 — Motor de Polinômios Avançados. "Produto notável" (ver
+  // quadrado-soma/quadrado-diferença), "Diferença de quadrados" e "Cubo
+  // perfeito" (ver cubo-soma/cubo-diferença) já existiam desde a Sprint 4
+  // — só as duas fórmulas abaixo eram uma lacuna real.
+  {
+    id: "grau-polinomio",
+    title: "Grau de um polinômio",
+    latex: String.raw`\deg\left(a_nx^n+\cdots+a_1x+a_0\right)=n,\quad a_n\neq0`,
+    category: "algebra",
+  },
+  {
+    id: "fatoracao-raizes",
+    title: "Relação entre fatoração e raízes",
+    latex: String.raw`P(x)=a\left(x-r_1\right)\left(x-r_2\right)\cdots\left(x-r_n\right)`,
+    category: "algebra",
+  },
 ];

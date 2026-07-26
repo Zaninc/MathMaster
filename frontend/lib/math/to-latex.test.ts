@@ -220,6 +220,53 @@ describe("expressionToLatex", () => {
     expect(await expressionToLatex("arg(1+i)")).toBe(await expressionToLatex("argumento(1+i)"));
   });
 
+  // --- Sprint V2.6 (Motor de Polinômios Avançados) — as sete operações não
+  // têm notação dedicada, só `\operatorname{}` com o nome em português (ver
+  // `POLYNOMIAL_OPERATION_LATEX`); `coeficientes(...)` precisa de um caso
+  // à parte para não virar uma matriz coluna (comportamento default do
+  // mathjs para QUALQUER array).
+
+  it("converte fatorar/expandir/simplificar/grau com \\operatorname", async () => {
+    expect(normalized(await expressionToLatex("fatorar(x^2-9)"))).toBe(
+      "\\operatorname{fatorar}\\left({x}^{2}-9\\right)"
+    );
+    expect(normalized(await expressionToLatex("expandir((x+2)^3)"))).toBe(
+      "\\operatorname{expandir}\\left({\\left(x+2\\right)}^{3}\\right)"
+    );
+    expect(normalized(await expressionToLatex("simplificar((x^2-1)/(x-1))"))).toContain(
+      "\\operatorname{simplificar}"
+    );
+    expect(normalized(await expressionToLatex("grau(x^5+1)"))).toBe(
+      "\\operatorname{grau}\\left({x}^{5}+1\\right)"
+    );
+  });
+
+  it("converte raizes/divisao (ASCII) com o rótulo acentuado correto", async () => {
+    expect(normalized(await expressionToLatex("raizes(x^2-9)"))).toBe(
+      "\\operatorname{raízes}\\left({x}^{2}-9\\right)"
+    );
+    expect(normalized(await expressionToLatex("divisao(x^3-1,x-1)"))).toBe(
+      "\\operatorname{divisão}\\left({x}^{3}-1,x-1\\right)"
+    );
+  });
+
+  it("converte coeficientes(...) como lista horizontal, nunca como matriz coluna", async () => {
+    expect(normalized(await expressionToLatex("coeficientes(x^3+2x^2-5)"))).toBe(
+      "\\operatorname{coeficientes}\\left({x}^{3}+2{x}^{2}-5\\right)"
+    );
+  });
+
+  it("renderiza a LISTA RESULTADO de coeficientes ([1, 2, 0, -5]) na horizontal", async () => {
+    const latex = normalized(await valueToLatex("[1, 2, 0, -5]"));
+    expect(latex).toBe("\\left[1,2,0,-5\\right]");
+    expect(latex).not.toContain("bmatrix");
+  });
+
+  it("não regride a renderização de matriz literal (array de arrays)", async () => {
+    const latex = normalized(await expressionToLatex("[[1,2],[3,4]]"));
+    expect(latex).toContain("\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}");
+  });
+
   // --- Sprint V2.4 (Sistemas Lineares) ------------------------------------
 
   it("converte um sistema linear (quebra de linha) em \\begin{cases}...\\end{cases}", async () => {
@@ -423,6 +470,34 @@ describe("resultToLatex", () => {
 
   it("devolve null quando nada é conversível (fallback total)", async () => {
     expect(await resultToLatex("Relação entre as retas: Perpendiculares ⊥")).toBeNull();
+  });
+
+  // --- Sprint V2.6 (Motor de Polinômios Avançados) — nenhuma mudança de
+  // código foi necessária para estas três formas: "Expandido: ..."/
+  // "Quociente: ...; Resto: ..." já são reconhecidos pelo padrão "Rótulo:
+  // valor" existente (mesmo usado por "Derivada: ..."); "x = -3, x = 3" já
+  // é a forma de lista de igualdades existente (mesma de uma equação).
+
+  it("converte resultado rotulado de expandir (Expandido)", async () => {
+    const segments = await resultToLatex("Expandido: x**3 + 6*x**2 + 12*x + 8");
+    expect(segments).toHaveLength(1);
+    expect(segments![0].label).toBe("Expandido");
+    expect(normalized(segments![0].latex)).toContain("{x}^{3}+6\\cdot{x}^{2}+12\\cdotx+8");
+  });
+
+  it("converte resultado de divisão em dois segmentos rotulados (Quociente/Resto)", async () => {
+    const segments = await resultToLatex("Quociente: x**2 + x + 1; Resto: 0");
+    expect(segments).toHaveLength(2);
+    expect(segments![0].label).toBe("Quociente");
+    expect(normalized(segments![0].latex)).toContain("{x}^{2}+x+1");
+    expect(segments![1]).toMatchObject({ label: "Resto", text: "0" });
+  });
+
+  it("converte raízes de polinômio (lista de igualdades, sem rótulo)", async () => {
+    const segments = await resultToLatex("x₁ = -3, x₂ = 3");
+    expect(segments).toHaveLength(1);
+    expect(segments![0].label).toBeNull();
+    expect(normalized(segments![0].latex)).toContain("x_{1}=-3");
   });
 
   it("converte a notação Σ compacta como RESULTADO (Sprint V2.1 — somatório que não expande)", async () => {

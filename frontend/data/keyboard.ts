@@ -139,6 +139,65 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
         ariaLabel: "Inserir sistema linear de exemplo",
         latex: "\\begin{cases}x+y=5\\\\x-y=1\\end{cases}",
       },
+      // Sprint V2.6 (Motor de Polinômios Avançados) — mesmo padrão de
+      // det(A)/A⁻¹/Aᵀ acima: o rótulo/LaTeX mostra um placeholder ("x", ou
+      // "a, b" para divisão) para deixar clara a operação, mas o texto
+      // INSERIDO é sempre o template com parênteses vazios (cursor
+      // posicionado dentro) — nunca o placeholder literal. `insert` usa
+      // sempre a forma ASCII ("raizes"/"divisao", nunca "raízes"/"divisão")
+      // porque é a única que sobrevive ao Tier 1 do pipeline de LaTeX do
+      // preview (`lib/math/to-latex.ts` — a forma acentuada cai fora de
+      // `SAFE_CHARSET`, mesmo motivo documentado ali); o backend aceita as
+      // duas grafias igualmente.
+      {
+        label: "fatorar(x)",
+        insert: "fatorar()",
+        cursorOffset: "fatorar(".length,
+        ariaLabel: "Inserir fatoração de polinômio",
+        latex: "\\operatorname{fatorar}(x)",
+      },
+      {
+        label: "expandir(x)",
+        insert: "expandir()",
+        cursorOffset: "expandir(".length,
+        ariaLabel: "Inserir expansão de polinômio",
+        latex: "\\operatorname{expandir}(x)",
+      },
+      {
+        label: "simplificar(x)",
+        insert: "simplificar()",
+        cursorOffset: "simplificar(".length,
+        ariaLabel: "Inserir simplificação de expressão racional",
+        latex: "\\operatorname{simplificar}(x)",
+      },
+      {
+        label: "grau(x)",
+        insert: "grau()",
+        cursorOffset: "grau(".length,
+        ariaLabel: "Inserir grau de um polinômio",
+        latex: "\\operatorname{grau}(x)",
+      },
+      {
+        label: "raízes(x)",
+        insert: "raizes()",
+        cursorOffset: "raizes(".length,
+        ariaLabel: "Inserir raízes de um polinômio",
+        latex: "\\operatorname{raízes}(x)",
+      },
+      {
+        label: "coeficientes(x)",
+        insert: "coeficientes()",
+        cursorOffset: "coeficientes(".length,
+        ariaLabel: "Inserir coeficientes de um polinômio",
+        latex: "\\operatorname{coeficientes}(x)",
+      },
+      {
+        label: "divisão(a,b)",
+        insert: "divisao(,)",
+        cursorOffset: "divisao(".length,
+        ariaLabel: "Inserir divisão de polinômios",
+        latex: "\\operatorname{divisão}(a,\\,b)",
+      },
     ],
   },
   {

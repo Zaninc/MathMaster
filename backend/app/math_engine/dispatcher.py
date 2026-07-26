@@ -20,6 +20,10 @@ from .logarithms.dispatcher import (
 )
 from .matrix.dispatcher import is_matrix_domain_expression, solve_matrix_text
 from .parser.normalize import normalize_expression
+from .polynomials.dispatcher import (
+    is_polynomial_domain_expression,
+    solve_polynomial_text,
+)
 from .safe_parsing import safe_parse_expr
 from .summation.dispatcher import (
     is_summation_domain_expression,
@@ -86,6 +90,14 @@ def solve_expression(expression: str) -> str:
     # Ver docstring de `complex/dispatcher.py`.
     if is_complex_domain_expression(expression):
         return solve_complex_text(expression)
+
+    # Sprint V2.6 — precisa vir antes de calculus/functions/trigonometry/
+    # logarithms/equations pelo mesmo motivo que já justifica complex vir
+    # antes delas: o argumento de "fatorar(...)"/"raizes(...)"/etc. pode
+    # conter livremente "sin(", "log(", "=" etc. Ver docstring de
+    # `polynomials/dispatcher.py`.
+    if is_polynomial_domain_expression(expression):
+        return solve_polynomial_text(expression)
 
     # Sprint 12 — precisa vir antes de functions/trigonometry/logarithms:
     # essas áreas casam "sin("/"log(" em qualquer posição do texto, o que
