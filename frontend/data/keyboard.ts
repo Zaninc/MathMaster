@@ -124,6 +124,21 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
         ariaLabel: "Inserir transposta",
         latex: "A^{T}",
       },
+      {
+        // Sprint V2.4 (Sistemas Lineares) — o backend já suporta sistemas
+        // multi-linha nativamente (`equations/dispatcher.py` detecta "\n"/
+        // ";" como separador de equação); o textarea multilinha da
+        // Calculadora já lida com "\n" sem nenhuma mudança — só faltava a
+        // tecla. Mesmo padrão da tecla Σ (Símbolos): insere um EXEMPLO
+        // completo e válido (não um template vazio com parênteses),
+        // cursorOffset no fim do texto para o usuário seguir editando os
+        // números a partir dali.
+        label: "Sistema linear",
+        insert: "x+y=5\nx-y=1",
+        cursorOffset: "x+y=5\nx-y=1".length,
+        ariaLabel: "Inserir sistema linear de exemplo",
+        latex: "\\begin{cases}x+y=5\\\\x-y=1\\end{cases}",
+      },
     ],
   },
   {

@@ -569,6 +569,108 @@ describe("ResultPanel — matrizes (Sprint V2.2)", () => {
   });
 });
 
+describe("ResultPanel — sistemas lineares (Sprint V2.4)", () => {
+  it("renderiza a expressão como \\begin{cases}...\\end{cases} e o resultado como lista de igualdades", async () => {
+    const { container } = render(
+      <ResultPanel
+        status="success"
+        expression={"x+y=5\nx-y=1"}
+        result="x = 3, y = 2"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    expect(annotations.some((latex) => latex?.includes("\\begin{cases}"))).toBe(true);
+    expect(
+      annotations.some((latex) => latex?.replace(/[\s~]|\\[,;:!]/g, "").includes("x=3,y=2"))
+    ).toBe(true);
+  });
+
+  it("sistema 3x3 renderiza as três equações dentro de cases", async () => {
+    const { container } = render(
+      <ResultPanel
+        status="success"
+        expression={"x+y+z=6\nx-y=0\ny-z=1"}
+        result="x = 7/3, y = 7/3, z = 4/3"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    expect(annotations.some((latex) => latex?.includes("\\begin{cases}"))).toBe(true);
+    expect(annotations.some((latex) => latex?.includes("\\frac{7}{3}"))).toBe(true);
+  });
+
+  it("sistema impossível ('Sistema sem solução') mostra o texto puro, sem KaTeX no resultado nem erro visual", async () => {
+    render(
+      <ResultPanel
+        status="success"
+        expression={"x+y=2\nx+y=3"}
+        result="Sistema sem solução"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    expect(await screen.findByText("Sistema sem solução")).toBeInTheDocument();
+  });
+
+  it("bloco Explorar de um sistema linear mostra 'Ver fórmula relacionada' e 'Exercícios semelhantes', NUNCA 'Ver propriedades' (não é matriz)", () => {
+    render(
+      <ResultPanel
+        status="success"
+        expression={"x+y=5\nx-y=1"}
+        result="x = 3, y = 2"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    expect(screen.queryByRole("link", { name: "Ver propriedades" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ver fórmula relacionada" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("categoria=algebra-linear")
+    );
+    expect(screen.getByRole("link", { name: "Exercícios semelhantes" })).toHaveAttribute(
+      "href",
+      "/aprendizado?topico=algebra-linear"
+    );
+  });
+
+  it("uma única equação (sem sistema) continua sem o bloco Explorar de Álgebra Linear (regressão)", () => {
+    render(
+      <ResultPanel
+        status="success"
+        expression="x+y=5"
+        result="Infinitas soluções"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    expect(screen.queryByRole("link", { name: "Ver fórmula relacionada" })).not.toBeInTheDocument();
+  });
+});
+
 describe("ResultPanel — variáveis locais de matriz (Sprint V2.2.1)", () => {
   it("renderiza um programa multi-linha (atribuições + expressão final) sem quebrar, expressão preservada verbatim", async () => {
     const expression = "A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA*B";

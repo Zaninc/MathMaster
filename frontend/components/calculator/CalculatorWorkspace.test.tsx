@@ -90,6 +90,18 @@ describe("CalculatorWorkspace", () => {
     expect(input.selectionStart).toBe(10);
   });
 
+  it("Sprint V2.4 (Sistemas Lineares): tecla 'Sistema linear' insere o exemplo multilinha no campo, com cursor no fim", () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    render(<CalculatorWorkspace />);
+    const input = screen.getByLabelText<HTMLTextAreaElement>("Expressão matemática");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Álgebra" }));
+    fireEvent.click(screen.getByRole("button", { name: "Inserir sistema linear de exemplo" }));
+
+    expect(input).toHaveValue("x+y=5\nx-y=1");
+    expect(input.selectionStart).toBe("x+y=5\nx-y=1".length);
+  });
+
   it("√ insere o glifo visual √() com cursor no parêntese; completado, preview deriva do MESMO texto", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     const { container } = render(<CalculatorWorkspace />);
@@ -454,6 +466,15 @@ describe("CalculatorWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Preencher exemplo: d/dx(x² + 3x)" }));
 
     expect(screen.getByLabelText("Expressão matemática")).toHaveValue("d/dx(x² + 3x)");
+  });
+
+  it("Sprint V2.4 (Sistemas Lineares): exemplo 'x+y=5\\nx-y=1' preenche o campo multilinha com o valor exato", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    render(<CalculatorWorkspace />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Preencher exemplo: x+y=5\nx-y=1" }));
+
+    expect(screen.getByLabelText("Expressão matemática")).toHaveValue("x+y=5\nx-y=1");
   });
 
   it("Sprint V2.2.1: o campo (agora um textarea) preserva um valor multi-linha de variáveis locais de matriz", async () => {

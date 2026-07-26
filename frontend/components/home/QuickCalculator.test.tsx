@@ -89,6 +89,14 @@ describe("QuickCalculator", () => {
 
     expect(screen.getByLabelText("Expressão matemática")).toHaveValue("d/dx(x² + 3x)");
   });
+
+  it("Sprint V2.4 (Sistemas Lineares): exemplo 'x+y=5; x-y=1' preenche o campo (';' sobrevive num input de uma linha, '\\n' não)", () => {
+    render(<QuickCalculator />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Preencher exemplo: x+y=5; x-y=1" }));
+
+    expect(screen.getByLabelText("Expressão matemática")).toHaveValue("x+y=5; x-y=1");
+  });
 });
 
 /**
@@ -222,6 +230,23 @@ describe("QuickCalculator — resultado em KaTeX (correção pós-Sprint V2.3)",
     solve("@@@");
 
     expect(await screen.findByText("Não foi possível interpretar a expressão: @@@")).toBeInTheDocument();
+  });
+
+  it("11. resultado de sistema linear (Sprint V2.4) renderizado em KaTeX", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "x+y=5; x-y=1",
+      result: "x = 3, y = 2",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("x+y=5; x-y=1");
+
+    await waitFor(() =>
+      expect(annotationsOf(container).some((latex) => latex?.replace(/\s/g, "").includes("x=3"))).toBe(true)
+    );
+    expect(
+      annotationsOf(container).some((latex) => latex?.replace(/\s/g, "").includes("y=2"))
+    ).toBe(true);
   });
 
   it("10. reaproveita a pipeline compartilhada de lib/math/to-latex — mesma saída de resultToLatex direto, sem conversor paralelo", async () => {

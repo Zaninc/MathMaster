@@ -383,6 +383,34 @@ export const FORMULAS: FormulaEntry[] = [
     latex: String.raw`\operatorname{tr}(A) = \sum_{i=1}^{n} a_{ii}`,
     category: "algebra-linear",
   },
+  // Sprint V2.4 — Sistemas Lineares (motor já existente desde antes desta
+  // sprint; só faltava a exposição na Biblioteca de Fórmulas). Integradas
+  // em "algebra-linear" (não uma categoria própria), mesmo raciocínio de
+  // "Matrizes" acima — evita fragmentar a biblioteca.
+  {
+    id: "sistema-linear-2x2",
+    title: "Sistema linear 2x2 (forma geral)",
+    latex: String.raw`\begin{cases}a_1x+b_1y=c_1\\a_2x+b_2y=c_2\end{cases}`,
+    category: "algebra-linear",
+  },
+  {
+    id: "sistema-linear-forma-matricial",
+    title: "Forma matricial de um sistema linear",
+    latex: String.raw`AX=B`,
+    category: "algebra-linear",
+  },
+  {
+    id: "sistema-linear-condicao-solucao-unica",
+    title: "Condição de solução única (determinante)",
+    latex: String.raw`\det(A)\neq0 \implies \text{solução única}`,
+    category: "algebra-linear",
+  },
+  {
+    id: "regra-cramer",
+    title: "Regra de Cramer",
+    latex: String.raw`x_i = \frac{\det(A_i)}{\det(A)}`,
+    category: "algebra-linear",
+  },
   // Sprint V2.3 — Motor de Números Complexos, ordem pedida pelo Theo.
   {
     id: "definicao-numero-complexo",

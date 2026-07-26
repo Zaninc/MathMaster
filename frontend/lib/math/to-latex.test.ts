@@ -219,6 +219,42 @@ describe("expressionToLatex", () => {
     expect(normalized(await expressionToLatex("argumento(1+i)"))).toContain("\\arg\\left(1+i\\right)");
     expect(await expressionToLatex("arg(1+i)")).toBe(await expressionToLatex("argumento(1+i)"));
   });
+
+  // --- Sprint V2.4 (Sistemas Lineares) ------------------------------------
+
+  it("converte um sistema linear (quebra de linha) em \\begin{cases}...\\end{cases}", async () => {
+    const latex = normalized(await expressionToLatex("x+y=5\nx-y=1"));
+    expect(latex).toBe("\\begin{cases}x+y=5\\\\x-y=1\\end{cases}");
+  });
+
+  it("';' produz o MESMO \\begin{cases}...\\end{cases} que '\\n'", async () => {
+    const withSemicolon = await expressionToLatex("x+y=5; x-y=1");
+    const withNewline = await expressionToLatex("x+y=5\nx-y=1");
+    expect(withSemicolon).toBe(withNewline);
+  });
+
+  it("sistema com três incógnitas gera três linhas dentro de cases", async () => {
+    const latex = normalized(await expressionToLatex("x+y+z=6\nx-y=0\ny-z=1"));
+    expect(latex).toBe("\\begin{cases}x+y+z=6\\\\x-y=0\\\\y-z=1\\end{cases}");
+  });
+
+  it("uma única equação de UMA linha continua indo pelo split de '=' de sempre (regressão, nunca vira cases)", async () => {
+    const latex = normalized(await expressionToLatex("x+y=5"));
+    expect(latex).toBe("x+y=5");
+    expect(latex).not.toContain("cases");
+  });
+
+  it("um programa de matriz com várias atribuições não é confundido com sistema (matriz tem prioridade)", async () => {
+    const latex = normalized(await expressionToLatex("A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA+B"));
+    expect(latex).toContain("\\begin{bmatrix}");
+    expect(latex).not.toContain("cases");
+  });
+
+  it("';' separando expressões que não são equações não vira sistema (fica com o comportamento antigo, nunca cases)", async () => {
+    const latex = await expressionToLatex("2+2; 3+3");
+    expect(latex).not.toBeNull();
+    expect(latex).not.toContain("cases");
+  });
 });
 
 describe("valueToLatex", () => {
@@ -396,6 +432,38 @@ describe("resultToLatex", () => {
     expect(segments).toHaveLength(1);
     expect(segments![0].latex).not.toBeNull();
     expect(segments![0].latex).not.toContain("bmatrix");
+  });
+
+  // --- Sprint V2.4 (Sistemas Lineares) — o RESULTADO de um sistema
+  // ("x = 3, y = 2") já era reconhecido de graça pela lista de igualdades
+  // existente (`valueToLatex`: `,` separando partes que casam com
+  // `EQUATION_SPLIT` cada uma) — nenhuma mudança de código precisou ser
+  // feita para o resultado, só para o ECO da entrada digitada (ver
+  // `expressionToLatex`/`inputToLatex` acima). Testes aqui são de
+  // REGRESSÃO/documentação, não de uma feature nova.
+
+  it("converte o resultado de um sistema linear (solução única) como lista de igualdades", async () => {
+    const segments = await resultToLatex("x = 3, y = 2");
+    expect(segments).toHaveLength(1);
+    expect(segments![0].label).toBeNull();
+    expect(normalized(segments![0].latex)).toBe("x=3,y=2");
+  });
+
+  it("converte o resultado de um sistema 3x3 com frações", async () => {
+    const segments = await resultToLatex("x = 7/3, y = 7/3, z = 4/3");
+    expect(segments).toHaveLength(1);
+    expect(normalized(segments![0].latex)).toContain("\\frac{7}{3}");
+    expect(normalized(segments![0].latex)).toContain("\\frac{4}{3}");
+  });
+
+  it("sistema impossível ('Sistema sem solução') cai no fallback de texto puro, sem lançar", async () => {
+    expect(await resultToLatex("Sistema sem solução")).toBeNull();
+  });
+
+  it("sistema indeterminado (solução paramétrica, ex. 'x = 2 - y, y = y') ainda renderiza em KaTeX", async () => {
+    const segments = await resultToLatex("x = 2 - y, y = y");
+    expect(segments).toHaveLength(1);
+    expect(normalized(segments![0].latex)).toBe("x=2-y,y=y");
   });
 });
 
@@ -732,6 +800,29 @@ describe("previewLatex (pipeline único da pré-visualização e do histórico)"
 
   it("digitação incompleta de conjugado/modulo/argumento/polar nunca lança e sempre renderiza em segurança (Tier 2)", async () => {
     for (const input of ["conjugado(", "modulo(", "argumento(", "polar(", "polar(1+i"]) {
+      const latex = await previewLatex(input);
+      expect(latex, input).not.toBeNull();
+      assertRendersSafely(latex as string, input);
+    }
+  });
+
+  // --- Sprint V2.4 (Sistemas Lineares) ---------------------------------
+
+  it("mostra o sistema linear renderizado em \\begin{cases}...\\end{cases} assim que a 2ª equação fica completa", async () => {
+    const latex = await previewLatex("x+y=5\nx-y=1");
+    expect(latex).not.toBeNull();
+    expect(latex).toContain("\\begin{cases}");
+    assertRendersSafely(latex as string, "x+y=5\nx-y=1");
+  });
+
+  it("';' produz o mesmo resultado de preview que '\\n'", async () => {
+    const withSemicolon = await previewLatex("x+y=5; x-y=1");
+    const withNewline = await previewLatex("x+y=5\nx-y=1");
+    expect(withSemicolon).toBe(withNewline);
+  });
+
+  it("digitação incompleta de um sistema (2ª equação ainda não fechada) nunca lança e sempre renderiza em segurança (Tier 2)", async () => {
+    for (const input of ["x+y=5\n", "x+y=5\nx-", "x+y=5\nx-y="]) {
       const latex = await previewLatex(input);
       expect(latex, input).not.toBeNull();
       assertRendersSafely(latex as string, input);

@@ -161,6 +161,29 @@ describe("MathPreview", () => {
     expect(annotations.some((latex) => latex?.replace(/\s/g, "").includes("^{2}"))).toBe(true);
   });
 
+  it("Sprint V2.4 (Sistemas Lineares): entrada multilinha 'x+y=5\\nx-y=1' promove a \\begin{cases}...\\end{cases}", async () => {
+    const { container } = render(<MathPreview value={"x+y=5\nx-y=1"} />);
+    await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull(), {
+      timeout: 2000,
+    });
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    expect(annotations.some((latex) => latex?.includes("\\begin{cases}"))).toBe(true);
+    expect(annotations.some((latex) => latex?.includes("\\end{cases}"))).toBe(true);
+  });
+
+  it("Sprint V2.4: separador ';' produz o mesmo \\begin{cases}...\\end{cases} que '\\n'", async () => {
+    const { container } = render(<MathPreview value="x+y=5; x-y=1" />);
+    await waitFor(() => expect(container.querySelector(".katex")).not.toBeNull(), {
+      timeout: 2000,
+    });
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    expect(annotations.some((latex) => latex?.includes("\\begin{cases}"))).toBe(true);
+  });
+
   it("clique sequencial em vários botões continua atualizando a pré-visualização via KaTeX a cada passo", async () => {
     const { container, rerender } = render(<MathPreview value="" />);
     expect(screen.getByText("Pré-visualização")).toBeInTheDocument();

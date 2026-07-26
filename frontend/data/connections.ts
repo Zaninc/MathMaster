@@ -162,6 +162,15 @@ export const FORMULA_CONNECTIONS: Partial<Record<string, RelatedLink[]>> = {
   ],
   "matriz-identidade": [{ icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("[[1,0],[0,1]]") }],
   "traco-matriz": [{ icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("trace([[1,2],[3,4]])") }],
+  // Sprint V2.4 — Sistemas Lineares. Só "sistema-linear-2x2" ganha a ação
+  // "Abrir na calculadora": é a única das quatro fórmulas novas com um
+  // exemplo numérico concreto e resolvível ("AX=B"/a condição do
+  // determinante/Cramer são conceituais, sem um único exemplo natural —
+  // regra "nunca mostrar ação sem destino funcional").
+  "sistema-linear-2x2": [
+    { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("x+y=5\nx-y=1") },
+    { icon: "📝", label: "Exercícios relacionados", href: exercisesLink("algebra-linear") },
+  ],
   // Sprint V2.3 — Motor de Números Complexos.
   "definicao-numero-complexo": [
     { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("3+4i") },
@@ -259,6 +268,37 @@ const MATRIX_FUNCTION_PATTERN =
 
 function isMatrix(expression: string): boolean {
   return expression.includes("[[") || MATRIX_FUNCTION_PATTERN.test(expression);
+}
+
+// Sprint V2.4 (Sistemas Lineares) — mesmo critério de `to-latex.ts`
+// (`EQUATION_SPLIT`): um "=" de igualdade real, não "<="/">="/"=="/"!=".
+const SYSTEM_EQUATION_SPLIT_PATTERN = /(?<![<>!=])=(?!=)/;
+
+/** Uma "instrução" (já dividida por `splitMatrixStatements`) parece uma única equação: exatamente um "=" com os dois lados não vazios. */
+function isSingleEquationStatement(statement: string): boolean {
+  const parts = statement.split(SYSTEM_EQUATION_SPLIT_PATTERN);
+  return parts.length === 2 && parts[0].trim() !== "" && parts[1].trim() !== "";
+}
+
+/**
+ * Sprint V2.4 (Sistemas Lineares) — mesmo critério do backend
+ * (`equations/dispatcher.py:solve_equation_text`, roteado por
+ * `is_equation_domain_expression`): 2+ "instruções" separadas por quebra
+ * de linha/";" (mesmo split bracket-aware de `splitMatrixStatements`
+ * ACIMA, reutilizado aqui de propósito — nunca duplicado por conta
+ * própria), cada uma com a forma de uma única equação ("lado = lado").
+ * Sempre `false` quando `isMatrix` reconhece a expressão — mesma exclusão
+ * do roteador real (matrix é checado ANTES de equations em
+ * `math_engine/dispatcher.py`): sem isso, um programa de matriz com
+ * várias atribuições ("A=[[1,2],[3,4]]\nB=...") seria lido como sistema,
+ * já que cada atribuição TEM a forma "nome = valor". Também `false` para
+ * uma única equação (nada a distinguir de uma equação comum) e para
+ * instruções separadas por ";" que não sejam equações (ex. "2+2; 3+3").
+ */
+export function isLinearSystem(expression: string): boolean {
+  if (isMatrix(expression)) return false;
+  const statements = splitMatrixStatements(expression);
+  return statements.length >= 2 && statements.every(isSingleEquationStatement);
 }
 
 /**
@@ -470,6 +510,19 @@ export function getCalculatorExplorations(expression: string): RelatedLink[] {
 
   if (isTrigonometric(finalStatement)) {
     return [{ icon: "📝", label: "Praticar exercícios semelhantes", href: exercisesLink("trigonometria") }];
+  }
+
+  // Checado por último — mesma posição de "equations" na cascata do
+  // backend (`math_engine/dispatcher.py`: depois de summation/matrix/
+  // complex/calculus/functions/trigonometry/logarithms, logo antes do
+  // fallback de álgebra pura). Usa `expression` inteira (não
+  // `finalStatement`): um sistema É o conjunto de equações — a última
+  // linha sozinha ("x-y=1") não basta para reconhecer o sistema.
+  if (isLinearSystem(expression)) {
+    return [
+      { icon: "📚", label: "Ver fórmula relacionada", href: formulasLink({ categoria: "algebra-linear" }) },
+      { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-linear") },
+    ];
   }
 
   return [];

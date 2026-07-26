@@ -44,20 +44,40 @@ export const QUICK_EXAMPLES: QuickExample[] = [
   { label: "modulo(3+4i)", expression: "modulo(3+4i)" },
   { label: "argumento(1+i)", expression: "argumento(1+i)" },
   { label: "polar(1+i)", expression: "polar(1+i)" },
+  // Sprint V2.4 — Descoberta de Sistemas Lineares (motor já existente,
+  // sem exemplo até então). Um único exemplo representativo, mesmo padrão
+  // de "um por operação nova" das sprints anteriores. Separador ";" (não
+  // "\n"): o campo da Home é um `<input type="text">` de uma linha só —
+  // o próprio navegador (algoritmo de sanitização de valor do HTML,
+  // reproduzido pelo jsdom) remove qualquer "\n" do value ao preenchê-lo
+  // programaticamente, colando as duas equações ("x+y=5x-y=1", inválido).
+  // ";" é o separador alternativo que o backend já aceita nativamente
+  // (`equations/dispatcher.py`) e sobrevive intacto num input de uma
+  // linha — mesmo sistema, mesma renderização KaTeX (`to-latex.ts` trata
+  // os dois separadores de forma idêntica), zero mudança estrutural no
+  // componente da Home. A Calculadora (textarea real) usa a forma com
+  // "\n" em `CALCULATOR_QUICK_EXAMPLES` abaixo, sem esse problema.
+  { label: "x+y=5; x-y=1", expression: "x+y=5; x-y=1" },
 ];
 
 /**
- * Vitrine rápida da Calculadora (`/calculadora`) — 10 exemplos fixos, um
- * por área do motor, NUNCA um catálogo completo do que é suportado
- * (decisão de UX do Theo, pós-Sprint V2.3: `QUICK_EXAMPLES` tinha
- * crescido para 18 itens ali, virando exemplo de cada operação nova em
- * vez de continuar uma vitrine). Operações que não aparecem mais aqui
- * (ex. det/inv/transpose, multiplicação de matrizes, conjugado/
- * argumento/polar de complexos) continuam 100% suportadas pelo motor —
- * só deixaram de ocupar espaço na tela principal da calculadora;
- * permanecem acessíveis pela Biblioteca de Fórmulas e pelos exemplos
- * próprios de cada categoria lá (`data/formulas.ts`). Ordem fixa, todos
- * confirmados contra o backend real.
+ * Vitrine rápida da Calculadora (`/calculadora`) — um exemplo por área do
+ * motor, NUNCA um catálogo completo do que é suportado (decisão de UX do
+ * Theo, pós-Sprint V2.3: `QUICK_EXAMPLES` tinha crescido para 18 itens
+ * ali, virando exemplo de cada operação nova em vez de continuar uma
+ * vitrine). Operações que não aparecem mais aqui (ex. det/inv/transpose,
+ * multiplicação de matrizes, conjugado/argumento/polar de complexos)
+ * continuam 100% suportadas pelo motor — só deixaram de ocupar espaço na
+ * tela principal da calculadora; permanecem acessíveis pela Biblioteca de
+ * Fórmulas e pelos exemplos próprios de cada categoria lá
+ * (`data/formulas.ts`). Ordem fixa, todos confirmados contra o backend
+ * real.
+ *
+ * Sprint V2.4 — Sistemas Lineares: motor já existia (backend +
+ * `equations/dispatcher.py`), mas não tinha NENHUM exemplo/tecla/exposição
+ * no frontend (lacuna de descoberta pura, não uma feature nova) — um
+ * único exemplo acrescentado (10 → 11), exceção deliberada à contagem
+ * fixa de antes, pedida explicitamente pelo Theo.
  */
 export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "x² - 4 = 0", expression: "x² - 4 = 0" },
@@ -70,6 +90,7 @@ export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "[[1,2],[3,4]]", expression: "[[1,2],[3,4]]" },
   { label: "(2+i)(3-i)", expression: "(2+i)(3-i)" },
   { label: "|3+4i|", expression: "|3+4i|" },
+  { label: "x+y=5\nx-y=1", expression: "x+y=5\nx-y=1" },
 ];
 
 export interface QuickShortcut {

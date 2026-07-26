@@ -215,6 +215,26 @@ describe("HistoryPanel", () => {
     expect(annotations.filter((latex) => latex?.includes("\\begin{bmatrix}"))).toHaveLength(2);
   });
 
+  it("Sprint V2.4 (Sistemas Lineares): mostra um item de sistema linear com a expressão em \\begin{cases} e o resultado como lista de igualdades", async () => {
+    const { container } = render(
+      <HistoryPanel
+        items={[item("x+y=5\nx-y=1", "x = 3, y = 2", "2026-01-01T00:00:00Z")]}
+        hiddenTimestamps={new Set()}
+        onSelect={NOOP}
+        onHide={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    expect(annotations.some((latex) => latex?.includes("\\begin{cases}"))).toBe(true);
+    expect(
+      annotations.some((latex) => latex?.replace(/[\s~]|\\[,;:!]/g, "").includes("x=3,y=2"))
+    ).toBe(true);
+  });
+
   it("filtra itens ocultos", () => {
     render(
       <HistoryPanel

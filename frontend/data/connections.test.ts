@@ -9,6 +9,7 @@ import {
   getGeometryConnections,
   graphsLink,
   isComplex,
+  isLinearSystem,
 } from "./connections";
 
 describe("URL helpers", () => {
@@ -65,6 +66,20 @@ describe("getFormulaConnections", () => {
   it("fórmula sem curadoria não tem nenhuma conexão (nunca um fallback genérico)", () => {
     expect(getFormulaConnections("area-trapezio")).toEqual([]);
     expect(getFormulaConnections("id-que-nao-existe")).toEqual([]);
+  });
+
+  it("Sprint V2.4: sistema-linear-2x2 tem calculadora e exercícios", () => {
+    const links = getFormulaConnections("sistema-linear-2x2");
+    expect(links).toEqual([
+      { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("x+y=5\nx-y=1") },
+      { icon: "📝", label: "Exercícios relacionados", href: exercisesLink("algebra-linear") },
+    ]);
+  });
+
+  it("Sprint V2.4: fórmulas conceituais (forma matricial/condição/Cramer) não têm ação sem destino funcional", () => {
+    expect(getFormulaConnections("sistema-linear-forma-matricial")).toEqual([]);
+    expect(getFormulaConnections("sistema-linear-condicao-solucao-unica")).toEqual([]);
+    expect(getFormulaConnections("regra-cramer")).toEqual([]);
   });
 });
 
@@ -291,6 +306,71 @@ describe("getCalculatorExplorations", () => {
 
   it("equação usando 'i' (ex. 'i^2 = -1') não é roubada pelo gate de números complexos", () => {
     expect(isComplex("i^2 = -1")).toBe(false);
+  });
+
+  // --- Sprint V2.4 (Sistemas Lineares) ------------------------------------
+
+  it("sistema linear (quebra de linha) sugere fórmula e exercícios de Álgebra Linear, sem 'Ver propriedades'", () => {
+    const links = getCalculatorExplorations("x+y=5\nx-y=1");
+    expect(links).toEqual([
+      { icon: "📚", label: "Ver fórmula relacionada", href: formulasLink({ categoria: "algebra-linear" }) },
+      { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-linear") },
+    ]);
+  });
+
+  it("sistema linear separado por ';' produz o mesmo resultado que separado por quebra de linha", () => {
+    const withSemicolon = getCalculatorExplorations("x+y=5; x-y=1");
+    const withNewline = getCalculatorExplorations("x+y=5\nx-y=1");
+    expect(withSemicolon).toEqual(withNewline);
+  });
+
+  it("sistema com três incógnitas também é reconhecido", () => {
+    expect(getCalculatorExplorations("x+y+z=6\nx-y=0\ny-z=1")).toHaveLength(2);
+  });
+
+  it("uma única equação (sem sistema) NÃO aciona o bloco de Álgebra Linear", () => {
+    expect(getCalculatorExplorations("x+y=5")).toEqual([]);
+  });
+
+  it("um programa de matriz com várias atribuições não é confundido com sistema (matriz tem prioridade, mesma cascata do backend)", () => {
+    const links = getCalculatorExplorations("A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA+B");
+    expect(links.some((link) => link.label === "Ver fórmula relacionada")).toBe(false);
+    expect(links.some((link) => link.href === formulasLink({ categoria: "algebra-linear" }))).toBe(true);
+    // A entrada é classificada como matriz (não sistema): recebe o bloco de
+    // matriz, que inclui "Ver propriedades" — sistema nunca inclui.
+    expect(links.some((link) => link.label === "Ver propriedades")).toBe(true);
+  });
+
+  it("';' separando expressões que não são equações não vira sistema (mesmo comportamento de erro do backend)", () => {
+    expect(getCalculatorExplorations("2+2; 3+3")).toEqual([]);
+  });
+});
+
+describe("isLinearSystem", () => {
+  it("reconhece 2+ equações separadas por quebra de linha ou ';'", () => {
+    expect(isLinearSystem("x+y=5\nx-y=1")).toBe(true);
+    expect(isLinearSystem("x+y=5; x-y=1")).toBe(true);
+    expect(isLinearSystem("x+y+z=6\nx-y=0\ny-z=1")).toBe(true);
+  });
+
+  it("nunca reconhece uma única equação", () => {
+    expect(isLinearSystem("x+y=5")).toBe(false);
+    expect(isLinearSystem("x=2")).toBe(false);
+  });
+
+  it("nunca reconhece um programa de matriz com múltiplas linhas (matriz tem prioridade)", () => {
+    expect(isLinearSystem("A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA+B")).toBe(false);
+    expect(isLinearSystem("A=[[1,2],[3,4]]\ndet(A)")).toBe(false);
+  });
+
+  it("nunca reconhece instruções separadas por ';' que não sejam equações", () => {
+    expect(isLinearSystem("2+2; 3+3")).toBe(false);
+    expect(isLinearSystem("x=5; y+2")).toBe(false);
+  });
+
+  it("nunca reconhece uma expressão vazia ou sem separador", () => {
+    expect(isLinearSystem("")).toBe(false);
+    expect(isLinearSystem("2+2")).toBe(false);
   });
 });
 

@@ -350,6 +350,78 @@ const MATRIX_LITERAL_PREFIX = "[[";
 const MULTI_STATEMENT_MARKER = /[\n;]/;
 
 /**
+ * Sprint V2.4 (Sistemas Lineares) — divide um sistema em equações por
+ * quebra de linha OU ";" no nível mais alto (fora de parênteses/colchetes/
+ * chaves), mesmo bracket-counting de
+ * `connections.ts:splitMatrixStatements` (duplicado aqui de propósito —
+ * módulos de camadas diferentes, mesmo critério de separador do backend em
+ * `equations/dispatcher.py:_split_equations`).
+ */
+function splitSystemLines(text: string): string[] {
+  const lines: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const char of text) {
+    if (char === "(" || char === "[" || char === "{") depth += 1;
+    else if (char === ")" || char === "]" || char === "}") depth -= 1;
+    if ((char === "\n" || char === ";") && depth === 0) {
+      const line = current.trim();
+      if (line !== "") lines.push(line);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  const tail = current.trim();
+  if (tail !== "") lines.push(tail);
+  return lines;
+}
+
+/** Uma linha "parece" uma única equação: exatamente um "=" de igualdade (não "<="/"=="/etc.), com os dois lados não vazios. */
+function isSingleEquationLine(line: string): boolean {
+  const parts = line.split(EQUATION_SPLIT);
+  return parts.length === 2 && parts[0].trim() !== "" && parts[1].trim() !== "";
+}
+
+// Sprint V2.4 — mesmo critério de exclusão do backend
+// (`matrix/dispatcher.py:is_matrix_domain_expression`, checado ANTES de
+// equations na cascata de `math_engine/dispatcher.py`): "[[" ou uma
+// chamada de função de matriz em QUALQUER posição do texto significa que
+// o roteador real trata a entrada inteira como matriz, nunca como sistema
+// — precisa ser excluído aqui pelo mesmo motivo, senão um programa de
+// matriz com várias atribuições ("A=[[1,2],[3,4]]\nB=...") seria lido
+// erroneamente como sistema (cada atribuição TEM a forma "nome = valor").
+const SYSTEM_EXCLUDED_MATRIX_PATTERN =
+  /\b(det|inv|transpose|trace|determinante|inversa|transposta|traço)\s*\(/i;
+
+/**
+ * Sprint V2.4 (Sistemas Lineares) — reconhece 2+ equações separadas por
+ * quebra de linha/";" (mesmo critério do backend,
+ * `equations/dispatcher.py:solve_equation_text`) e as envolve em
+ * "\begin{cases}...\end{cases}". Cada linha é convertida pelo MESMO
+ * pipeline de equação única (`expressionToLatex` recursivo — nunca reentra
+ * neste branch, porque uma linha isolada nunca tem 2+ linhas). `null` =
+ * não é um sistema (menos de 2 linhas, alguma linha não é uma equação
+ * única, ou colide com o domínio de matriz) — quem chama cai para o
+ * pipeline normal de expressão/equação única.
+ */
+async function linearSystemToLatex(text: string): Promise<string | null> {
+  if (text.includes(MATRIX_LITERAL_PREFIX) || SYSTEM_EXCLUDED_MATRIX_PATTERN.test(text)) return null;
+  if (!MULTI_STATEMENT_MARKER.test(text)) return null;
+
+  const lines = splitSystemLines(text);
+  if (lines.length < 2 || !lines.every(isSingleEquationLine)) return null;
+
+  const rendered: string[] = [];
+  for (const line of lines) {
+    const latex = await expressionToLatex(line);
+    if (latex === null) return null;
+    rendered.push(latex);
+  }
+  return `\\begin{cases}${rendered.join("\\\\")}\\end{cases}`;
+}
+
+/**
  * Expressão ou equação/lista de igualdades ("x = 2", "f(2) = 10",
  * "x₁ = -2"). Cada lado é convertido separadamente — "=" nunca chega ao
  * mathjs (lá seria atribuição, com outro significado).
@@ -380,6 +452,9 @@ export async function expressionToLatex(text: string): Promise<string | null> {
   if (trimmed.includes(MATRIX_LITERAL_PREFIX) && MULTI_STATEMENT_MARKER.test(trimmed)) {
     return singleExpressionToLatex(trimmed);
   }
+
+  const system = await linearSystemToLatex(trimmed);
+  if (system !== null) return system;
 
   const pieces = trimmed.split(EQUATION_SPLIT).map((side) => side.trim());
   if (pieces.some((piece) => piece === "")) return null;

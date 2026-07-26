@@ -178,6 +178,24 @@ describe("KEYBOARD_CATEGORIES", () => {
     }
   });
 
+  it("tecla de sistema linear (Álgebra) vem depois de det/inversa/transposta e insere um exemplo completo com cursor no fim", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    const labels = algebra?.keys.map((key) => key.label) ?? [];
+    const relevantLabels = labels.filter((label) =>
+      ["det(A)", "A⁻¹", "Aᵀ", "Sistema linear"].includes(label)
+    );
+    expect(relevantLabels).toEqual(["det(A)", "A⁻¹", "Aᵀ", "Sistema linear"]);
+
+    const key = algebra?.keys.find((candidate) => candidate.label === "Sistema linear");
+    expect(key).toBeDefined();
+    // Mesma sintaxe multilinha que o backend já aceita nativamente
+    // (`equations/dispatcher.py`: "\n"/";" separam equações de um sistema).
+    expect(key!.insert).toBe("x+y=5\nx-y=1");
+    expect(key!.cursorOffset).toBe(key!.insert.length);
+    expect(key!.latex).toBe("\\begin{cases}x+y=5\\\\x-y=1\\end{cases}");
+    expect(key!.ariaLabel).toBeDefined();
+  });
+
   it("tecla i (Símbolos) insere a unidade imaginária minúscula", () => {
     const simbolos = KEYBOARD_CATEGORIES.find((category) => category.id === "simbolos");
     const key = simbolos?.keys.find((candidate) => candidate.label === "i");

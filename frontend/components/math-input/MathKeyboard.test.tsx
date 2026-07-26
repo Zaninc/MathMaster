@@ -85,4 +85,19 @@ describe("MathKeyboard", () => {
       expect(inserted).not.toContain("^T");
     }
   });
+
+  it("Sprint V2.4 (Sistemas Lineares): tecla 'Sistema linear' (Álgebra) renderiza como \\begin{cases}...\\end{cases} e insere o exemplo multilinha", () => {
+    const onInsert = vi.fn();
+    render(<MathKeyboard onInsert={onInsert} />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Álgebra" }));
+    const button = screen.getByRole("button", { name: "Inserir sistema linear de exemplo" });
+
+    expect(button.querySelector(".katex")).not.toBeNull();
+
+    fireEvent.click(button);
+    expect(onInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ insert: "x+y=5\nx-y=1", cursorOffset: "x+y=5\nx-y=1".length })
+    );
+  });
 });
