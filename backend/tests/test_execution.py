@@ -55,6 +55,22 @@ def test_raises_computation_timeout_error_when_child_still_running(
         execution_module.solve_expression_with_timeout("2+2")
 
 
+def test_nonlinear_system_still_respects_the_existing_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sprint V2.5 — `solve_nonlinear_system` (`nonlinsolve`) roda dentro
+    do MESMO isolamento por processo/timeout de qualquer outra expressão
+    (`solve_expression_with_timeout` envolve `solve_expression` inteiro,
+    sem exceção nenhuma para equations/nonlinear.py) — nenhum código novo
+    de timeout foi necessário nesta sprint. Mesmo padrão do teste acima
+    (timeout de 0.01s): mesmo um cálculo trivial não termina a tempo do
+    subprocesso nem ser criado, então isto é robusto independente da
+    complexidade real do sistema não linear."""
+    monkeypatch.setattr(execution_module.settings, "compute_timeout_seconds", 0.01)
+    with pytest.raises(ComputationTimeoutError):
+        execution_module.solve_expression_with_timeout("x**2+y=5\nx-y=1")
+
+
 def test_child_process_created_by_the_call_is_not_left_alive_after_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

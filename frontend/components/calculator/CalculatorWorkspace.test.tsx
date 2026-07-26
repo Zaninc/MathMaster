@@ -477,6 +477,15 @@ describe("CalculatorWorkspace", () => {
     expect(screen.getByLabelText("Expressão matemática")).toHaveValue("x+y=5\nx-y=1");
   });
 
+  it("Sprint V2.5 (Sistemas Polinomiais Não Lineares): exemplo 'x²+y=5\\nx-y=1' preenche o campo multilinha com o valor exato", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    render(<CalculatorWorkspace />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Preencher exemplo: x²+y=5\nx-y=1" }));
+
+    expect(screen.getByLabelText("Expressão matemática")).toHaveValue("x²+y=5\nx-y=1");
+  });
+
   it("Sprint V2.2.1: o campo (agora um textarea) preserva um valor multi-linha de variáveis locais de matriz", async () => {
     // Sprint V2.2.2 removeu os exemplos com variáveis locais (A=..., B=...)
     // da lista de "Exemplos" (decisão de UX) — a sintaxe continua 100%

@@ -395,44 +395,43 @@ const SYSTEM_EXCLUDED_MATRIX_PATTERN =
   /\b(det|inv|transpose|trace|determinante|inversa|transposta|traço)\s*\(/i;
 
 /**
- * Correção pós-Sprint V2.4 (guarda contra sistemas não lineares) — o
- * backend (`equations/systems.py:solve_linear_system`, via
- * `sympy.linsolve`) só resolve sistemas LINEARES; um termo com potência
- * ou produto entre incógnitas faz o backend rejeitar com uma
- * `ExpressionError` amigável ("Sistemas não lineares ainda não são
- * suportados..."). O frontend NUNCA tenta validar linearidade de
- * verdade (o backend continua sendo a fonte final) — só evita ATIVAR o
- * recurso polido de "sistema linear" (\begin{cases}, bloco Explorar de
- * Álgebra Linear) quando a entrada CLARAMENTE não é linear: "**"/"^"/
- * sobrescrito Unicode (potência), ou "identificador*identificador"
- * (produto entre duas incógnitas, ex. "x*y" — nunca confundido com
- * "2*x", coeficiente vezes variável, que o padrão não casa por exigir
- * uma LETRA dos dois lados do "*"). Entradas ambíguas (ex.
- * multiplicação implícita "xy") continuam passando pela guarda — só o
- * backend decide por elas.
+ * Sprint V2.5 (Motor de Sistemas Polinomiais Não Lineares) — o backend
+ * agora resolve sistemas POLINOMIAIS de qualquer grau (potência, produto
+ * entre incógnitas — `equations/nonlinear.py`, via `sympy.nonlinsolve`),
+ * não só sistemas lineares. Funções transcendentais das incógnitas
+ * (seno/cosseno/tangente/log/ln/exp/módulo) continuam fora de escopo —
+ * o backend rejeita com uma `ExpressionError` amigável
+ * (`nonlinear.py:solve_nonlinear_system`, guarda `is_polynomial_system`).
+ * O frontend NUNCA valida polinomialidade de verdade (o backend continua
+ * sendo a fonte final) — só evita ATIVAR o recurso polido de "sistema"
+ * (\begin{cases}, bloco Explorar) quando a entrada tem uma chamada de
+ * função transcendental claramente identificável.
  */
-const NONLINEAR_SYSTEM_MARKER_PATTERN =
-  /\*\*|\^|[⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ]|[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*\s*\*\s*[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*/;
+const TRANSCENDENTAL_SYSTEM_MARKER_PATTERN =
+  /\b(sen|sin|cos|tg|tan|asin|acos|atan|log|ln|exp|Abs|modulo)\s*\(/i;
 
 /**
- * Sprint V2.4 (Sistemas Lineares) — reconhece 2+ equações separadas por
- * quebra de linha/";" (mesmo critério do backend,
+ * Sprint V2.4/V2.5 (Sistemas de Equações) — reconhece 2+ equações
+ * separadas por quebra de linha/";" (mesmo critério do backend,
  * `equations/dispatcher.py:solve_equation_text`) e as envolve em
- * "\begin{cases}...\end{cases}". Cada linha é convertida pelo MESMO
- * pipeline de equação única (`expressionToLatex` recursivo — nunca reentra
- * neste branch, porque uma linha isolada nunca tem 2+ linhas). `null` =
- * não é um sistema (menos de 2 linhas, alguma linha não é uma equação
- * única, colide com o domínio de matriz, ou tem um marcador claro de
- * não-linearidade) — quem chama cai para o pipeline normal de
+ * "\begin{cases}...\end{cases}" — sistemas lineares E polinomiais não
+ * lineares (potência, produto entre incógnitas) recebem o MESMO
+ * tratamento visual, já que "\begin{cases}" não distingue grau. Cada
+ * linha é convertida pelo MESMO pipeline de equação única
+ * (`expressionToLatex` recursivo — nunca reentra neste branch, porque
+ * uma linha isolada nunca tem 2+ linhas). `null` = não é um sistema
+ * (menos de 2 linhas, alguma linha não é uma equação única, colide com o
+ * domínio de matriz, ou tem uma função transcendental — fora de escopo
+ * mesmo do motor não linear) — quem chama cai para o pipeline normal de
  * expressão/equação única.
  */
-async function linearSystemToLatex(text: string): Promise<string | null> {
+async function polynomialSystemToLatex(text: string): Promise<string | null> {
   if (text.includes(MATRIX_LITERAL_PREFIX) || SYSTEM_EXCLUDED_MATRIX_PATTERN.test(text)) return null;
   if (!MULTI_STATEMENT_MARKER.test(text)) return null;
 
   const lines = splitSystemLines(text);
   if (lines.length < 2 || !lines.every(isSingleEquationLine)) return null;
-  if (lines.some((line) => NONLINEAR_SYSTEM_MARKER_PATTERN.test(line))) return null;
+  if (lines.some((line) => TRANSCENDENTAL_SYSTEM_MARKER_PATTERN.test(line))) return null;
 
   const rendered: string[] = [];
   for (const line of lines) {
@@ -475,7 +474,7 @@ export async function expressionToLatex(text: string): Promise<string | null> {
     return singleExpressionToLatex(trimmed);
   }
 
-  const system = await linearSystemToLatex(trimmed);
+  const system = await polynomialSystemToLatex(trimmed);
   if (system !== null) return system;
 
   const pieces = trimmed.split(EQUATION_SPLIT).map((side) => side.trim());

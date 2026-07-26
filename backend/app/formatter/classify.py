@@ -51,6 +51,21 @@ def is_assignment_shape(segments: list[str]) -> bool:
     return all(_ASSIGNMENT_SEGMENT_PATTERN.match(segment) for segment in segments)
 
 
+def is_multi_assignment_shape(branches: list[list[str]]) -> bool:
+    """Sprint V2.5 (Sistemas Polinomiais Não Lineares) — `branches` are
+    already the top-level " ou "-split branches of the raw string, each
+    itself already comma-split into segments (see
+    `safe_parse.split_top_level`, called twice by the caller). True only
+    if there are 2+ branches and EVERY branch is itself a valid
+    assignment-shape list — the raw shape
+    `equations/nonlinear_formatter.py` produces for a system with
+    multiple solution tuples, e.g. "x = 2, y = 3 ou x = 3, y = 2". Must be
+    checked BEFORE `is_assignment_shape` on the whole string: a naive
+    comma-split of that raw string produces malformed segments (" y = 3
+    ou x = 3" as ONE segment), since " ou " isn't a comma boundary."""
+    return len(branches) >= 2 and all(is_assignment_shape(segments) for segments in branches)
+
+
 def is_pure_expression_shape(text: str) -> bool:
     """Conservative whitelist: SymPy's str() of a plain expression never
     contains "=", ":", ";" or accented/non-ASCII characters — Portuguese

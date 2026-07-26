@@ -448,4 +448,15 @@ export const FORMULAS: FormulaEntry[] = [
     latex: String.raw`e^{i\theta} = \cos(\theta) + i\sin(\theta)`,
     category: "numeros-complexos",
   },
+  // Sprint V2.5 — Motor de Sistemas Polinomiais Não Lineares. Categoria
+  // "algebra" (não uma nova categoria, nem "algebra-linear" — um sistema
+  // não linear não envolve matriz/vetor): a posição no array não precisa
+  // ficar contígua às outras entradas "algebra" (`FormulaCategory` agrupa
+  // por `category`, não por posição no array).
+  {
+    id: "sistema-nao-linear-exemplo",
+    title: "Sistema não linear (parábola + reta)",
+    latex: String.raw`\begin{cases}x^2+y=5\\x-y=1\end{cases}`,
+    category: "algebra",
+  },
 ];

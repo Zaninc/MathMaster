@@ -671,6 +671,85 @@ describe("ResultPanel — sistemas lineares (Sprint V2.4)", () => {
   });
 });
 
+describe("ResultPanel — sistemas polinomiais não lineares (Sprint V2.5)", () => {
+  it("renderiza a expressão como \\begin{cases}...\\end{cases} e múltiplas soluções unidas por ' ou '", async () => {
+    const { container } = render(
+      <ResultPanel
+        status="success"
+        expression={"x**2+y=5\nx-y=1"}
+        result="x = -3, y = -4 ou x = 2, y = 1"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    expect(annotations.some((latex) => latex?.includes("\\begin{cases}"))).toBe(true);
+    expect(annotations.some((latex) => latex?.includes("\\text{ou}"))).toBe(true);
+  });
+
+  it("sistema não linear impossível mostra o texto puro, sem KaTeX no resultado nem erro visual", async () => {
+    render(
+      <ResultPanel
+        status="success"
+        expression={"x**2+y**2=1\nx**2+y**2=4"}
+        result="Sistema sem solução"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    expect(await screen.findByText("Sistema sem solução")).toBeInTheDocument();
+  });
+
+  it("bloco Explorar de um sistema não linear mostra 'Ver fórmula relacionada'/'Exercícios semelhantes', NUNCA 'Ver propriedades', e NUNCA aponta para Álgebra Linear", () => {
+    render(
+      <ResultPanel
+        status="success"
+        expression={"x**2+y=5\nx-y=1"}
+        result="x = -3, y = -4 ou x = 2, y = 1"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    expect(screen.queryByRole("link", { name: "Ver propriedades" })).not.toBeInTheDocument();
+    const formulaLink = screen.getByRole("link", { name: "Ver fórmula relacionada" });
+    expect(formulaLink).toHaveAttribute("href", expect.stringContaining("categoria=algebra"));
+    expect(formulaLink).not.toHaveAttribute("href", expect.stringContaining("algebra-linear"));
+    expect(screen.getByRole("link", { name: "Exercícios semelhantes" })).toHaveAttribute(
+      "href",
+      "/aprendizado?topico=algebra-basica"
+    );
+  });
+
+  it("sistema linear NUNCA aciona o bloco de sistema não linear (mutuamente exclusivos)", () => {
+    render(
+      <ResultPanel
+        status="success"
+        expression={"x+y=5\nx-y=1"}
+        result="x = 3, y = 2"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    const formulaLink = screen.getByRole("link", { name: "Ver fórmula relacionada" });
+    expect(formulaLink).toHaveAttribute("href", expect.stringContaining("algebra-linear"));
+  });
+});
+
 describe("ResultPanel — variáveis locais de matriz (Sprint V2.2.1)", () => {
   it("renderiza um programa multi-linha (atribuições + expressão final) sem quebrar, expressão preservada verbatim", async () => {
     const expression = "A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA*B";

@@ -235,6 +235,30 @@ describe("HistoryPanel", () => {
     ).toBe(true);
   });
 
+  it("Sprint V2.5 (Sistemas Polinomiais Não Lineares): mostra um item de sistema não linear com múltiplas soluções unidas por ' ou '", async () => {
+    const { container } = render(
+      <HistoryPanel
+        items={[
+          item(
+            "x**2+y=5\nx-y=1",
+            "x = -3, y = -4 ou x = 2, y = 1",
+            "2026-01-01T00:00:00Z"
+          ),
+        ]}
+        hiddenTimestamps={new Set()}
+        onSelect={NOOP}
+        onHide={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    expect(annotations.some((latex) => latex?.includes("\\begin{cases}"))).toBe(true);
+    expect(annotations.some((latex) => latex?.includes("\\text{ou}"))).toBe(true);
+  });
+
   it("filtra itens ocultos", () => {
     render(
       <HistoryPanel

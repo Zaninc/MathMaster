@@ -23,6 +23,7 @@ from .classify import (
     is_assignment_shape,
     is_finiteset_shape,
     is_interval_shape,
+    is_multi_assignment_shape,
     is_periodic_solution_shape,
     is_pure_expression_shape,
 )
@@ -112,6 +113,22 @@ def _format_assignment_list(segments: list[str], mode: Mode) -> str | None:
     )
 
 
+def _format_multi_assignment(branches: list[list[str]], mode: Mode) -> str | None:
+    """Sprint V2.5 (Sistemas Polinomiais Não Lineares) — cada ramo "ou" é
+    a solução de UM tuplo do sistema ("x = 2, y = 3"), com símbolos
+    diferentes por segmento — reaproveita `_format_assignment_list` já
+    existente (mesma limpeza/ordenação por valor), nunca duplica essa
+    lógica. `None` se QUALQUER ramo falhar ao formatar (mesmo contrato
+    "tudo ou nada" das outras formas — o chamador preserva o raw)."""
+    rendered_branches = []
+    for segments in branches:
+        rendered = _format_assignment_list(segments, mode)
+        if rendered is None:
+            return None
+        rendered_branches.append(rendered)
+    return " ou ".join(rendered_branches)
+
+
 def _format_pure_expression(raw: str, mode: Mode) -> str | None:
     parsed = safe_sympify(raw)
     if parsed is None:
@@ -144,6 +161,18 @@ def format_result(expression: str, raw: str, mode: Mode = "exact") -> str:
 
         if is_finiteset_shape(stripped):
             rendered = _format_finiteset(stripped, expression)
+            return rendered if rendered is not None else raw
+
+        # Sprint V2.5 — checado ANTES do assignment-shape comum pelo
+        # mesmo motivo que a forma periódica é checada antes das outras:
+        # um split ingênuo por vírgula da string INTEIRA quebraria no
+        # lugar errado (" ou " não é fronteira de vírgula). Só dispara
+        # para o raw de múltiplas soluções de um sistema não linear
+        # (`equations/nonlinear_formatter.py`) — uma equação normal nunca
+        # contém " ou " no meio.
+        ou_branches = [split_top_level(branch) for branch in split_top_level(stripped, " ou ")]
+        if is_multi_assignment_shape(ou_branches):
+            rendered = _format_multi_assignment(ou_branches, mode)
             return rendered if rendered is not None else raw
 
         segments = split_top_level(stripped)

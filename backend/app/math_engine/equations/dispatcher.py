@@ -13,6 +13,8 @@ from ..safe_parsing import safe_parse_expr
 from .absolute import solve_absolute_equation
 from .inequalities import solve_inequality
 from .linear import solve_linear
+from .nonlinear import solve_nonlinear_system
+from .nonlinear_validation import is_linear_system
 from .polynomial import solve_polynomial
 from .quadratic import solve_quadratic
 from .systems import solve_linear_system
@@ -85,7 +87,15 @@ def solve_equation_text(expression: str) -> str:
             {symbol for equation in equations for symbol in equation.free_symbols},
             key=str,
         )
-        return solve_linear_system(equations, symbols)
+        # Sprint V2.5 — a classificação linear x não linear usa a árvore
+        # SymPy (`nonlinear_validation.is_linear_system`, grau total <= 1
+        # em todos os símbolos), nunca regex. `solve_linear_system`
+        # (`linsolve`) permanece o único caminho para sistemas lineares,
+        # 100% intocado; `solve_nonlinear_system` (`nonlinsolve`) é uma
+        # camada nova e separada para tudo que tiver grau > 1.
+        if is_linear_system(equations, symbols):
+            return solve_linear_system(equations, symbols)
+        return solve_nonlinear_system(equations, symbols)
 
     equation = equations[0]
     symbols = list(equation.free_symbols)

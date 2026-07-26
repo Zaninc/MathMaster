@@ -58,6 +58,11 @@ export const QUICK_EXAMPLES: QuickExample[] = [
   // componente da Home. A Calculadora (textarea real) usa a forma com
   // "\n" em `CALCULATOR_QUICK_EXAMPLES` abaixo, sem esse problema.
   { label: "x+y=5; x-y=1", expression: "x+y=5; x-y=1" },
+  // Sprint V2.5 — Motor de Sistemas Polinomiais Não Lineares. Mesmo
+  // separador ";" e mesmo motivo da V2.4 acima (o campo da Home é um
+  // <input> de uma linha só, "\n" seria removido na sanitização de valor
+  // do HTML).
+  { label: "x²+y=5; x-y=1", expression: "x²+y=5; x-y=1" },
 ];
 
 /**
@@ -78,6 +83,10 @@ export const QUICK_EXAMPLES: QuickExample[] = [
  * no frontend (lacuna de descoberta pura, não uma feature nova) — um
  * único exemplo acrescentado (10 → 11), exceção deliberada à contagem
  * fixa de antes, pedida explicitamente pelo Theo.
+ *
+ * Sprint V2.5 — Motor de Sistemas Polinomiais Não Lineares: motor NOVO de
+ * verdade desta vez (não uma lacuna de descoberta) — mesma exceção de
+ * "um exemplo por área nova" (11 → 12).
  */
 export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "x² - 4 = 0", expression: "x² - 4 = 0" },
@@ -91,6 +100,7 @@ export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "(2+i)(3-i)", expression: "(2+i)(3-i)" },
   { label: "|3+4i|", expression: "|3+4i|" },
   { label: "x+y=5\nx-y=1", expression: "x+y=5\nx-y=1" },
+  { label: "x²+y=5\nx-y=1", expression: "x²+y=5\nx-y=1" },
 ];
 
 export interface QuickShortcut {

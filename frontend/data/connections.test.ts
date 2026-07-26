@@ -10,6 +10,7 @@ import {
   graphsLink,
   isComplex,
   isLinearSystem,
+  isNonlinearSystem,
 } from "./connections";
 
 describe("URL helpers", () => {
@@ -80,6 +81,14 @@ describe("getFormulaConnections", () => {
     expect(getFormulaConnections("sistema-linear-forma-matricial")).toEqual([]);
     expect(getFormulaConnections("sistema-linear-condicao-solucao-unica")).toEqual([]);
     expect(getFormulaConnections("regra-cramer")).toEqual([]);
+  });
+
+  it("Sprint V2.5: sistema-nao-linear-exemplo tem calculadora e exercícios", () => {
+    const links = getFormulaConnections("sistema-nao-linear-exemplo");
+    expect(links).toEqual([
+      { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("x**2+y=5\nx-y=1") },
+      { icon: "📝", label: "Exercícios relacionados", href: exercisesLink("algebra-basica") },
+    ]);
   });
 });
 
@@ -345,12 +354,59 @@ describe("getCalculatorExplorations", () => {
     expect(getCalculatorExplorations("2+2; 3+3")).toEqual([]);
   });
 
-  it("correção pós-Sprint V2.4: sistema com potência não aciona o bloco de Álgebra Linear (o backend vai rejeitar como não linear)", () => {
-    expect(getCalculatorExplorations("x**2+y=5\nx-y=1")).toEqual([]);
+  // Sprint V2.5 (Motor de Sistemas Polinomiais Não Lineares) — sistema
+  // com potência/produto entre incógnitas NÃO aciona mais o bloco de
+  // Álgebra Linear (isLinearSystem continua false para esses), mas
+  // agora aciona o bloco de sistema NÃO linear (isNonlinearSystem) —
+  // regressão do comportamento conservador da Sprint V2.4, superado por
+  // esta sprint (ver `getCalculatorExplorations` > "sistemas não
+  // lineares" abaixo para os testes desse bloco novo).
+
+  it("sistema com potência aciona o bloco de sistema não linear (não Álgebra Linear)", () => {
+    const links = getCalculatorExplorations("x**2+y=5\nx-y=1");
+    expect(links.some((link) => link.href === formulasLink({ categoria: "algebra-linear" }))).toBe(
+      false
+    );
+    expect(links.length).toBeGreaterThan(0);
   });
 
-  it("correção pós-Sprint V2.4: sistema com produto entre incógnitas (x*y) não aciona o bloco de Álgebra Linear", () => {
-    expect(getCalculatorExplorations("x*y=2\nx+y=3")).toEqual([]);
+  it("sistema com produto entre incógnitas (x*y) aciona o bloco de sistema não linear", () => {
+    const links = getCalculatorExplorations("x*y=2\nx+y=3");
+    expect(links.some((link) => link.href === formulasLink({ categoria: "algebra-linear" }))).toBe(
+      false
+    );
+    expect(links.length).toBeGreaterThan(0);
+  });
+});
+
+describe("getCalculatorExplorations — sistemas não lineares (Sprint V2.5)", () => {
+  it("sistema não linear (parábola + reta) sugere fórmula e exercícios, sem 'Ver propriedades'", () => {
+    const links = getCalculatorExplorations("x**2+y=5\nx-y=1");
+    expect(links).toEqual([
+      {
+        icon: "📚",
+        label: "Ver fórmula relacionada",
+        href: formulasLink({ categoria: "algebra", q: "sistema" }),
+      },
+      { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-basica") },
+    ]);
+  });
+
+  it("sistema não linear separado por ';' produz o mesmo resultado que separado por quebra de linha", () => {
+    const withSemicolon = getCalculatorExplorations("x**2+y=5; x-y=1");
+    const withNewline = getCalculatorExplorations("x**2+y=5\nx-y=1");
+    expect(withSemicolon).toEqual(withNewline);
+  });
+
+  it("sistema linear NUNCA aciona o bloco de sistema não linear (mutuamente exclusivos)", () => {
+    const links = getCalculatorExplorations("x+y=5\nx-y=1");
+    expect(links.some((link) => link.href === formulasLink({ categoria: "algebra", q: "sistema" }))).toBe(
+      false
+    );
+  });
+
+  it("função transcendental num sistema não aciona nenhum dos dois blocos (fora de escopo dos dois motores)", () => {
+    expect(getCalculatorExplorations("sen(x)+y=1\nx-y=0")).toEqual([]);
   });
 });
 
@@ -400,6 +456,49 @@ describe("isLinearSystem", () => {
   it("continua reconhecendo coeficiente*variável (2*x) e multiplicação implícita (2x) como sistema válido", () => {
     expect(isLinearSystem("2*x+3*y=5\nx-y=1")).toBe(true);
     expect(isLinearSystem("2x+3y=5\nx-y=1")).toBe(true);
+  });
+
+  it("nunca reconhece como linear um sistema com marcador de não-linearidade (é isNonlinearSystem, não isLinearSystem)", () => {
+    expect(isLinearSystem("x**2+y=5\nx-y=1")).toBe(false);
+  });
+});
+
+describe("isNonlinearSystem (Sprint V2.5)", () => {
+  it("reconhece sistemas com potência (**, ^ ou expoente Unicode) em qualquer equação", () => {
+    expect(isNonlinearSystem("x**2+y=5\nx-y=1")).toBe(true);
+    expect(isNonlinearSystem("x^2+y=5\nx-y=1")).toBe(true);
+    expect(isNonlinearSystem("x²+y=5\nx-y=1")).toBe(true);
+    expect(isNonlinearSystem("x+y=5\ny^2-x=1")).toBe(true);
+  });
+
+  it("reconhece sistemas com produto entre duas incógnitas (x*y)", () => {
+    expect(isNonlinearSystem("x*y=2\nx+y=3")).toBe(true);
+  });
+
+  it("reconhece circunferência + reta, parábola explícita, cúbico e produto fatorado", () => {
+    expect(isNonlinearSystem("x**2+y**2=25\nx-y=1")).toBe(true);
+    expect(isNonlinearSystem("y=x**2\nx+y=6")).toBe(true);
+    expect(isNonlinearSystem("x**3+y=9\nx+y=3")).toBe(true);
+    expect(isNonlinearSystem("(x+1)*(y-2)=0\nx-y=0")).toBe(true);
+  });
+
+  it("NUNCA reconhece um sistema estritamente linear (mutuamente exclusivo com isLinearSystem)", () => {
+    expect(isNonlinearSystem("x+y=5\nx-y=1")).toBe(false);
+    expect(isNonlinearSystem("2*x+3*y=5\nx-y=1")).toBe(false);
+    expect(isNonlinearSystem("2x+3y=5\nx-y=1")).toBe(false);
+  });
+
+  it("nunca reconhece uma única equação, mesmo com potência", () => {
+    expect(isNonlinearSystem("x**2+y=5")).toBe(false);
+  });
+
+  it("nunca reconhece um programa de matriz com múltiplas linhas (matriz tem prioridade)", () => {
+    expect(isNonlinearSystem("A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA+B")).toBe(false);
+  });
+
+  it("nunca reconhece função transcendental (sen/cos/log/exp/módulo), mesmo com potência em outra equação", () => {
+    expect(isNonlinearSystem("sen(x)+y=1\nx-y=0")).toBe(false);
+    expect(isNonlinearSystem("x**2+y=5\nlog(y)-x=1")).toBe(false);
   });
 });
 

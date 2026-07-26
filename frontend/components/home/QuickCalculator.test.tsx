@@ -97,6 +97,14 @@ describe("QuickCalculator", () => {
 
     expect(screen.getByLabelText("Expressão matemática")).toHaveValue("x+y=5; x-y=1");
   });
+
+  it("Sprint V2.5 (Sistemas Polinomiais Não Lineares): exemplo 'x²+y=5; x-y=1' preenche o campo", () => {
+    render(<QuickCalculator />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Preencher exemplo: x²+y=5; x-y=1" }));
+
+    expect(screen.getByLabelText("Expressão matemática")).toHaveValue("x²+y=5; x-y=1");
+  });
 });
 
 /**
@@ -247,6 +255,20 @@ describe("QuickCalculator — resultado em KaTeX (correção pós-Sprint V2.3)",
     expect(
       annotationsOf(container).some((latex) => latex?.replace(/\s/g, "").includes("y=2"))
     ).toBe(true);
+  });
+
+  it("12. resultado de sistema não linear com múltiplas soluções (Sprint V2.5) renderizado em KaTeX, unidas por ' ou '", async () => {
+    vi.mocked(apiClient.solve).mockResolvedValue({
+      expression: "x²+y=5; x-y=1",
+      result: "x = -3, y = -4 ou x = 2, y = 1",
+      approx: null,
+    });
+    const { container } = render(<QuickCalculator />);
+    solve("x²+y=5; x-y=1");
+
+    await waitFor(() =>
+      expect(annotationsOf(container).some((latex) => latex?.includes("\\text{ou}"))).toBe(true)
+    );
   });
 
   it("10. reaproveita a pipeline compartilhada de lib/math/to-latex — mesma saída de resultToLatex direto, sem conversor paralelo", async () => {

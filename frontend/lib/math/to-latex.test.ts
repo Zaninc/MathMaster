@@ -256,30 +256,28 @@ describe("expressionToLatex", () => {
     expect(latex).not.toContain("cases");
   });
 
-  // --- Correção pós-Sprint V2.4 (guarda contra sistemas não lineares) —
-  // o backend só resolve sistemas LINEARES (`sympy.linsolve`); uma
-  // entrada com potência ou produto entre incógnitas nunca deve ativar o
-  // recurso polido de "sistema linear" (\begin{cases}), mesmo que a FORMA
-  // (2+ linhas, cada uma com "=") seja idêntica a um sistema válido.
+  // --- Sprint V2.5 (Motor de Sistemas Polinomiais Não Lineares) — o
+  // backend agora resolve sistemas polinomiais de qualquer grau
+  // (`nonlinsolve`), não só lineares. Potência/produto entre incógnitas
+  // ATIVAM o \begin{cases} normalmente (regressão do comportamento
+  // conservador da Sprint V2.4, superado por esta sprint); só função
+  // transcendental continua fora de escopo.
 
-  it("potência (** ou ^) em qualquer equação do sistema desativa o cases (o backend vai rejeitar)", async () => {
+  it("potência (** ou ^) em qualquer equação do sistema ATIVA o cases (sistema polinomial não linear, suportado desde a Sprint V2.5)", async () => {
     for (const input of ["x**2+y=5\nx-y=1", "x^2+y=5\nx-y=1", "x+y=5\ny^2-x=1"]) {
-      const latex = await expressionToLatex(input);
-      expect(latex, input).not.toBeNull();
-      expect(latex, input).not.toContain("cases");
+      const latex = normalized(await expressionToLatex(input));
+      expect(latex, input).toContain("\\begin{cases}");
     }
   });
 
-  it("expoente Unicode (x²) em qualquer equação do sistema desativa o cases", async () => {
-    const latex = await expressionToLatex("x²+y=5\nx-y=1");
-    expect(latex).not.toBeNull();
-    expect(latex).not.toContain("cases");
+  it("expoente Unicode (x²) em qualquer equação do sistema ATIVA o cases", async () => {
+    const latex = normalized(await expressionToLatex("x²+y=5\nx-y=1"));
+    expect(latex).toContain("\\begin{cases}");
   });
 
-  it("produto entre duas incógnitas (x*y) desativa o cases, mas coeficiente*variável (2*x) continua sendo sistema válido", async () => {
-    const product = await expressionToLatex("x*y=2\nx+y=3");
-    expect(product).not.toBeNull();
-    expect(product).not.toContain("cases");
+  it("produto entre duas incógnitas (x*y) ATIVA o cases (sistema polinomial não linear)", async () => {
+    const product = normalized(await expressionToLatex("x*y=2\nx+y=3"));
+    expect(product).toContain("\\begin{cases}");
 
     const withCoefficient = normalized(await expressionToLatex("2*x+3*y=5\nx-y=1"));
     expect(withCoefficient).toContain("\\begin{cases}");
@@ -288,6 +286,14 @@ describe("expressionToLatex", () => {
   it("multiplicação implícita (2x+3y=5) continua reconhecida como sistema válido (regressão)", async () => {
     const latex = normalized(await expressionToLatex("2x+3y=5\nx-y=1"));
     expect(latex).toContain("\\begin{cases}");
+  });
+
+  it("função transcendental (sen/cos/log/exp/módulo) em qualquer equação do sistema desativa o cases (continua fora de escopo)", async () => {
+    for (const input of ["sen(x)+y=1\nx-y=0", "x+y=5\nlog(y)-x=1", "exp(x)+y=5\nx-y=1"]) {
+      const latex = await expressionToLatex(input);
+      expect(latex, input).not.toBeNull();
+      expect(latex, input).not.toContain("cases");
+    }
   });
 });
 
@@ -498,6 +504,35 @@ describe("resultToLatex", () => {
     const segments = await resultToLatex("x = 2 - y, y = y");
     expect(segments).toHaveLength(1);
     expect(normalized(segments![0].latex)).toBe("x=2-y,y=y");
+  });
+
+  // --- Sprint V2.5 (Motor de Sistemas Polinomiais Não Lineares) — o
+  // RESULTADO de múltiplas soluções ("x = a, y = b ou x = c, y = d") já é
+  // reconhecido de graça pela combinação de duas formas existentes: " ou "
+  // (alternativas, já usada por soluções trigonométricas periódicas) e
+  // lista de igualdades (já usada pelo resultado de um sistema linear) —
+  // nenhuma mudança de código precisou ser feita aqui, só o eco da
+  // ENTRADA (`expressionToLatex`, testes acima) ganhou o \begin{cases}
+  // para sistemas não lineares.
+
+  it("converte o resultado de múltiplas soluções de um sistema não linear (' ou ' entre tuplos)", async () => {
+    const segments = await resultToLatex("x = -3, y = -4 ou x = 2, y = 1");
+    expect(segments).toHaveLength(1);
+    expect(normalized(segments![0].latex)).toBe("x=-3,y=-4\\text{ou}x=2,y=1");
+  });
+
+  it("converte múltiplas soluções complexas de um sistema não linear (cúbico)", async () => {
+    const segments = await resultToLatex(
+      "x = -1 - √2*i, y = 4 + √2*i ou x = -1 + √2*i, y = 4 - √2*i ou x = 2, y = 1"
+    );
+    expect(segments).toHaveLength(1);
+    const latex = normalized(segments![0].latex);
+    expect(latex).toContain("\\sqrt{2}\\cdoti");
+    expect(latex.split("ou").length).toBe(3);
+  });
+
+  it("sistema não linear indeterminado ('Sistema com infinitas soluções (indeterminado).') cai no fallback de texto puro, sem lançar", async () => {
+    expect(await resultToLatex("Sistema com infinitas soluções (indeterminado).")).toBeNull();
   });
 });
 
@@ -857,6 +892,29 @@ describe("previewLatex (pipeline único da pré-visualização e do histórico)"
 
   it("digitação incompleta de um sistema (2ª equação ainda não fechada) nunca lança e sempre renderiza em segurança (Tier 2)", async () => {
     for (const input of ["x+y=5\n", "x+y=5\nx-", "x+y=5\nx-y="]) {
+      const latex = await previewLatex(input);
+      expect(latex, input).not.toBeNull();
+      assertRendersSafely(latex as string, input);
+    }
+  });
+
+  // --- Sprint V2.5 (Motor de Sistemas Polinomiais Não Lineares) ----------
+
+  it("mostra um sistema não linear (parábola + reta) renderizado em \\begin{cases}...\\end{cases}", async () => {
+    const latex = await previewLatex("x**2+y=5\nx-y=1");
+    expect(latex).not.toBeNull();
+    expect(latex).toContain("\\begin{cases}");
+    assertRendersSafely(latex as string, "x**2+y=5\nx-y=1");
+  });
+
+  it("mostra um sistema não linear com produto entre incógnitas (x*y) renderizado em cases", async () => {
+    const latex = await previewLatex("x*y=6\nx+y=5");
+    expect(latex).not.toBeNull();
+    expect(latex).toContain("\\begin{cases}");
+  });
+
+  it("função transcendental (sen/log/exp) num sistema continua fora de escopo, mas nunca lança (Tier 2)", async () => {
+    for (const input of ["sen(x)+y=1\nx-y=0", "x+y=5\nlog(y)-x=1"]) {
       const latex = await previewLatex(input);
       expect(latex, input).not.toBeNull();
       assertRendersSafely(latex as string, input);

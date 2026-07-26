@@ -191,6 +191,11 @@ export const FORMULA_CONNECTIONS: Partial<Record<string, RelatedLink[]>> = {
   "formula-euler": [
     { icon: "🧮", label: "Ver forma polar relacionada", href: calculatorLink("polar(1+i)") },
   ],
+  // Sprint V2.5 — Motor de Sistemas Polinomiais Não Lineares.
+  "sistema-nao-linear-exemplo": [
+    { icon: "🧮", label: "Abrir na calculadora", href: calculatorLink("x**2+y=5\nx-y=1") },
+    { icon: "📝", label: "Exercícios relacionados", href: exercisesLink("algebra-basica") },
+  ],
 };
 
 export function getFormulaConnections(formulaId: string): RelatedLink[] {
@@ -281,40 +286,73 @@ function isSingleEquationStatement(statement: string): boolean {
 }
 
 /**
- * Correção pós-Sprint V2.4 (guarda contra sistemas não lineares) — mesmo
- * padrão de `to-latex.ts:NONLINEAR_SYSTEM_MARKER_PATTERN` (duplicado aqui
- * de propósito, módulos de camadas diferentes): o backend só resolve
- * sistemas LINEARES (`sympy.linsolve`) e rejeita potência/produto entre
- * incógnitas com uma `ExpressionError` amigável — o Explorar não deve
- * rotular como "sistema linear" (nem linkar pra Álgebra Linear) uma
- * entrada que CLARAMENTE não é. O backend continua sendo a fonte final de
- * validação; isto só evita um rótulo enganoso na UI.
+ * Sprint V2.5 (Motor de Sistemas Polinomiais Não Lineares) — mesmo
+ * espírito de `to-latex.ts:TRANSCENDENTAL_SYSTEM_MARKER_PATTERN`
+ * (duplicado aqui de propósito, módulos de camadas diferentes; o
+ * marcador de POTÊNCIA/PRODUTO abaixo é exclusivo deste arquivo — a
+ * conversão LaTeX não distingue grau, só a classificação do Explorar
+ * precisa). O backend agora resolve sistemas POLINOMIAIS de qualquer
+ * grau (`equations/nonlinear.py`, via `sympy.nonlinsolve`) — potência
+ * ("**"/"^"/sobrescrito Unicode) ou produto entre duas incógnitas
+ * ("x*y", nunca confundido com "2*x", coeficiente vezes variável) já NÃO
+ * são mais motivo de exclusão, só decidem se o sistema é classificado
+ * como linear ou não linear. Também casa produto de dois grupos entre
+ * parênteses ("(x+1)*(y-2)" — forma fatorada de uma equação de grau 2),
+ * que "identificador*identificador" sozinho não cobre. Função
+ * transcendental (seno/cosseno/tangente/log/ln/exp/módulo) continua fora
+ * de escopo dos dois motores — mesma exclusão em ambos os detectores
+ * abaixo (`TRANSCENDENTAL_MARKER_PATTERN`).
  */
-const NONLINEAR_SYSTEM_MARKER_PATTERN =
-  /\*\*|\^|[⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ]|[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*\s*\*\s*[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*/;
+const NONLINEAR_MARKER_PATTERN =
+  /\*\*|\^|[⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ]|\)\s*\*\s*\(|[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*\s*\*\s*[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*/;
+
+const TRANSCENDENTAL_MARKER_PATTERN =
+  /\b(sen|sin|cos|tg|tan|asin|acos|atan|log|ln|exp|Abs|modulo)\s*\(/i;
+
+/**
+ * Divide a expressão em "instruções" (bracket-aware, reutiliza
+ * `splitMatrixStatements` ACIMA) e confirma a forma comum aos dois
+ * detectores de sistema: 2+ instruções, cada uma "lado = lado", nenhuma
+ * função transcendental — mesma exclusão de `isMatrix` (matriz tem
+ * prioridade na cascata real do backend, `math_engine/dispatcher.py`).
+ * `null` = não é um sistema de forma nenhuma (nem linear, nem não
+ * linear); os dois detectores públicos abaixo só decidem o GRAU a partir
+ * daqui.
+ */
+function systemStatementsOrNull(expression: string): string[] | null {
+  if (isMatrix(expression)) return null;
+  const statements = splitMatrixStatements(expression);
+  if (statements.length < 2 || !statements.every(isSingleEquationStatement)) return null;
+  if (statements.some((statement) => TRANSCENDENTAL_MARKER_PATTERN.test(statement))) return null;
+  return statements;
+}
 
 /**
  * Sprint V2.4 (Sistemas Lineares) — mesmo critério do backend
- * (`equations/dispatcher.py:solve_equation_text`, roteado por
- * `is_equation_domain_expression`): 2+ "instruções" separadas por quebra
- * de linha/";" (mesmo split bracket-aware de `splitMatrixStatements`
- * ACIMA, reutilizado aqui de propósito — nunca duplicado por conta
- * própria), cada uma com a forma de uma única equação ("lado = lado").
- * Sempre `false` quando `isMatrix` reconhece a expressão — mesma exclusão
- * do roteador real (matrix é checado ANTES de equations em
- * `math_engine/dispatcher.py`): sem isso, um programa de matriz com
- * várias atribuições ("A=[[1,2],[3,4]]\nB=...") seria lido como sistema,
- * já que cada atribuição TEM a forma "nome = valor". Também `false` para
- * uma única equação (nada a distinguir de uma equação comum), para
- * instruções separadas por ";" que não sejam equações (ex. "2+2; 3+3"), e
- * para qualquer equação com um marcador claro de não-linearidade
- * (potência ou produto entre incógnitas).
+ * (`equations/nonlinear_validation.py:is_linear_system`, grau total <= 1
+ * em todos os símbolos via árvore SymPy): aqui, sem SymPy disponível, a
+ * aproximação é a AUSÊNCIA de qualquer marcador de potência/produto
+ * (`NONLINEAR_MARKER_PATTERN`) — sempre `false` para uma única equação
+ * (nada a distinguir de uma equação comum) ou instruções separadas por
+ * ";" que não sejam equações (ex. "2+2; 3+3").
  */
 export function isLinearSystem(expression: string): boolean {
-  if (isMatrix(expression)) return false;
-  const statements = splitMatrixStatements(expression);
-  if (statements.length < 2 || !statements.every(isSingleEquationStatement)) return false;
-  return !statements.some((statement) => NONLINEAR_SYSTEM_MARKER_PATTERN.test(statement));
+  const statements = systemStatementsOrNull(expression);
+  if (statements === null) return false;
+  return !statements.some((statement) => NONLINEAR_MARKER_PATTERN.test(statement));
+}
+
+/**
+ * Sprint V2.5 (Motor de Sistemas Polinomiais Não Lineares) — mesma forma
+ * de sistema que `isLinearSystem`, mas exige que PELO MENOS uma equação
+ * tenha um marcador claro de potência/produto entre incógnitas (senão é
+ * um sistema linear, tratado por `isLinearSystem`/`solve_linear_system` —
+ * os dois detectores são mutuamente exclusivos por construção).
+ */
+export function isNonlinearSystem(expression: string): boolean {
+  const statements = systemStatementsOrNull(expression);
+  if (statements === null) return false;
+  return statements.some((statement) => NONLINEAR_MARKER_PATTERN.test(statement));
 }
 
 /**
@@ -538,6 +576,17 @@ export function getCalculatorExplorations(expression: string): RelatedLink[] {
     return [
       { icon: "📚", label: "Ver fórmula relacionada", href: formulasLink({ categoria: "algebra-linear" }) },
       { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-linear") },
+    ];
+  }
+
+  // Sprint V2.5 (Motor de Sistemas Polinomiais Não Lineares) — checado
+  // logo depois de `isLinearSystem` (mutuamente exclusivos por
+  // construção: um sistema nunca é as duas coisas ao mesmo tempo). Usa
+  // `expression` inteira pelo mesmo motivo do bloco linear acima.
+  if (isNonlinearSystem(expression)) {
+    return [
+      { icon: "📚", label: "Ver fórmula relacionada", href: formulasLink({ categoria: "algebra", q: "sistema" }) },
+      { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-basica") },
     ];
   }
 

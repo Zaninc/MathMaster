@@ -10,6 +10,7 @@ from app.formatter.classify import (
     is_assignment_shape,
     is_finiteset_shape,
     is_interval_shape,
+    is_multi_assignment_shape,
     is_periodic_solution_shape,
     is_pure_expression_shape,
 )
@@ -65,6 +66,19 @@ def test_is_assignment_shape_requires_every_segment_to_match() -> None:
     assert is_assignment_shape(["x = 5", "y = 7"]) is True
     assert is_assignment_shape(["x = 5", "f(2) = 7"]) is False  # um segmento não-assignment invalida tudo
     assert is_assignment_shape([]) is False
+
+
+# --- Sprint V2.5 (Sistemas Polinomiais Não Lineares) ------------------
+
+
+def test_is_multi_assignment_shape_requires_two_plus_branches_all_valid() -> None:
+    assert is_multi_assignment_shape([["x = 2", "y = 3"], ["x = 3", "y = 2"]]) is True
+    assert is_multi_assignment_shape([["x = 2", "y = 3"]]) is False  # só 1 ramo — nada a distinguir
+    assert is_multi_assignment_shape([]) is False
+
+
+def test_is_multi_assignment_shape_rejects_when_any_branch_is_malformed() -> None:
+    assert is_multi_assignment_shape([["x = 2", "y = 3"], ["x = 3", "f(2) = 7"]]) is False
 
 
 @pytest.mark.parametrize("text", ["x + 1", "2*x**2 - 4", "sqrt(2)"])

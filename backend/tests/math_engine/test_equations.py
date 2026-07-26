@@ -76,18 +76,26 @@ def test_solve_wrapper_syntax_is_not_valid_and_fails_cleanly() -> None:
 # o usuário recebia um erro de servidor em vez de uma mensagem de
 # validação. `equations/systems.py:solve_linear_system` agora captura
 # SÓ `NonlinearError` e a converte em `ExpressionError`.
+#
+# Sprint V2.5 (Motor de Sistemas Polinomiais Não Lineares) SUPERSEDE essa
+# rejeição para os dois casos POLINOMIAIS abaixo: `dispatcher.py` agora
+# roteia sistema não linear polinomial para `solve_nonlinear_system`
+# (`nonlinsolve`) ANTES de `solve_linear_system` sequer ser chamado — a
+# guarda de `NonlinearError` em `systems.py` continua lá como defesa em
+# profundidade, mas nunca mais dispara para estes dois casos na prática
+# (cobertura de resolução real: `test_nonlinear_systems.py`). O terceiro
+# teste (transcendental) continua exatamente como era — fora de escopo
+# desta sprint também.
 
-_NONLINEAR_SYSTEM_MESSAGE = "Sistemas não lineares ainda não são suportados nesta versão."
+
+def test_system_with_power_term_now_resolves_via_nonlinear_engine() -> None:
+    # Sprint V2.5: era um ExpressionError (hotfix da Sprint V2.4); agora
+    # resolve de verdade via `solve_nonlinear_system`.
+    assert _solve("x**2+y=5\nx-y=1") == "x = -3, y = -4 ou x = 2, y = 1"
 
 
-def test_system_with_power_term_raises_friendly_error_not_crash() -> None:
-    with pytest.raises(ExpressionError, match=_NONLINEAR_SYSTEM_MESSAGE):
-        _solve("x**2+y=5\nx-y=1")
-
-
-def test_system_with_product_of_unknowns_raises_friendly_error_not_crash() -> None:
-    with pytest.raises(ExpressionError, match=_NONLINEAR_SYSTEM_MESSAGE):
-        _solve("x*y=2\nx+y=3")
+def test_system_with_product_of_unknowns_now_resolves_via_nonlinear_engine() -> None:
+    assert _solve("x*y=6\nx+y=5") == "x = 2, y = 3 ou x = 3, y = 2"
 
 
 def test_system_with_transcendental_function_never_reaches_internal_error() -> None:
