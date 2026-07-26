@@ -255,6 +255,40 @@ describe("expressionToLatex", () => {
     expect(latex).not.toBeNull();
     expect(latex).not.toContain("cases");
   });
+
+  // --- Correção pós-Sprint V2.4 (guarda contra sistemas não lineares) —
+  // o backend só resolve sistemas LINEARES (`sympy.linsolve`); uma
+  // entrada com potência ou produto entre incógnitas nunca deve ativar o
+  // recurso polido de "sistema linear" (\begin{cases}), mesmo que a FORMA
+  // (2+ linhas, cada uma com "=") seja idêntica a um sistema válido.
+
+  it("potência (** ou ^) em qualquer equação do sistema desativa o cases (o backend vai rejeitar)", async () => {
+    for (const input of ["x**2+y=5\nx-y=1", "x^2+y=5\nx-y=1", "x+y=5\ny^2-x=1"]) {
+      const latex = await expressionToLatex(input);
+      expect(latex, input).not.toBeNull();
+      expect(latex, input).not.toContain("cases");
+    }
+  });
+
+  it("expoente Unicode (x²) em qualquer equação do sistema desativa o cases", async () => {
+    const latex = await expressionToLatex("x²+y=5\nx-y=1");
+    expect(latex).not.toBeNull();
+    expect(latex).not.toContain("cases");
+  });
+
+  it("produto entre duas incógnitas (x*y) desativa o cases, mas coeficiente*variável (2*x) continua sendo sistema válido", async () => {
+    const product = await expressionToLatex("x*y=2\nx+y=3");
+    expect(product).not.toBeNull();
+    expect(product).not.toContain("cases");
+
+    const withCoefficient = normalized(await expressionToLatex("2*x+3*y=5\nx-y=1"));
+    expect(withCoefficient).toContain("\\begin{cases}");
+  });
+
+  it("multiplicação implícita (2x+3y=5) continua reconhecida como sistema válido (regressão)", async () => {
+    const latex = normalized(await expressionToLatex("2x+3y=5\nx-y=1"));
+    expect(latex).toContain("\\begin{cases}");
+  });
 });
 
 describe("valueToLatex", () => {

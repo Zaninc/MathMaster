@@ -344,6 +344,14 @@ describe("getCalculatorExplorations", () => {
   it("';' separando expressões que não são equações não vira sistema (mesmo comportamento de erro do backend)", () => {
     expect(getCalculatorExplorations("2+2; 3+3")).toEqual([]);
   });
+
+  it("correção pós-Sprint V2.4: sistema com potência não aciona o bloco de Álgebra Linear (o backend vai rejeitar como não linear)", () => {
+    expect(getCalculatorExplorations("x**2+y=5\nx-y=1")).toEqual([]);
+  });
+
+  it("correção pós-Sprint V2.4: sistema com produto entre incógnitas (x*y) não aciona o bloco de Álgebra Linear", () => {
+    expect(getCalculatorExplorations("x*y=2\nx+y=3")).toEqual([]);
+  });
 });
 
 describe("isLinearSystem", () => {
@@ -371,6 +379,27 @@ describe("isLinearSystem", () => {
   it("nunca reconhece uma expressão vazia ou sem separador", () => {
     expect(isLinearSystem("")).toBe(false);
     expect(isLinearSystem("2+2")).toBe(false);
+  });
+
+  // --- Correção pós-Sprint V2.4 (guarda contra sistemas não lineares) —
+  // o backend só resolve sistemas LINEARES; não rotular como "sistema
+  // linear" (nem linkar pra Álgebra Linear) uma entrada que claramente
+  // não é, mesmo que a FORMA seja idêntica a um sistema válido.
+
+  it("nunca reconhece um sistema com potência (** , ^ ou expoente Unicode) em qualquer equação", () => {
+    expect(isLinearSystem("x**2+y=5\nx-y=1")).toBe(false);
+    expect(isLinearSystem("x^2+y=5\nx-y=1")).toBe(false);
+    expect(isLinearSystem("x²+y=5\nx-y=1")).toBe(false);
+    expect(isLinearSystem("x+y=5\ny^2-x=1")).toBe(false);
+  });
+
+  it("nunca reconhece um sistema com produto entre duas incógnitas (x*y)", () => {
+    expect(isLinearSystem("x*y=2\nx+y=3")).toBe(false);
+  });
+
+  it("continua reconhecendo coeficiente*variável (2*x) e multiplicação implícita (2x) como sistema válido", () => {
+    expect(isLinearSystem("2*x+3*y=5\nx-y=1")).toBe(true);
+    expect(isLinearSystem("2x+3y=5\nx-y=1")).toBe(true);
   });
 });
 

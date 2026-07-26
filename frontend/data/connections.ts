@@ -281,6 +281,19 @@ function isSingleEquationStatement(statement: string): boolean {
 }
 
 /**
+ * Correção pós-Sprint V2.4 (guarda contra sistemas não lineares) — mesmo
+ * padrão de `to-latex.ts:NONLINEAR_SYSTEM_MARKER_PATTERN` (duplicado aqui
+ * de propósito, módulos de camadas diferentes): o backend só resolve
+ * sistemas LINEARES (`sympy.linsolve`) e rejeita potência/produto entre
+ * incógnitas com uma `ExpressionError` amigável — o Explorar não deve
+ * rotular como "sistema linear" (nem linkar pra Álgebra Linear) uma
+ * entrada que CLARAMENTE não é. O backend continua sendo a fonte final de
+ * validação; isto só evita um rótulo enganoso na UI.
+ */
+const NONLINEAR_SYSTEM_MARKER_PATTERN =
+  /\*\*|\^|[⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ]|[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*\s*\*\s*[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*/;
+
+/**
  * Sprint V2.4 (Sistemas Lineares) — mesmo critério do backend
  * (`equations/dispatcher.py:solve_equation_text`, roteado por
  * `is_equation_domain_expression`): 2+ "instruções" separadas por quebra
@@ -292,13 +305,16 @@ function isSingleEquationStatement(statement: string): boolean {
  * `math_engine/dispatcher.py`): sem isso, um programa de matriz com
  * várias atribuições ("A=[[1,2],[3,4]]\nB=...") seria lido como sistema,
  * já que cada atribuição TEM a forma "nome = valor". Também `false` para
- * uma única equação (nada a distinguir de uma equação comum) e para
- * instruções separadas por ";" que não sejam equações (ex. "2+2; 3+3").
+ * uma única equação (nada a distinguir de uma equação comum), para
+ * instruções separadas por ";" que não sejam equações (ex. "2+2; 3+3"), e
+ * para qualquer equação com um marcador claro de não-linearidade
+ * (potência ou produto entre incógnitas).
  */
 export function isLinearSystem(expression: string): boolean {
   if (isMatrix(expression)) return false;
   const statements = splitMatrixStatements(expression);
-  return statements.length >= 2 && statements.every(isSingleEquationStatement);
+  if (statements.length < 2 || !statements.every(isSingleEquationStatement)) return false;
+  return !statements.some((statement) => NONLINEAR_SYSTEM_MARKER_PATTERN.test(statement));
 }
 
 /**

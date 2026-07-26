@@ -395,6 +395,26 @@ const SYSTEM_EXCLUDED_MATRIX_PATTERN =
   /\b(det|inv|transpose|trace|determinante|inversa|transposta|traço)\s*\(/i;
 
 /**
+ * Correção pós-Sprint V2.4 (guarda contra sistemas não lineares) — o
+ * backend (`equations/systems.py:solve_linear_system`, via
+ * `sympy.linsolve`) só resolve sistemas LINEARES; um termo com potência
+ * ou produto entre incógnitas faz o backend rejeitar com uma
+ * `ExpressionError` amigável ("Sistemas não lineares ainda não são
+ * suportados..."). O frontend NUNCA tenta validar linearidade de
+ * verdade (o backend continua sendo a fonte final) — só evita ATIVAR o
+ * recurso polido de "sistema linear" (\begin{cases}, bloco Explorar de
+ * Álgebra Linear) quando a entrada CLARAMENTE não é linear: "**"/"^"/
+ * sobrescrito Unicode (potência), ou "identificador*identificador"
+ * (produto entre duas incógnitas, ex. "x*y" — nunca confundido com
+ * "2*x", coeficiente vezes variável, que o padrão não casa por exigir
+ * uma LETRA dos dois lados do "*"). Entradas ambíguas (ex.
+ * multiplicação implícita "xy") continuam passando pela guarda — só o
+ * backend decide por elas.
+ */
+const NONLINEAR_SYSTEM_MARKER_PATTERN =
+  /\*\*|\^|[⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ]|[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*\s*\*\s*[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*/;
+
+/**
  * Sprint V2.4 (Sistemas Lineares) — reconhece 2+ equações separadas por
  * quebra de linha/";" (mesmo critério do backend,
  * `equations/dispatcher.py:solve_equation_text`) e as envolve em
@@ -402,8 +422,9 @@ const SYSTEM_EXCLUDED_MATRIX_PATTERN =
  * pipeline de equação única (`expressionToLatex` recursivo — nunca reentra
  * neste branch, porque uma linha isolada nunca tem 2+ linhas). `null` =
  * não é um sistema (menos de 2 linhas, alguma linha não é uma equação
- * única, ou colide com o domínio de matriz) — quem chama cai para o
- * pipeline normal de expressão/equação única.
+ * única, colide com o domínio de matriz, ou tem um marcador claro de
+ * não-linearidade) — quem chama cai para o pipeline normal de
+ * expressão/equação única.
  */
 async function linearSystemToLatex(text: string): Promise<string | null> {
   if (text.includes(MATRIX_LITERAL_PREFIX) || SYSTEM_EXCLUDED_MATRIX_PATTERN.test(text)) return null;
@@ -411,6 +432,7 @@ async function linearSystemToLatex(text: string): Promise<string | null> {
 
   const lines = splitSystemLines(text);
   if (lines.length < 2 || !lines.every(isSingleEquationLine)) return null;
+  if (lines.some((line) => NONLINEAR_SYSTEM_MARKER_PATTERN.test(line))) return null;
 
   const rendered: string[] = [];
   for (const line of lines) {
