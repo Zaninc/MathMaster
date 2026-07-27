@@ -502,9 +502,11 @@ export const FORMULAS: FormulaEntry[] = [
     category: "combinatoria",
   },
   {
+    // Sprint V2.7.1 — notação internacional \binom{n}{k} no lugar de
+    // C_{n,k} (só a representação visual; título/categoria intocados).
     id: "combinacao-simples",
     title: "Combinação simples",
-    latex: String.raw`C_{n,k} = \frac{n!}{k!\,(n-k)!}`,
+    latex: String.raw`\binom{n}{k} = \frac{n!}{k!\,(n-k)!}`,
     category: "combinatoria",
   },
   {

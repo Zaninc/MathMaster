@@ -326,7 +326,8 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(latexByInsert.get("fatorial()")).toBe("n!");
     expect(latexByInsert.get("permutacao()")).toBe("P_{n}");
     expect(latexByInsert.get("arranjo(,)")).toBe("A_{n,k}");
-    expect(latexByInsert.get("combinacao(,)")).toBe("C_{n,k}");
+    // Sprint V2.7.1 — label visual da combinação em \binom{n}{k}.
+    expect(latexByInsert.get("combinacao(,)")).toBe("\\binom{n}{k}");
     expect(latexByInsert.get("permutacao_repeticao(,)")).toBe("P_{n}^{a,b}");
   });
 

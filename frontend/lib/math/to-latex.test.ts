@@ -272,8 +272,12 @@ describe("expressionToLatex", () => {
   // argumentos (ver `COMBINATORICS_LATEX`). "6!" e frações de fatoriais o
   // mathjs já renderiza nativamente — só os NOMES precisam de handler.
 
+  // Sprint V2.7.1 — combinação renderiza como coeficiente binomial
+  // \binom{n}{k} (notação internacional); arranjo/permutação/fatorial
+  // mantêm a notação da V2.7.
   it("converte combinacao/arranjo/permutacao/fatorial para a notação de livro didático", async () => {
-    expect(normalized(await expressionToLatex("combinacao(10,3)"))).toBe("C_{10,3}");
+    expect(normalized(await expressionToLatex("combinacao(10,3)"))).toBe("\\binom{10}{3}");
+    expect(normalized(await expressionToLatex("combinacao(5,2)"))).toBe("\\binom{5}{2}");
     expect(normalized(await expressionToLatex("arranjo(8,3)"))).toBe("A_{8,3}");
     expect(normalized(await expressionToLatex("permutacao(5)"))).toBe("P_{5}");
     expect(normalized(await expressionToLatex("fatorial(6)"))).toBe("6!");
@@ -292,9 +296,13 @@ describe("expressionToLatex", () => {
   });
 
   it("converte os aliases de livro didático C(...)/A(...)/P(...) com argumentos numéricos", async () => {
-    expect(normalized(await expressionToLatex("C(10,3)"))).toBe("C_{10,3}");
+    expect(normalized(await expressionToLatex("C(10,3)"))).toBe("\\binom{10}{3}");
     expect(normalized(await expressionToLatex("A(8,3)"))).toBe("A_{8,3}");
     expect(normalized(await expressionToLatex("P(5)"))).toBe("P_{5}");
+  });
+
+  it("combinação(20,10) grande também vira \\binom (Sprint V2.7.1)", async () => {
+    expect(normalized(await previewLatex("combinação(20,10)"))).toContain("\\binom{20}{10}");
   });
 
   it("NÃO reinterpreta C/A/P com argumento simbólico (fica o fallback genérico do mathjs)", async () => {
@@ -304,7 +312,7 @@ describe("expressionToLatex", () => {
 
   it("aridade errada de combinatória não vira notação dedicada (fail-closed p/ o genérico)", async () => {
     const latex = normalized(await expressionToLatex("combinacao(10,3,2)"));
-    expect(latex).not.toContain("C_{");
+    expect(latex).not.toContain("\\binom");
   });
 
   // --- Sprint V2.4 (Sistemas Lineares) ------------------------------------
@@ -545,15 +553,23 @@ describe("resultToLatex", () => {
   // ver `combinatorics/formatter.py`); cada pedaço é mathjs válido e o
   // split por "=" de `expressionToLatex` junta tudo numa linha só.
 
-  it("converte a dedução de combinação em cadeia única (C_{10,3} = fração de fatoriais = 120)", async () => {
+  it("converte a dedução de combinação em cadeia única (\\binom{10}{3} = fração de fatoriais = 120)", async () => {
     const segments = await resultToLatex("C(10,3) = 10!/(3!*7!) = 120");
     expect(segments).toHaveLength(1);
     expect(segments![0].label).toBeNull();
     const latex = normalized(segments![0].latex);
-    expect(latex).toContain("C_{10,3}");
+    expect(latex).toContain("\\binom{10}{3}");
     expect(latex).toContain("\\frac{10!}");
     expect(latex).toContain("=120");
     assertRendersSafely(segments![0].latex!, "dedução de combinação");
+  });
+
+  it("cadeia curta 'combinacao(10,3) = 120' também vira \\binom (Sprint V2.7.1)", async () => {
+    const segments = await resultToLatex("combinacao(10,3) = 120");
+    expect(segments).toHaveLength(1);
+    const latex = normalized(segments![0].latex);
+    expect(latex).toContain("\\binom{10}{3}");
+    expect(latex).toContain("=120");
   });
 
   it("converte a dedução de arranjo com o passo intermediário (8-3)!", async () => {
@@ -1085,7 +1101,7 @@ describe("previewLatex (pipeline único da pré-visualização e do histórico)"
   // --- Sprint V2.7 (Motor de Combinatória) -------------------------------
 
   it("mostra a notação de livro didático assim que a chamada de combinatória fica completa", async () => {
-    expect(normalized(await previewLatex("combinacao(10,3)"))).toBe("C_{10,3}");
+    expect(normalized(await previewLatex("combinacao(10,3)"))).toBe("\\binom{10}{3}");
     expect(normalized(await previewLatex("arranjo(8,3)"))).toBe("A_{8,3}");
     expect(normalized(await previewLatex("permutacao(5)"))).toBe("P_{5}");
     expect(normalized(await previewLatex("fatorial(6)"))).toBe("6!");
@@ -1093,11 +1109,34 @@ describe("previewLatex (pipeline único da pré-visualização e do histórico)"
   });
 
   it("as grafias ACENTUADAS (fora do Tier 1) ganham a mesma notação pelo Tier 2", async () => {
-    expect(normalized(await previewLatex("combinação(10,3)"))).toContain("C_{10,3}");
+    expect(normalized(await previewLatex("combinação(10,3)"))).toContain("\\binom{10}{3}");
     expect(normalized(await previewLatex("permutação(5)"))).toContain("P_{5}");
     expect(normalized(await previewLatex("permutação_repetição(8,3,2,2)"))).toContain(
       "P_{8}^{3,2,2}"
     );
+  });
+
+  // --- Hotfix V2.7.1a — o PREVIEW (previewLatex, único ponto de entrada de
+  // useInputLatex/useSolveLatex) produz \binom para TODAS as grafias de
+  // combinação, e as demais operações ficam intocadas — espelho exato dos
+  // casos do ticket. A divergência observada no navegador era artefato de
+  // sessão dev (inputCache de módulo + HMR degradado por `next build`
+  // concorrente), não um caminho de código: nenhum produtor de C_{n,k}
+  // resta no fonte (grep) e estes testes provam o pipeline real.
+
+  it("preview e resultado usam a MESMA notação \\binom para toda grafia de combinação (V2.7.1a)", async () => {
+    expect(normalized(await previewLatex("combinacao(10,3)"))).toBe("\\binom{10}{3}");
+    expect(normalized(await previewLatex("C(20,10)"))).toBe("\\binom{20}{10}");
+    expect(normalized(await previewLatex("combinação(5,2)"))).toContain("\\binom{5}{2}");
+
+    const solved = await resultToLatex("C(20,10) = 20!/(10!*10!) = 184756");
+    expect(normalized(solved![0].latex)).toContain("\\binom{20}{10}");
+  });
+
+  it("A(8,3)/P(6)/fat(6) continuam com a notação da V2.7 no preview (V2.7.1a)", async () => {
+    expect(normalized(await previewLatex("A(8,3)"))).toBe("A_{8,3}");
+    expect(normalized(await previewLatex("P(6)"))).toBe("P_{6}");
+    expect(normalized(await previewLatex("fat(6)"))).toBe("6!");
   });
 
   it("digitação incompleta de combinatória nunca lança e sempre renderiza em segurança (Tier 2)", async () => {

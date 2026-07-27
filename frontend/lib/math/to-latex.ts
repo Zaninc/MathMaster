@@ -262,9 +262,12 @@ type CombinatoricsRenderer = (
   options: TexOptions
 ) => string | undefined;
 
+// Sprint V2.7.1 — combinação usa o coeficiente binomial \binom{n}{k}
+// (notação internacional), não mais C_{n,k}; arranjo/permutação mantêm a
+// notação indexada (não existe forma internacional consagrada equivalente).
 const combinationLatex: CombinatoricsRenderer = (nodeArgs, options) =>
   nodeArgs.length === 2
-    ? `C_{${texOf(nodeArgs[0], options)},${texOf(nodeArgs[1], options)}}`
+    ? `\\binom{${texOf(nodeArgs[0], options)}}{${texOf(nodeArgs[1], options)}}`
     : undefined;
 
 const arrangementLatex: CombinatoricsRenderer = (nodeArgs, options) =>
@@ -1045,7 +1048,9 @@ function renderCall(name: string, argsText: string): string {
     return `\\sum_{${escapeLatexText(rawArgs[0])}=${args[1]}}^{${args[2]}} ${args[3]}`;
   }
   if (COMBINATION_NAMES.has(name) && args.length === 2) {
-    return `C_{${args[0]},${args[1]}}`;
+    // Sprint V2.7.1 — mesma notação \binom do Tier 1, duplicada de
+    // propósito (o Tier 2 nunca importa do Tier 1).
+    return `\\binom{${args[0]}}{${args[1]}}`;
   }
   if (ARRANGEMENT_NAMES.has(name) && args.length === 2) {
     return `A_{${args[0]},${args[1]}}`;

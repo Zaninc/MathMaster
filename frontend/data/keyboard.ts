@@ -315,11 +315,14 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
         latex: "A_{n,k}",
       },
       {
+        // Sprint V2.7.1 — label visual em \binom{n}{k} (notação
+        // internacional); o texto inserido continua a chamada ASCII que o
+        // backend entende, nunca "\binom{}{}".
         label: "C(n,k)",
         insert: "combinacao(,)",
         cursorOffset: "combinacao(".length,
         ariaLabel: "Inserir combinação simples",
-        latex: "C_{n,k}",
+        latex: "\\binom{n}{k}",
       },
       {
         label: "P(n; a,b)",
