@@ -281,6 +281,56 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
     ],
   },
   {
+    // Sprint V2.7 (Motor de Combinatória) — aba própria (a de Álgebra já
+    // tem 16 teclas). Mesmo contrato das teclas de polinômios da V2.6: o
+    // rótulo/LaTeX mostra a notação de livro didático (C_{n,k}, A_{n,k},
+    // P_n, n!) só como apresentação; o texto INSERIDO é sempre o template
+    // ASCII com parênteses vazios e cursor posicionado dentro — a forma
+    // acentuada ("combinação"/"permutação") continua aceita pelo backend
+    // se digitada à mão, mas o teclado nunca a insere (mesmo motivo de
+    // "raizes"/"divisao": só a forma ASCII sobrevive ao Tier 1 do preview,
+    // ver `lib/math/to-latex.ts`).
+    id: "combinatoria",
+    label: "Combinatória",
+    keys: [
+      {
+        label: "n!",
+        insert: "fatorial()",
+        cursorOffset: "fatorial(".length,
+        ariaLabel: "Inserir fatorial",
+        latex: "n!",
+      },
+      {
+        label: "P(n)",
+        insert: "permutacao()",
+        cursorOffset: "permutacao(".length,
+        ariaLabel: "Inserir permutação simples",
+        latex: "P_{n}",
+      },
+      {
+        label: "A(n,k)",
+        insert: "arranjo(,)",
+        cursorOffset: "arranjo(".length,
+        ariaLabel: "Inserir arranjo simples",
+        latex: "A_{n,k}",
+      },
+      {
+        label: "C(n,k)",
+        insert: "combinacao(,)",
+        cursorOffset: "combinacao(".length,
+        ariaLabel: "Inserir combinação simples",
+        latex: "C_{n,k}",
+      },
+      {
+        label: "P(n; a,b)",
+        insert: "permutacao_repeticao(,)",
+        cursorOffset: "permutacao_repeticao(".length,
+        ariaLabel: "Inserir permutação com repetição",
+        latex: "P_{n}^{a,b}",
+      },
+    ],
+  },
+  {
     id: "simbolos",
     label: "Símbolos",
     keys: [

@@ -234,6 +234,78 @@ const POLYNOMIAL_OPERATION_LATEX: Record<string, string> = {
 };
 
 /**
+ * Sprint V2.7 (Motor de Combinatória) — diferente das operações de
+ * polinômio (que não têm notação dedicada), aqui cada chamada tem a
+ * notação de livro didático própria: C_{n,k}, A_{n,k}, P_n, n!. A notação
+ * depende da POSIÇÃO dos argumentos, então a tabela guarda funções (mesmo
+ * padrão de `MATRIX_ALIAS_LATEX`/`COMPLEX_ALIAS_LATEX`), com a aridade
+ * errada devolvendo `undefined` para cair no fallback genérico. Chaves são
+ * sempre a forma ASCII ("combinacao", nunca "combinação") — mesmo motivo
+ * documentado em `POLYNOMIAL_OPERATION_LATEX` acima; as formas acentuadas
+ * têm entradas paralelas no Tier 2.
+ *
+ * "C"/"A"/"P" maiúsculos são as CABEÇAS que o backend devolve na dedução
+ * simbólica ("C(10,3) = 10!/(3!*7!) = 120") e também aliases de entrada
+ * aceitos por `combinatorics/parsing.py` — restritos a argumentos
+ * numéricos (`ConstantNode`) para nunca reinterpretar um uso simbólico
+ * legítimo de uma variável de matriz ("A(...)" num programa com "A=[[…]]").
+ */
+function factorialArgumentLatex(node: MathNode, options: TexOptions): string {
+  const rendered = texOf(node, options);
+  return node.type === "ConstantNode" || node.type === "SymbolNode"
+    ? `${rendered}!`
+    : `\\left(${rendered}\\right)!`;
+}
+
+type CombinatoricsRenderer = (
+  nodeArgs: MathNode[],
+  options: TexOptions
+) => string | undefined;
+
+const combinationLatex: CombinatoricsRenderer = (nodeArgs, options) =>
+  nodeArgs.length === 2
+    ? `C_{${texOf(nodeArgs[0], options)},${texOf(nodeArgs[1], options)}}`
+    : undefined;
+
+const arrangementLatex: CombinatoricsRenderer = (nodeArgs, options) =>
+  nodeArgs.length === 2
+    ? `A_{${texOf(nodeArgs[0], options)},${texOf(nodeArgs[1], options)}}`
+    : undefined;
+
+const permutationLatex: CombinatoricsRenderer = (nodeArgs, options) =>
+  nodeArgs.length === 1 ? `P_{${texOf(nodeArgs[0], options)}}` : undefined;
+
+const factorialLatex: CombinatoricsRenderer = (nodeArgs, options) =>
+  nodeArgs.length === 1 ? factorialArgumentLatex(nodeArgs[0], options) : undefined;
+
+const permutationRepetitionLatex: CombinatoricsRenderer = (nodeArgs, options) =>
+  nodeArgs.length >= 2
+    ? `P_{${texOf(nodeArgs[0], options)}}^{${nodeArgs
+        .slice(1)
+        .map((arg) => texOf(arg, options))
+        .join(",")}}`
+    : undefined;
+
+const numericOnly = (renderer: CombinatoricsRenderer): CombinatoricsRenderer => {
+  return (nodeArgs, options) =>
+    nodeArgs.every((arg) => arg.type === "ConstantNode")
+      ? renderer(nodeArgs, options)
+      : undefined;
+};
+
+const COMBINATORICS_LATEX: Record<string, CombinatoricsRenderer> = {
+  fatorial: factorialLatex,
+  fat: factorialLatex,
+  permutacao: permutationLatex,
+  arranjo: arrangementLatex,
+  combinacao: combinationLatex,
+  permutacao_repeticao: permutationRepetitionLatex,
+  C: numericOnly(combinationLatex),
+  A: numericOnly(arrangementLatex),
+  P: numericOnly(permutationLatex),
+};
+
+/**
  * Handler passado ao `toTex` do mathjs — cobre só o vocabulário do produto
  * e os wrappers de cálculo; todo o resto (frações, raízes, potências,
  * trigonometria canônica, matrizes) fica com o serializer default do
@@ -289,6 +361,11 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
   if (name !== null && name in POLYNOMIAL_OPERATION_LATEX) {
     const rendered = nodeArgs.map((arg) => texOf(arg, options)).join(",\\,");
     return `${POLYNOMIAL_OPERATION_LATEX[name]}\\left(${rendered}\\right)`;
+  }
+
+  if (name !== null && name in COMBINATORICS_LATEX) {
+    const rendered = COMBINATORICS_LATEX[name](nodeArgs, options);
+    if (rendered !== undefined) return rendered;
   }
 
   // exp() renderiza como "e elevado" — a linguagem visual do produto
@@ -874,6 +951,16 @@ const PREVIEW_UNARY_LATEX: Record<string, (arg: string) => string> = {
   abs: (a) => `\\left|${a}\\right|`,
   argumento: (a) => `\\arg\\left(${a}\\right)`,
   arg: (a) => `\\arg\\left(${a}\\right)`,
+  // Sprint V2.7 (Motor de Combinatória) — mesma notação de
+  // `COMBINATORICS_LATEX` (Tier 1), duplicada aqui de propósito (o Tier 2
+  // nunca importa do Tier 1). O Tier 2 é o único caminho das formas
+  // ACENTUADAS ("permutação(5)" cai fora de `SAFE_CHARSET` no Tier 1).
+  // O argumento aqui já é uma string LaTeX: parênteses no fatorial só
+  // quando ele não é um átomo simples ("(x+1)!" vs "6!").
+  fatorial: (a) => (/^[0-9A-Za-z]*$/.test(a) ? `${a}!` : `\\left(${a}\\right)!`),
+  fat: (a) => (/^[0-9A-Za-z]*$/.test(a) ? `${a}!` : `\\left(${a}\\right)!`),
+  permutacao: (a) => `P_{${a}}`,
+  "permutação": (a) => `P_{${a}}`,
 };
 
 /** Nome da função conhecida -> comando LaTeX "cru" (sem argumento), para o caso de chamada incompleta ("log(" ainda sem fechar). */
@@ -911,6 +998,18 @@ const DERIVATIVE_NAMES = new Set(["derivada", "derivative"]);
 const LIMIT_NAMES = new Set(["limite", "limit"]);
 const SUM_NAMES = new Set(["somatorio", "somatório", "sum"]);
 
+// Sprint V2.7 (Motor de Combinatória) — notação de livro didático no
+// preview tolerante, incluindo as grafias acentuadas que o backend aceita
+// (`combinatorics/parsing.py`) mas que nunca chegam ao Tier 1.
+const COMBINATION_NAMES = new Set(["combinacao", "combinação"]);
+const ARRANGEMENT_NAMES = new Set(["arranjo"]);
+const PERMUTATION_REPETITION_NAMES = new Set([
+  "permutacao_repeticao",
+  "permutação_repetição",
+  "permutacao_repetição",
+  "permutação_repeticao",
+]);
+
 const PREVIEW_IDENTIFIER = /^[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*/;
 const PREVIEW_SUPERSCRIPT_RUN = /^[⁰¹²³⁴⁵⁶⁷⁸⁹⁻ⁿ]+/;
 const PREVIEW_SUBSCRIPT_RUN = /^[₀₁₂₃₄₅₆₇₈₉₋]+/;
@@ -944,6 +1043,15 @@ function renderCall(name: string, argsText: string): string {
     // Ordem oficial: variável, limite inferior, limite superior, expressão
     // (mesma ordem do backend, `summation/parsing.py`).
     return `\\sum_{${escapeLatexText(rawArgs[0])}=${args[1]}}^{${args[2]}} ${args[3]}`;
+  }
+  if (COMBINATION_NAMES.has(name) && args.length === 2) {
+    return `C_{${args[0]},${args[1]}}`;
+  }
+  if (ARRANGEMENT_NAMES.has(name) && args.length === 2) {
+    return `A_{${args[0]},${args[1]}}`;
+  }
+  if (PERMUTATION_REPETITION_NAMES.has(name) && args.length >= 2) {
+    return `P_{${args[0]}}^{${args.slice(1).join(",")}}`;
   }
 
   const label = name.length < 3 ? escapeLatexText(name) : `\\operatorname{${escapeLatexText(name)}}`;

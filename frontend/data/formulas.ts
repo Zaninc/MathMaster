@@ -17,7 +17,8 @@ export type FormulaCategoryId =
   | "calculo"
   | "somatorios"
   | "algebra-linear"
-  | "numeros-complexos";
+  | "numeros-complexos"
+  | "combinatoria";
 
 export const FORMULA_CATEGORY_LABELS: Record<FormulaCategoryId, string> = {
   algebra: "Álgebra",
@@ -27,6 +28,7 @@ export const FORMULA_CATEGORY_LABELS: Record<FormulaCategoryId, string> = {
   somatorios: "Somatórios",
   "algebra-linear": "Álgebra Linear",
   "numeros-complexos": "Números Complexos",
+  combinatoria: "Combinatória",
 };
 
 export interface FormulaEntry {
@@ -474,5 +476,41 @@ export const FORMULAS: FormulaEntry[] = [
     title: "Relação entre fatoração e raízes",
     latex: String.raw`P(x)=a\left(x-r_1\right)\left(x-r_2\right)\cdots\left(x-r_n\right)`,
     category: "algebra",
+  },
+  // Sprint V2.7 — Motor de Combinatória. Categoria nova (mesmo padrão da
+  // V2.3 com "numeros-complexos"): entra ao final do array, então a seção
+  // aparece por último na página — ordem de exibição = ordem de 1ª
+  // aparição da categoria. Notação alinhada com o motor
+  // (`combinatorics/formatter.py`) e com o teclado: C_{n,k} / A_{n,k} /
+  // P_n / n!.
+  {
+    id: "fatorial",
+    title: "Fatorial",
+    latex: String.raw`n! = n\cdot(n-1)\cdot(n-2)\cdots 2\cdot 1,\quad 0! = 1`,
+    category: "combinatoria",
+  },
+  {
+    id: "permutacao-simples",
+    title: "Permutação simples",
+    latex: String.raw`P_n = n!`,
+    category: "combinatoria",
+  },
+  {
+    id: "arranjo-simples",
+    title: "Arranjo simples",
+    latex: String.raw`A_{n,k} = \frac{n!}{(n-k)!}`,
+    category: "combinatoria",
+  },
+  {
+    id: "combinacao-simples",
+    title: "Combinação simples",
+    latex: String.raw`C_{n,k} = \frac{n!}{k!\,(n-k)!}`,
+    category: "combinatoria",
+  },
+  {
+    id: "permutacao-repeticao",
+    title: "Permutação com repetição",
+    latex: String.raw`P_n^{a,b,\ldots} = \frac{n!}{a!\,b!\cdots}`,
+    category: "combinatoria",
   },
 ];

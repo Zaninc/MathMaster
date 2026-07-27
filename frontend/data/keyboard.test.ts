@@ -275,6 +275,61 @@ describe("KEYBOARD_CATEGORIES", () => {
     ]);
   });
 
+  // --- Sprint V2.7 (Motor de Combinatória) -------------------------------
+
+  it("a aba Combinatória existe, entre Geometria e Símbolos, com as 5 teclas da sprint", () => {
+    const ids = KEYBOARD_CATEGORIES.map((category) => category.id);
+    expect(ids.indexOf("combinatoria")).toBe(ids.indexOf("geometria") + 1);
+    expect(ids.indexOf("simbolos")).toBe(ids.indexOf("combinatoria") + 1);
+
+    const combinatoria = KEYBOARD_CATEGORIES.find((category) => category.id === "combinatoria");
+    expect(combinatoria?.label).toBe("Combinatória");
+    expect(combinatoria?.keys.map((key) => key.insert)).toEqual([
+      "fatorial()",
+      "permutacao()",
+      "arranjo(,)",
+      "combinacao(,)",
+      "permutacao_repeticao(,)",
+    ]);
+  });
+
+  it("teclas unárias de combinatória inserem parênteses vazios com cursor dentro", () => {
+    const combinatoria = KEYBOARD_CATEGORIES.find((category) => category.id === "combinatoria");
+    for (const insert of ["fatorial()", "permutacao()"]) {
+      const key = combinatoria?.keys.find((candidate) => candidate.insert === insert);
+      expect(key, insert).toBeDefined();
+      expect(key!.insert[key!.cursorOffset - 1]).toBe("(");
+      expect(key!.insert[key!.cursorOffset]).toBe(")");
+      expect(key!.ariaLabel).toBeDefined();
+      expect(key!.latex).toBeDefined();
+    }
+  });
+
+  it("teclas binárias/variádicas de combinatória inserem o template com vírgula e cursor no primeiro argumento", () => {
+    const combinatoria = KEYBOARD_CATEGORIES.find((category) => category.id === "combinatoria");
+    for (const insert of ["arranjo(,)", "combinacao(,)", "permutacao_repeticao(,)"]) {
+      const key = combinatoria?.keys.find((candidate) => candidate.insert === insert);
+      expect(key, insert).toBeDefined();
+      expect(key!.insert[key!.cursorOffset - 1]).toBe("(");
+      expect(key!.insert[key!.cursorOffset]).toBe(",");
+      expect(key!.ariaLabel).toBeDefined();
+      expect(key!.latex).toBeDefined();
+    }
+  });
+
+  it("teclas de combinatória inserem sempre a forma ASCII (nunca acentuada) e mostram a notação de livro didático", () => {
+    const combinatoria = KEYBOARD_CATEGORIES.find((category) => category.id === "combinatoria");
+    for (const key of combinatoria?.keys ?? []) {
+      expect(key.insert, key.label).toMatch(/^[a-z_(),]+$/);
+    }
+    const latexByInsert = new Map(combinatoria?.keys.map((key) => [key.insert, key.latex]));
+    expect(latexByInsert.get("fatorial()")).toBe("n!");
+    expect(latexByInsert.get("permutacao()")).toBe("P_{n}");
+    expect(latexByInsert.get("arranjo(,)")).toBe("A_{n,k}");
+    expect(latexByInsert.get("combinacao(,)")).toBe("C_{n,k}");
+    expect(latexByInsert.get("permutacao_repeticao(,)")).toBe("P_{n}^{a,b}");
+  });
+
   it("nenhuma tecla insere um operador cru sem operandos", () => {
     for (const category of KEYBOARD_CATEGORIES) {
       for (const key of category.keys) {

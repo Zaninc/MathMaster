@@ -25,7 +25,12 @@ export const QUICK_EXAMPLES: QuickExample[] = [
   // Sprint V2.2 — Motor de Matrizes.
   { label: "[[1,2],[3,4]]", expression: "[[1,2],[3,4]]" },
   { label: "det([[1,2],[3,4]])", expression: "det([[1,2],[3,4]])" },
-  { label: "inv([[2,0],[0,2]])", expression: "inv([[2,0],[0,2]])" },
+  // Sprint V2.7 — Motor de Combinatória. Substitui "inv([[2,0],[0,2]])"
+  // (removida daqui, mesmo racional da V2.6 com transpose: o motor de
+  // matrizes ainda tem 3 outros exemplos na lista e a regra da sprint é
+  // "substituir apenas um exemplo existente" — a operação continua 100%
+  // suportada, só deixou de ocupar espaço na Home).
+  { label: "combinacao(10,3)", expression: "combinacao(10,3)" },
   {
     label: "[[1,2],[3,4]]*[[5,6],[7,8]]",
     expression: "[[1,2],[3,4]]*[[5,6],[7,8]]",
@@ -96,6 +101,10 @@ export const QUICK_EXAMPLES: QuickExample[] = [
  * Sprint V2.6 — Motor de Polinômios Avançados: motor NOVO com 7 operações
  * distintas — 3 exemplos (não 1) para cobrir fatoração/expansão/raízes,
  * pedido explícito do escopo da sprint (12 → 15).
+ *
+ * Sprint V2.7 — Motor de Combinatória: 4 exemplos (fatorial, combinação,
+ * arranjo, permutação), a lista exata pedida na seção EXEMPLOS do escopo
+ * da sprint (15 → 19).
  */
 export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "x² - 4 = 0", expression: "x² - 4 = 0" },
@@ -113,6 +122,10 @@ export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "fatorar(x²-9)", expression: "fatorar(x²-9)" },
   { label: "expandir((x+2)³)", expression: "expandir((x+2)³)" },
   { label: "raízes(x³-6x²+11x-6)", expression: "raízes(x³-6x²+11x-6)" },
+  { label: "fatorial(6)", expression: "fatorial(6)" },
+  { label: "combinacao(10,3)", expression: "combinacao(10,3)" },
+  { label: "arranjo(8,3)", expression: "arranjo(8,3)" },
+  { label: "permutacao(6)", expression: "permutacao(6)" },
 ];
 
 export interface QuickShortcut {

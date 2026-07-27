@@ -8,6 +8,7 @@ import {
   getFormulaConnections,
   getGeometryConnections,
   graphsLink,
+  isCombinatoricsOperation,
   isComplex,
   isLinearSystem,
   isNonlinearSystem,
@@ -358,6 +359,44 @@ describe("getCalculatorExplorations", () => {
     }
   });
 
+  // --- Sprint V2.7 (Motor de Combinatória) --------------------------------
+
+  it("chamada de combinatória sugere fórmulas de Combinatória e exercícios", () => {
+    const links = getCalculatorExplorations("combinacao(10,3)");
+    expect(links).toEqual([
+      { icon: "📚", label: "Ver fórmulas relacionadas", href: formulasLink({ categoria: "combinatoria" }) },
+      { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-basica") },
+    ]);
+  });
+
+  it("todas as cinco operações de combinatória (ASCII, acentuadas e C/A/P) acionam o bloco", () => {
+    for (const call of [
+      "fatorial(6)",
+      "fat(5)",
+      "permutacao(6)",
+      "permutação(5)",
+      "arranjo(8,3)",
+      "combinação(10,3)",
+      "permutacao_repeticao(8,3,2,2)",
+      "C(10,3)",
+      "A(8,3)",
+      "P(5)",
+    ]) {
+      const links = getCalculatorExplorations(call);
+      expect(links, call).toHaveLength(2);
+      expect(links[0].href, call).toBe(formulasLink({ categoria: "combinatoria" }));
+    }
+  });
+
+  it("'fatorar(x²-9)' continua no bloco de polinômios, nunca no de combinatória (prioridade da cascata)", () => {
+    const links = getCalculatorExplorations("fatorar(x²-9)");
+    expect(links[0].href).toBe(formulasLink({ categoria: "algebra", q: "polinomio" }));
+  });
+
+  it("'5!' solto não aciona o bloco de combinatória (é álgebra pura, como no backend)", () => {
+    expect(getCalculatorExplorations("5!")).toEqual([]);
+  });
+
   // --- Sprint V2.4 (Sistemas Lineares) ------------------------------------
 
   it("sistema linear (quebra de linha) sugere fórmula e exercícios de Álgebra Linear, sem 'Ver propriedades'", () => {
@@ -603,5 +642,38 @@ describe("isPolynomialOperation", () => {
   it("expressão sem nenhuma das sete operações não é reconhecida", () => {
     expect(isPolynomialOperation("x^2 - 9")).toBe(false);
     expect(isPolynomialOperation("2 + 2")).toBe(false);
+  });
+});
+
+describe("isCombinatoricsOperation (Sprint V2.7)", () => {
+  it("reconhece as cinco operações, forma ASCII e acentuada", () => {
+    for (const call of [
+      "fatorial(6)",
+      "fat(5)",
+      "permutacao(6)",
+      "permutação(5)",
+      "arranjo(8,3)",
+      "combinacao(10,3)",
+      "combinação(10,3)",
+      "permutacao_repeticao(8,3,2,2)",
+      "permutação_repetição(8,3,2,2)",
+    ]) {
+      expect(isCombinatoricsOperation(call), call).toBe(true);
+    }
+  });
+
+  it("reconhece os aliases de livro didático C/A/P só ANCORADOS e em maiúscula (espelho do backend)", () => {
+    expect(isCombinatoricsOperation("C(10,3)")).toBe(true);
+    expect(isCombinatoricsOperation("A(8,3)")).toBe(true);
+    expect(isCombinatoricsOperation("P(5)")).toBe(true);
+    expect(isCombinatoricsOperation("c(10,3)")).toBe(false);
+    expect(isCombinatoricsOperation("a(8,3)")).toBe(false);
+    expect(isCombinatoricsOperation("2*P(5)")).toBe(false);
+  });
+
+  it("não confunde 'fatorar(' (polinômios) nem 'fatorial' sem chamada", () => {
+    expect(isCombinatoricsOperation("fatorar(x²-9)")).toBe(false);
+    expect(isCombinatoricsOperation("5!")).toBe(false);
+    expect(isCombinatoricsOperation("2 + 2")).toBe(false);
   });
 });

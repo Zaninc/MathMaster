@@ -10,6 +10,10 @@ from .analytic_geometry.dispatcher import (
 )
 from .calculus.dispatcher import is_calculus_domain_expression, solve_calculus_text
 from .calculus.natural_notation import normalize_calculus_notation
+from .combinatorics.dispatcher import (
+    is_combinatorics_domain_expression,
+    solve_combinatorics_text,
+)
 from .complex.dispatcher import is_complex_domain_expression, solve_complex_text
 from .equations.dispatcher import is_equation_domain_expression, solve_equation_text
 from .errors import ExpressionError
@@ -98,6 +102,15 @@ def solve_expression(expression: str) -> str:
     # `polynomials/dispatcher.py`.
     if is_polynomial_domain_expression(expression):
         return solve_polynomial_text(expression)
+
+    # Sprint V2.7 — chamadas nomeadas ancoradas ("fatorial(6)",
+    # "combinacao(10,3)", "C(10,3)"...), mesma família de polynomials acima.
+    # Os argumentos são só inteiros, então não há risco real de roubo por
+    # calculus/trigonometry/etc., mas a posição segue a convenção das áreas
+    # de chamada nomeada. "5!"/"factorial(5)" soltos continuam caindo na
+    # álgebra (fallback), intocados. Ver `combinatorics/dispatcher.py`.
+    if is_combinatorics_domain_expression(expression):
+        return solve_combinatorics_text(expression)
 
     # Sprint 12 — precisa vir antes de functions/trigonometry/logarithms:
     # essas áreas casam "sin("/"log(" em qualquer posição do texto, o que

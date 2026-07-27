@@ -403,6 +403,30 @@ export function isPolynomialOperation(expression: string): boolean {
 }
 
 /**
+ * Sprint V2.7 (Motor de Combinatória) — mesmo critério do backend
+ * (`combinatorics/dispatcher.py:is_combinatorics_domain_expression`, via
+ * `parsing.match_combinatorics_call`): chamada a uma das cinco operações
+ * (canônica ASCII ou acentuada), detectada em qualquer posição do texto —
+ * exceto os aliases de livro didático C(...)/A(...)/P(...), que só contam
+ * ANCORADOS na expressão inteira e em MAIÚSCULA (espelho exato do regex
+ * ancorado e case-sensitive do backend — "a(8,3)" é álgebra livre, e um
+ * "P(…)" no meio de um texto qualquer não pode sequestrar a detecção).
+ * Sem flag `i` no padrão de nomes completos por causa disso; as grafias
+ * PT-BR já estão listadas explicitamente.
+ */
+const COMBINATORICS_FUNCTION_PATTERN =
+  /\b(fatorial|fat|permuta[cç][aã]o(?:_repeti[cç][aã]o)?|arranjo|combina[cç][aã]o)\s*\(/;
+
+const COMBINATORICS_TEXTBOOK_CALL_PATTERN = /^\s*[CAP]\s*\(.*\)\s*$/;
+
+export function isCombinatoricsOperation(expression: string): boolean {
+  return (
+    COMBINATORICS_FUNCTION_PATTERN.test(expression) ||
+    COMBINATORICS_TEXTBOOK_CALL_PATTERN.test(expression)
+  );
+}
+
+/**
  * Sprint V2.2.1 (Variáveis Locais para Matrizes) — a expressão INTEIRA já
  * É uma chamada pronta a det/trace (canônico ou alias PT-BR), ex.
  * "det(A)". Usado para decidir quando OMITIR "Ver propriedades": compor
@@ -582,6 +606,25 @@ export function getCalculatorExplorations(expression: string): RelatedLink[] {
         icon: "📚",
         label: "Ver fórmulas relacionadas",
         href: formulasLink({ categoria: "algebra", q: "polinomio" }),
+      },
+      { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-basica") },
+    ];
+  }
+
+  // Sprint V2.7 (Motor de Combinatória) — checado logo depois de
+  // `isPolynomialOperation`, mesma posição da cascata do backend
+  // (`math_engine/dispatcher.py`: combinatorics entra depois de
+  // polynomials, antes de calculus/functions/trigonometry/logarithms/
+  // equations). Destinos válidos garantidos: a categoria "combinatoria"
+  // existe em `data/formulas.ts` (V2.7) e "algebra-basica" é um dos
+  // tópicos seedados de /aprendizado (mesma escolha da V2.6 — não há
+  // tópico de combinatória seedado ainda).
+  if (isCombinatoricsOperation(finalStatement)) {
+    return [
+      {
+        icon: "📚",
+        label: "Ver fórmulas relacionadas",
+        href: formulasLink({ categoria: "combinatoria" }),
       },
       { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-basica") },
     ];

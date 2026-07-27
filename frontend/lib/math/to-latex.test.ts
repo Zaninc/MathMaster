@@ -267,6 +267,46 @@ describe("expressionToLatex", () => {
     expect(latex).toContain("\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}");
   });
 
+  // --- Sprint V2.7 (Motor de Combinatória) — notação de livro didático
+  // dedicada (C_{n,k}, A_{n,k}, P_n, n!), dependente da posição dos
+  // argumentos (ver `COMBINATORICS_LATEX`). "6!" e frações de fatoriais o
+  // mathjs já renderiza nativamente — só os NOMES precisam de handler.
+
+  it("converte combinacao/arranjo/permutacao/fatorial para a notação de livro didático", async () => {
+    expect(normalized(await expressionToLatex("combinacao(10,3)"))).toBe("C_{10,3}");
+    expect(normalized(await expressionToLatex("arranjo(8,3)"))).toBe("A_{8,3}");
+    expect(normalized(await expressionToLatex("permutacao(5)"))).toBe("P_{5}");
+    expect(normalized(await expressionToLatex("fatorial(6)"))).toBe("6!");
+    expect(normalized(await expressionToLatex("fat(5)"))).toBe("5!");
+  });
+
+  it("converte permutacao_repeticao(n, a, b, ...) para P com sobrescrito", async () => {
+    expect(normalized(await expressionToLatex("permutacao_repeticao(8,3,2,2)"))).toBe(
+      "P_{8}^{3,2,2}"
+    );
+  });
+
+  it("parentesiza o fatorial de argumento composto ((x+1)!), nunca de átomo (6!)", async () => {
+    expect(normalized(await expressionToLatex("fatorial(x+1)"))).toBe("\\left(x+1\\right)!");
+    expect(normalized(await expressionToLatex("fatorial(n)"))).toBe("n!");
+  });
+
+  it("converte os aliases de livro didático C(...)/A(...)/P(...) com argumentos numéricos", async () => {
+    expect(normalized(await expressionToLatex("C(10,3)"))).toBe("C_{10,3}");
+    expect(normalized(await expressionToLatex("A(8,3)"))).toBe("A_{8,3}");
+    expect(normalized(await expressionToLatex("P(5)"))).toBe("P_{5}");
+  });
+
+  it("NÃO reinterpreta C/A/P com argumento simbólico (fica o fallback genérico do mathjs)", async () => {
+    const latex = normalized(await expressionToLatex("A(x,3)"));
+    expect(latex).not.toContain("A_{");
+  });
+
+  it("aridade errada de combinatória não vira notação dedicada (fail-closed p/ o genérico)", async () => {
+    const latex = normalized(await expressionToLatex("combinacao(10,3,2)"));
+    expect(latex).not.toContain("C_{");
+  });
+
   // --- Sprint V2.4 (Sistemas Lineares) ------------------------------------
 
   it("converte um sistema linear (quebra de linha) em \\begin{cases}...\\end{cases}", async () => {
@@ -498,6 +538,52 @@ describe("resultToLatex", () => {
     expect(segments).toHaveLength(1);
     expect(segments![0].label).toBeNull();
     expect(normalized(segments![0].latex)).toContain("x_{1}=-3");
+  });
+
+  // --- Sprint V2.7 (Motor de Combinatória) — o backend devolve a dedução
+  // simbólica como CADEIA de igualdades ("C(10,3) = 10!/(3!*7!) = 120",
+  // ver `combinatorics/formatter.py`); cada pedaço é mathjs válido e o
+  // split por "=" de `expressionToLatex` junta tudo numa linha só.
+
+  it("converte a dedução de combinação em cadeia única (C_{10,3} = fração de fatoriais = 120)", async () => {
+    const segments = await resultToLatex("C(10,3) = 10!/(3!*7!) = 120");
+    expect(segments).toHaveLength(1);
+    expect(segments![0].label).toBeNull();
+    const latex = normalized(segments![0].latex);
+    expect(latex).toContain("C_{10,3}");
+    expect(latex).toContain("\\frac{10!}");
+    expect(latex).toContain("=120");
+    assertRendersSafely(segments![0].latex!, "dedução de combinação");
+  });
+
+  it("converte a dedução de arranjo com o passo intermediário (8-3)!", async () => {
+    const segments = await resultToLatex("A(8,3) = 8!/(8-3)! = 8!/5! = 336");
+    expect(segments).toHaveLength(1);
+    const latex = normalized(segments![0].latex);
+    expect(latex).toContain("A_{8,3}");
+    expect(latex).toContain("=336");
+    assertRendersSafely(segments![0].latex!, "dedução de arranjo");
+  });
+
+  it("converte a dedução de permutação (P_6 = 6! = 720)", async () => {
+    const segments = await resultToLatex("P(6) = 6! = 720");
+    expect(segments).toHaveLength(1);
+    const latex = normalized(segments![0].latex);
+    expect(latex).toContain("P_{6}");
+    expect(latex).toContain("6!");
+    expect(latex).toContain("=720");
+  });
+
+  it("converte a dedução de fatorial (6! = 720) e de permutação com repetição", async () => {
+    const factorial = await resultToLatex("6! = 720");
+    expect(normalized(factorial![0].latex)).toBe("6!=720");
+
+    const repetition = await resultToLatex("8!/(3!*2!*2!) = 1680");
+    expect(repetition).toHaveLength(1);
+    const latex = normalized(repetition![0].latex);
+    expect(latex).toContain("\\frac{8!}");
+    expect(latex).toContain("=1680");
+    assertRendersSafely(repetition![0].latex!, "permutação com repetição");
   });
 
   it("converte a notação Σ compacta como RESULTADO (Sprint V2.1 — somatório que não expande)", async () => {
@@ -990,6 +1076,32 @@ describe("previewLatex (pipeline único da pré-visualização e do histórico)"
 
   it("função transcendental (sen/log/exp) num sistema continua fora de escopo, mas nunca lança (Tier 2)", async () => {
     for (const input of ["sen(x)+y=1\nx-y=0", "x+y=5\nlog(y)-x=1"]) {
+      const latex = await previewLatex(input);
+      expect(latex, input).not.toBeNull();
+      assertRendersSafely(latex as string, input);
+    }
+  });
+
+  // --- Sprint V2.7 (Motor de Combinatória) -------------------------------
+
+  it("mostra a notação de livro didático assim que a chamada de combinatória fica completa", async () => {
+    expect(normalized(await previewLatex("combinacao(10,3)"))).toBe("C_{10,3}");
+    expect(normalized(await previewLatex("arranjo(8,3)"))).toBe("A_{8,3}");
+    expect(normalized(await previewLatex("permutacao(5)"))).toBe("P_{5}");
+    expect(normalized(await previewLatex("fatorial(6)"))).toBe("6!");
+    expect(normalized(await previewLatex("permutacao_repeticao(8,3,2,2)"))).toBe("P_{8}^{3,2,2}");
+  });
+
+  it("as grafias ACENTUADAS (fora do Tier 1) ganham a mesma notação pelo Tier 2", async () => {
+    expect(normalized(await previewLatex("combinação(10,3)"))).toContain("C_{10,3}");
+    expect(normalized(await previewLatex("permutação(5)"))).toContain("P_{5}");
+    expect(normalized(await previewLatex("permutação_repetição(8,3,2,2)"))).toContain(
+      "P_{8}^{3,2,2}"
+    );
+  });
+
+  it("digitação incompleta de combinatória nunca lança e sempre renderiza em segurança (Tier 2)", async () => {
+    for (const input of ["combinacao(", "combinacao(10,", "arranjo(8", "fatorial(", "permutacao_repeticao(8,3,"]) {
       const latex = await previewLatex(input);
       expect(latex, input).not.toBeNull();
       assertRendersSafely(latex as string, input);
