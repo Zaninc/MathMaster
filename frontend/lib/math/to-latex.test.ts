@@ -5,6 +5,7 @@ import {
   expressionToLatex,
   inputToLatex,
   previewLatex,
+  resultEchoesExpression,
   resultToLatex,
   safeExpressionLatex,
   valueToLatex,
@@ -313,6 +314,13 @@ describe("expressionToLatex", () => {
   it("aridade errada de combinatória não vira notação dedicada (fail-closed p/ o genérico)", async () => {
     const latex = normalized(await expressionToLatex("combinacao(10,3,2)"));
     expect(latex).not.toContain("\\binom");
+  });
+
+  it("inteiro grande renderiza por extenso, nunca em notação científica (hotfix pós-V2.7.1)", async () => {
+    expect(normalized(await expressionToLatex("27907200"))).toBe("27907200");
+    expect(normalized(await valueToLatex("27907200"))).toBe("27907200");
+    // Decimais continuam com a formatação default do mathjs.
+    expect(normalized(await expressionToLatex("2.5"))).toBe("2.5");
   });
 
   // --- Sprint V2.4 (Sistemas Lineares) ------------------------------------
@@ -710,6 +718,49 @@ describe("resultToLatex", () => {
 
   it("sistema não linear indeterminado ('Sistema com infinitas soluções (indeterminado).') cai no fallback de texto puro, sem lançar", async () => {
     expect(await resultToLatex("Sistema com infinitas soluções (indeterminado).")).toBeNull();
+  });
+});
+
+describe("resultEchoesExpression (hotfix pós-V2.7.1 — Histórico)", () => {
+  async function echoes(expression: string, result: string): Promise<boolean> {
+    const [expressionLatex, segments] = await Promise.all([
+      previewLatex(expression),
+      resultToLatex(result),
+    ]);
+    return resultEchoesExpression(expressionLatex, segments);
+  }
+
+  it("detecta a cadeia de dedução que começa pela própria expressão (todas as grafias)", async () => {
+    expect(await echoes("arranjo(20,6)", "A(20,6) = 20!/(20-6)! = 20!/14! = 27907200")).toBe(true);
+    expect(await echoes("A(20,6)", "A(20,6) = 20!/(20-6)! = 20!/14! = 27907200")).toBe(true);
+    expect(await echoes("combinacao(10,3)", "C(10,3) = 10!/(3!*7!) = 120")).toBe(true);
+    expect(await echoes("C(10,3)", "C(10,3) = 10!/(3!*7!) = 120")).toBe(true);
+    expect(await echoes("permutacao(6)", "P(6) = 6! = 720")).toBe(true);
+    expect(await echoes("fatorial(7)", "7! = 5040")).toBe(true);
+    expect(await echoes("fat(7)", "7! = 5040")).toBe(true);
+  });
+
+  it("detecta resultado idêntico à expressão (nunca compor 'A = A')", async () => {
+    expect(await echoes("[[1,2],[3,4]]", "[[1, 2], [3, 4]]")).toBe(true);
+    expect(await echoes("x/2", "x/2")).toBe(true);
+  });
+
+  it("NUNCA casa com lista de soluções, valor simples, segmento rotulado ou cadeia sem cabeça", async () => {
+    expect(await echoes("x² - 4 = 0", "x₁ = -2, x₂ = 2")).toBe(false);
+    expect(await echoes("2+2", "4")).toBe(false);
+    expect(await echoes("det([[1,2],[3,4]])", "-2")).toBe(false);
+    expect(await echoes("Σ(i=1..10) i", "55")).toBe(false);
+    expect(await echoes("expandir((x+2)³)", "Expandido: x**3 + 6*x**2 + 12*x + 8")).toBe(false);
+    expect(await echoes("divisao(x³-1,x-1)", "Quociente: x**2 + x + 1; Resto: 0")).toBe(false);
+    // permutação com repetição: a cadeia NÃO começa pela expressão — a
+    // composição "expressão = resultado" continua correta e desejada.
+    expect(await echoes("permutacao_repeticao(8,3,2,2)", "8!/(3!*2!*2!) = 1680")).toBe(false);
+  });
+
+  it("é null-safe (conversões pendentes/nulas nunca disparam a regra)", () => {
+    expect(resultEchoesExpression(null, [{ label: null, text: "x", latex: "x" }])).toBe(false);
+    expect(resultEchoesExpression("x", null)).toBe(false);
+    expect(resultEchoesExpression("x", [{ label: null, text: "x", latex: null }])).toBe(false);
   });
 });
 

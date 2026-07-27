@@ -37,6 +37,42 @@ export interface ResultSegment {
   latex: string | null;
 }
 
+/**
+ * Hotfix pós-V2.7.1 (Histórico) — detecta quando o RESULTADO já contém a
+ * representação completa da expressão inicial: ou é uma cadeia de dedução
+ * que COMEÇA pela própria expressão (combinatória: "C(10,3) = 10!/(3!*7!)
+ * = 120"), ou é idêntico a ela (eco sem forma fechada, ex. um literal de
+ * matriz devolvido como está). Nesses casos o chamador NÃO deve compor
+ * "expressão = resultado" — duplicaria a cabeça ("A_{20,6} = A_{20,6} =
+ * ...") ou geraria "A = A".
+ *
+ * A comparação é sobre o LATEX já produzido por este pipeline, nunca sobre
+ * o texto cru: "combinacao(10,3)" (digitado) e "C(10,3)" (cabeça devolvida
+ * pelo backend) só coincidem depois de convertidos para "\binom{10}{3}".
+ * Normalização idêntica à dos testes (espaçamento fino do mathjs — "~",
+ * "\," — é detalhe de implementação, não estrutura).
+ *
+ * Restrita por construção: exige UM segmento, sem rótulo, com LaTeX
+ * reconhecido — listas de soluções ("x₁ = -2, x₂ = 2" não começa pela
+ * equação), segmentos rotulados ("Expandido: ...", "Quociente: ...") e
+ * valores simples ("4", "-2") nunca casam, preservando a composição
+ * "expressão = resultado" de sempre para todos eles.
+ */
+export function resultEchoesExpression(
+  expressionLatex: string | null,
+  segments: ResultSegment[] | null
+): boolean {
+  if (expressionLatex === null || segments === null || segments.length !== 1) return false;
+  const only = segments[0];
+  if (only.label !== null || only.latex === null) return false;
+
+  const strip = (latex: string) => latex.replace(/[\s~]|\\[,;:!]/g, "");
+  const expression = strip(expressionLatex);
+  const result = strip(only.latex);
+  if (expression === "") return false;
+  return result === expression || result.startsWith(`${expression}=`);
+}
+
 type Mathjs = typeof import("mathjs");
 
 let mathjsPromise: Promise<Mathjs> | null = null;
@@ -317,6 +353,25 @@ const COMBINATORICS_LATEX: Record<string, CombinatoricsRenderer> = {
 function productHandler(node: MathNode, options: TexOptions): string | undefined {
   if (node.type === "SymbolNode") {
     return (node as unknown as { name?: string }).name === "Infinity" ? "\\infty" : undefined;
+  }
+
+  // Hotfix pós-V2.7.1 — o serializer default do mathjs formata inteiros
+  // grandes em notação científica ("27907200" -> "2.79072\cdot10^{+7}",
+  // confirmado pelo teste do histórico de arranjo(20,6)) — errado para um
+  // produto de aritmética exata: o resultado deve aparecer por extenso.
+  // Só inteiros SEGUROS (até Number.MAX_SAFE_INTEGER): acima disso o
+  // float do mathjs já perdeu os dígitos no parse e a notação default é o
+  // melhor possível. Inteiros pequenos rendem a mesma string de antes.
+  if (node.type === "ConstantNode") {
+    const value = (node as unknown as { value: unknown }).value;
+    if (
+      typeof value === "number" &&
+      Number.isInteger(value) &&
+      Math.abs(value) <= Number.MAX_SAFE_INTEGER
+    ) {
+      return String(value);
+    }
+    return undefined;
   }
 
   // Sprint V2.6 (Motor de Polinômios Avançados) — `coeficientes(...)`

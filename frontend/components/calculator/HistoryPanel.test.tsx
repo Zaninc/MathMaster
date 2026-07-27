@@ -198,10 +198,31 @@ describe("HistoryPanel", () => {
     });
   });
 
-  it("mostra um item de matriz como \\begin{bmatrix}, sem duplicar expressão/resultado (Sprint V2.2)", async () => {
+  it("item de matriz cujo resultado É a própria matriz mostra UMA cadeia só, nunca 'A = A' (Sprint V2.2 + hotfix pós-V2.7.1)", async () => {
+    // Antes do hotfix este item renderizava "bmatrix = bmatrix" (expressão
+    // e resultado idênticos, dois KaTeX separados por "="). A regra 6 do
+    // hotfix (resultado igual à expressão, sem forma fechada) elimina o
+    // eco redundante: uma única renderização.
     const { container } = render(
       <HistoryPanel
         items={[item("[[1,2],[3,4]]", "[[1, 2], [3, 4]]", "2026-01-01T00:00:00Z")]}
+        hiddenTimestamps={new Set()}
+        onSelect={NOOP}
+        onHide={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(1));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    expect(annotations.filter((latex) => latex?.includes("\\begin{bmatrix}"))).toHaveLength(1);
+  });
+
+  it("resultado de operação de matriz (det) continua com expressão = resultado separados", async () => {
+    const { container } = render(
+      <HistoryPanel
+        items={[item("det([[1,2],[3,4]])", "-2", "2026-01-01T00:00:00Z")]}
         hiddenTimestamps={new Set()}
         onSelect={NOOP}
         onHide={NOOP}
@@ -212,7 +233,144 @@ describe("HistoryPanel", () => {
     const annotations = Array.from(container.querySelectorAll("annotation")).map(
       (node) => node.textContent
     );
-    expect(annotations.filter((latex) => latex?.includes("\\begin{bmatrix}"))).toHaveLength(2);
+    expect(annotations.some((latex) => latex?.includes("\\det"))).toBe(true);
+  });
+
+  // --- Hotfix pós-V2.7.1: dedução de combinatória não duplica a cabeça ---
+
+  function normalizedAnnotations(container: HTMLElement): string[] {
+    return Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent?.replace(/[\s~]|\\[,;:!]/g, "") ?? ""
+    );
+  }
+
+  it("arranjo: dedução vira cadeia única, sem 'A_{20,6} = A_{20,6} = ...'", async () => {
+    const { container } = render(
+      <HistoryPanel
+        items={[
+          item("arranjo(20,6)", "A(20,6) = 20!/(20-6)! = 20!/14! = 27907200", "2026-01-01T00:00:00Z"),
+        ]}
+        hiddenTimestamps={new Set()}
+        onSelect={NOOP}
+        onHide={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(1));
+    const [chain] = normalizedAnnotations(container);
+    expect(chain.startsWith("A_{20,6}=")).toBe(true);
+    expect(chain).toContain("=27907200");
+    expect(chain.match(/A_\{20,6\}/g)).toHaveLength(1);
+    // Layout: a fórmula única continua no wrapper com rolagem própria
+    // (sem overflow indevido no card, mesmo contrato do teste de resultado
+    // longo acima).
+    const wrapper = container.querySelector(".katex")?.parentElement?.parentElement;
+    expect(wrapper?.className).toContain("overflow-x-auto");
+    expect(wrapper?.className).toContain("max-w-full");
+  });
+
+  it("combinação: cadeia única com \\binom, digitada como combinacao(...) ou C(...)", async () => {
+    const { container } = render(
+      <HistoryPanel
+        items={[
+          item("combinacao(10,3)", "C(10,3) = 10!/(3!*7!) = 120", "2026-01-01T00:00:00Z"),
+          item("C(10,3)", "C(10,3) = 10!/(3!*7!) = 120", "2026-01-02T00:00:00Z"),
+        ]}
+        hiddenTimestamps={new Set()}
+        onSelect={NOOP}
+        onHide={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
+    for (const chain of normalizedAnnotations(container)) {
+      expect(chain.startsWith("\\binom{10}{3}=")).toBe(true);
+      expect(chain).toContain("=120");
+      expect(chain.match(/\\binom/g)).toHaveLength(1);
+    }
+  });
+
+  it("permutação: 'P_{6} = 6! = 720' sem duplicação", async () => {
+    const { container } = render(
+      <HistoryPanel
+        items={[item("P(6)", "P(6) = 6! = 720", "2026-01-01T00:00:00Z")]}
+        hiddenTimestamps={new Set()}
+        onSelect={NOOP}
+        onHide={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(1));
+    const [chain] = normalizedAnnotations(container);
+    expect(chain).toBe("P_{6}=6!=720");
+  });
+
+  it("fatorial: '7! = 5040' nunca vira '7! = 7! = 5040'", async () => {
+    const { container } = render(
+      <HistoryPanel
+        items={[item("fatorial(7)", "7! = 5040", "2026-01-01T00:00:00Z")]}
+        hiddenTimestamps={new Set()}
+        onSelect={NOOP}
+        onHide={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(1));
+    const [chain] = normalizedAnnotations(container);
+    expect(chain).toBe("7!=5040");
+  });
+
+  it("permutação com repetição (resultado sem cabeça) mantém 'expressão = cadeia'", async () => {
+    // O resultado NÃO começa pela expressão (não há cabeça de texto puro
+    // para P_n^{a,b,...}) — aqui a composição com "=" é correta e produz
+    // "P_{8}^{3,2,2} = 8!/(3!·2!·2!) = 1680".
+    const { container } = render(
+      <HistoryPanel
+        items={[
+          item("permutacao_repeticao(8,3,2,2)", "8!/(3!*2!*2!) = 1680", "2026-01-01T00:00:00Z"),
+        ]}
+        hiddenTimestamps={new Set()}
+        onSelect={NOOP}
+        onHide={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
+    const annotations = normalizedAnnotations(container);
+    expect(annotations.some((latex) => latex.includes("P_{8}^{3,2,2}"))).toBe(true);
+    expect(annotations.some((latex) => latex.includes("=1680"))).toBe(true);
+  });
+
+  it("resultado simples (equação) continua com expressão = soluções separadas", async () => {
+    const { container } = render(
+      <HistoryPanel
+        items={[item("x² - 4 = 0", "x₁ = -2, x₂ = 2", "2026-01-01T00:00:00Z")]}
+        hiddenTimestamps={new Set()}
+        onSelect={NOOP}
+        onHide={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
+    const annotations = normalizedAnnotations(container);
+    expect(annotations.some((latex) => latex.includes("{x}^{2}-4=0"))).toBe(true);
+    expect(annotations.some((latex) => latex.includes("x_{1}=-2"))).toBe(true);
+  });
+
+  it("polinômio com dedução rotulada (Expandido) não é tratado como eco", async () => {
+    const { container } = render(
+      <HistoryPanel
+        items={[
+          item("expandir((x+2)³)", "Expandido: x**3 + 6*x**2 + 12*x + 8", "2026-01-01T00:00:00Z"),
+        ]}
+        hiddenTimestamps={new Set()}
+        onSelect={NOOP}
+        onHide={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
+    expect(screen.getByText("Expandido:")).toBeInTheDocument();
   });
 
   it("Sprint V2.4 (Sistemas Lineares): mostra um item de sistema linear com a expressão em \\begin{cases} e o resultado como lista de igualdades", async () => {

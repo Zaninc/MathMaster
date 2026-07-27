@@ -3,6 +3,7 @@
 import { ProgressiveMathResult } from "@/components/shared/ProgressiveMathResult";
 import { useSolveLatex } from "@/hooks/useSolveLatex";
 import type { HistoryItem } from "@/lib/api/types";
+import { resultEchoesExpression } from "@/lib/math/to-latex";
 
 interface HistoryPanelProps {
   items: HistoryItem[];
@@ -25,20 +26,32 @@ interface HistoryPanelProps {
  * button). Quando o resultado é longo, a aproximação fica fixa — "Reutilizar"
  * continua levando à calculadora, onde o valor exato completo (com toggle)
  * está disponível.
+ *
+ * Hotfix pós-V2.7.1: quando o resultado já é a dedução completa começando
+ * pela própria expressão ("A(20,6) = 20!/(20-6)! = ... = 27907200") — ou é
+ * idêntico a ela — a composição "expressão = resultado" duplicaria a
+ * cabeça ("A_{20,6} = A_{20,6} = ..."). Nesses casos o eco da expressão e
+ * o "=" são omitidos e a linha vira a cadeia única do resultado (decisão
+ * compartilhada: `resultEchoesExpression` em `lib/math/to-latex.ts`).
  */
 function HistoryEntry({ expression, result, approx }: { expression: string; result: string; approx: string | null }) {
   const { expressionLatex, segments } = useSolveLatex(expression, result);
   const resultApprox = segments !== null && segments.length === 1 ? approx : null;
+  const echoed = resultEchoesExpression(expressionLatex, segments);
 
   return (
     <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 [overflow-wrap:anywhere]">
-      <ProgressiveMathResult
-        latex={expressionLatex}
-        text={expression}
-        approx={null}
-        allowToggle={false}
-      />
-      <span>=</span>
+      {!echoed && (
+        <>
+          <ProgressiveMathResult
+            latex={expressionLatex}
+            text={expression}
+            approx={null}
+            allowToggle={false}
+          />
+          <span>=</span>
+        </>
+      )}
       {segments !== null ? (
         segments.map((segment) => (
           <span
