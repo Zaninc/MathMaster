@@ -379,16 +379,15 @@ describe("HistoryPanel", () => {
     expect(chain).toContain("=0.7");
   });
 
-  it("binomial: preview mostra a fórmula geral, resultado mostra a dedução específica (não colapsam — 'P(X=k)' != 'P(X=3)')", async () => {
-    // Diferente das outras cinco operações (preview == cabeça do
-    // resultado, então `resultEchoesExpression` colapsa em uma cadeia
-    // só), o preview de binomial é a fórmula GERAL abstrata
-    // ("P(X=k) = ..."), pedida explicitamente no escopo da sprint — nunca
-    // igual à cabeça ESPECÍFICA da dedução ("P(X=3) = ..."). Mesmo
-    // contrato de "permutação com repetição" em combinatória (resultado
-    // sem cabeça de texto puro correspondente): "expressão = resultado"
-    // continua correto, sem duplicação real (as duas cadeias são
-    // diferentes por construção).
+  it("binomial: preview mostra a expressão instanciada sem calcular, resultado mostra a dedução completa (não colapsam)", async () => {
+    // Sprint V2.8.1 — o preview de binomial passou a mostrar os valores
+    // reais SEM resolver ("P(X=3)=\binom{10}{3}(0.5)^3(1-0.5)^7", com
+    // "(1-0.5)" literal, não reduzido a "0.5"), diferente da dedução do
+    // backend (que já chega com o complemento substituído — "0.5^7", sem
+    // "1-" literal — e a cadeia completa até o valor final). As duas
+    // cadeias continuam estruturalmente diferentes por construção
+    // (parênteses+justaposição vs "\cdot" do backend), então
+    // `resultEchoesExpression` não colapsa: 2 nós KaTeX, nunca 1.
     const { container } = render(
       <HistoryPanel
         items={[
@@ -406,11 +405,11 @@ describe("HistoryPanel", () => {
 
     await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
     const annotations = normalizedAnnotations(container);
-    expect(annotations.some((latex) => latex.includes("P(X=k)"))).toBe(true);
-    expect(annotations.some((latex) => latex.includes("\\binom{n}{k}"))).toBe(true);
-    expect(annotations.some((latex) => latex.includes("P(X=3)"))).toBe(true);
-    expect(annotations.some((latex) => latex.includes("\\binom{10}{3}"))).toBe(true);
+    expect(
+      annotations.some((latex) => latex.includes("P(X=3)=\\binom{10}{3}(0.5)^{3}(1-0.5)^{7}"))
+    ).toBe(true);
     expect(annotations.some((latex) => latex.includes("=0.1171875"))).toBe(true);
+    expect(annotations.some((latex) => latex.includes("120"))).toBe(true);
   });
 
   it("independentes: resultado sem notação KaTeX dedicada cai no texto puro, sem lançar", async () => {

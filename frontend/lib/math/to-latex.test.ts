@@ -323,28 +323,42 @@ describe("expressionToLatex", () => {
     expect(normalized(await expressionToLatex("2.5"))).toBe("2.5");
   });
 
-  // --- Sprint V2.8 (Motor de Probabilidade) — notação ABSTRATA (nunca usa
-  // os argumentos reais, ver `PROBABILITY_LATEX`): a preview de
-  // "probabilidade(3,10)" mostra "P(A)", não "P(3,10)".
+  // --- Sprint V2.8.1 (Preview Contextual de Probabilidade) —
+  // probabilidade/condicional/binomial mostram a expressão já instanciada
+  // com os argumentos reais, SEM resolver (mesmo padrão de combinatória);
+  // complementar/uniao/intersecao_independente permanecem ABSTRATAS
+  // (fora do escopo desta sprint, ver `PROBABILITY_LATEX`).
 
-  it("converte as chamadas de probabilidade para a notação abstrata P(A)/P(Aᶜ)/P(A∪B)/P(A∩B)/P(A|B)", async () => {
-    expect(normalized(await expressionToLatex("probabilidade(3,10)"))).toBe("P(A)");
+  it("converte probabilidade(a,b)/condicional(pa,pb) para P(A)/P(A|B) com os argumentos reais, sem simplificar", async () => {
+    expect(normalized(await expressionToLatex("probabilidade(3,10)"))).toBe("P(A)=\\frac{3}{10}");
+    expect(normalized(await expressionToLatex("probabilidade(7,20)"))).toBe("P(A)=\\frac{7}{20}");
+    expect(normalized(await expressionToLatex("condicional(0.2,0.5)"))).toBe(
+      "P(A\\midB)=\\frac{0.2}{0.5}"
+    );
+    expect(normalized(await expressionToLatex("condicional(3,8)"))).toBe("P(A\\midB)=\\frac{3}{8}");
+  });
+
+  it("mantém complementar/uniao/intersecao_independente na notação abstrata P(Aᶜ)/P(A∪B)/P(A∩B) (fora do escopo da V2.8.1)", async () => {
     expect(normalized(await expressionToLatex("complementar(0.3)"))).toBe("P(A^{c})");
     expect(normalized(await expressionToLatex("uniao(0.4,0.5,0.2)"))).toBe("P(A\\cupB)");
     expect(normalized(await expressionToLatex("intersecao_independente(0.5,0.3)"))).toBe(
       "P(A\\capB)"
     );
-    expect(normalized(await expressionToLatex("condicional(0.2,0.5)"))).toBe("P(A\\midB)");
   });
 
-  it("converte binomial(...) para a fórmula geral \\binom{n}{k}p^k(1-p)^{n-k}", async () => {
-    const latex = normalized(await expressionToLatex("binomial(10,3,0.5)"));
-    expect(latex).toBe("P(X=k)=\\binom{n}{k}p^{k}(1-p)^{n-k}");
+  it("converte binomial(n,k,p) para P(X=k)=\\binom{n}{k}(p)^k(1-p)^{n-k} com os valores reais, sem calcular", async () => {
+    expect(normalized(await expressionToLatex("binomial(10,3,0.5)"))).toBe(
+      "P(X=3)=\\binom{10}{3}(0.5)^{3}(1-0.5)^{7}"
+    );
+    expect(normalized(await expressionToLatex("binomial(20,10,0.25)"))).toBe(
+      "P(X=10)=\\binom{20}{10}(0.25)^{10}(1-0.25)^{10}"
+    );
   });
 
   it("aridade errada de probabilidade não vira notação dedicada (fail-closed p/ o genérico)", async () => {
     const latex = normalized(await expressionToLatex("probabilidade(3,10,5)"));
     expect(latex).not.toBe("P(A)");
+    expect(latex).not.toContain("P(A)=");
   });
 
   // --- Sprint V2.4 (Sistemas Lineares) ------------------------------------
@@ -1293,18 +1307,23 @@ describe("previewLatex (pipeline único da pré-visualização e do histórico)"
     }
   });
 
-  // --- Sprint V2.8 (Motor de Probabilidade) -------------------------------
+  // --- Sprint V2.8 / V2.8.1 (Motor de Probabilidade) ----------------------
 
-  it("mostra a notação abstrata assim que a chamada de probabilidade fica completa", async () => {
-    expect(normalized(await previewLatex("probabilidade(3,10)"))).toBe("P(A)");
+  it("mostra probabilidade/condicional/binomial já instanciados (com os argumentos reais) assim que a chamada fica completa", async () => {
+    expect(normalized(await previewLatex("probabilidade(3,10)"))).toBe("P(A)=\\frac{3}{10}");
+    expect(normalized(await previewLatex("condicional(0.2,0.5)"))).toBe(
+      "P(A\\midB)=\\frac{0.2}{0.5}"
+    );
+    expect(normalized(await previewLatex("binomial(10,3,0.5)"))).toBe(
+      "P(X=3)=\\binom{10}{3}(0.5)^{3}(1-0.5)^{7}"
+    );
+  });
+
+  it("mantém complementar/uniao/intersecao_independente na notação abstrata na pré-visualização (fora do escopo da V2.8.1)", async () => {
     expect(normalized(await previewLatex("complementar(0.3)"))).toBe("P(A^{c})");
     expect(normalized(await previewLatex("uniao(0.4,0.5,0.2)"))).toBe("P(A\\cupB)");
     expect(normalized(await previewLatex("intersecao_independente(0.5,0.3)"))).toBe(
       "P(A\\capB)"
-    );
-    expect(normalized(await previewLatex("condicional(0.2,0.5)"))).toBe("P(A\\midB)");
-    expect(normalized(await previewLatex("binomial(10,3,0.5)"))).toBe(
-      "P(X=k)=\\binom{n}{k}p^{k}(1-p)^{n-k}"
     );
   });
 

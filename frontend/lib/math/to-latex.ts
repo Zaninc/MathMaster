@@ -345,23 +345,79 @@ const COMBINATORICS_LATEX: Record<string, CombinatoricsRenderer> = {
 };
 
 /**
- * Sprint V2.8 (Motor de Probabilidade) — diferente de combinatória (que usa
- * os ARGUMENTOS reais na notação, ex. combinacao(10,3) -> \binom{10}{3}),
- * aqui a pré-visualização é sempre ABSTRATA: `probabilidade(3,10)` mostra
- * "P(A)", nunca "P(3,10)" — os valores só entram na dedução depois de
- * resolvido (cadeia do backend, reconhecida à parte por
- * `probabilityResultHeadToLatex` abaixo, já que "Aᶜ"/"∪"/"∩"/"|" caem fora
- * do que o mathjs tokeniza como uma única expressão). Por isso a tabela
- * ignora os argumentos, só verificando a ARIDADE — nunca "adivinha" uma
- * chamada com o número errado de parâmetros.
+ * Extrai o valor numérico puro de uma `ConstantNode` (ex. o "10" de
+ * `probabilidade(3,10)`, sempre um `number` do mathjs para os literais
+ * inteiros/decimais aceitos por este domínio — confirmado empiricamente,
+ * nunca `BigNumber` nesta configuração). `null` para qualquer outra coisa
+ * (símbolo, expressão) — usado só pela aridade fixa de `binomialLatex`
+ * abaixo para calcular `n-k` sem reimplementar o motor de probabilidade no
+ * frontend; a mesma restrição de "só numérico" que já existe no backend
+ * (`probability/validation.py`) para os argumentos desta operação.
  */
-const PROBABILITY_LATEX: Record<string, (arity: number) => string | undefined> = {
-  probabilidade: (n) => (n === 2 ? "P(A)" : undefined),
-  complementar: (n) => (n === 1 ? "P(A^{c})" : undefined),
-  uniao: (n) => (n === 3 ? "P(A\\cup B)" : undefined),
-  intersecao_independente: (n) => (n === 2 ? "P(A\\cap B)" : undefined),
-  condicional: (n) => (n === 2 ? "P(A \\mid B)" : undefined),
-  binomial: (n) => (n === 3 ? "P(X=k) = \\binom{n}{k}p^{k}(1-p)^{n-k}" : undefined),
+function constantNumber(node: MathNode): number | null {
+  if (node.type !== "ConstantNode") return null;
+  const value = (node as unknown as { value: unknown }).value;
+  return typeof value === "number" ? value : null;
+}
+
+/**
+ * Sprint V2.8 (Motor de Probabilidade) — diferente das operações ABSTRATAS
+ * abaixo (complementar/uniao/intersecao_independente, sem notação
+ * dependente de valor), estas três usam os ARGUMENTOS reais na notação
+ * (mesmo espírito de `COMBINATORICS_LATEX`), mostrando a expressão já
+ * instanciada, mas SEM reduzir a fração/potência (Sprint V2.8.1 — antes,
+ * a tabela inteira era abstrata; ver histórico do arquivo). O resultado
+ * numérico continua sendo trabalho exclusivo do backend.
+ */
+const probabilityLatex: CombinatoricsRenderer = (nodeArgs, options) =>
+  nodeArgs.length === 2
+    ? `P(A)=\\frac{${texOf(nodeArgs[0], options)}}{${texOf(nodeArgs[1], options)}}`
+    : undefined;
+
+const conditionalLatex: CombinatoricsRenderer = (nodeArgs, options) =>
+  nodeArgs.length === 2
+    ? `P(A \\mid B)=\\frac{${texOf(nodeArgs[0], options)}}{${texOf(nodeArgs[1], options)}}`
+    : undefined;
+
+/**
+ * `binomial(n,k,p)` -> "P(X=k)=\binom{n}{k}(p)^{k}(1-p)^{n-k}". O expoente
+ * `n-k` do segundo fator precisa do VALOR (não só do texto digitado) — "10"
+ * e "3" não bastam para escrever "7" sem uma subtração real —, por isso
+ * exige `n`/`k` numéricos (`constantNumber`); `p` nunca precisa disso, só é
+ * ecoado via `texOf` como os outros. Símbolo/expressão em `n`/`k` (fora do
+ * que este domínio aceita) devolve `undefined` — cai no fallback genérico
+ * em vez de "adivinhar" um expoente.
+ */
+const binomialLatex: CombinatoricsRenderer = (nodeArgs, options) => {
+  if (nodeArgs.length !== 3) return undefined;
+  const [nNode, kNode, pNode] = nodeArgs;
+  const n = constantNumber(nNode);
+  const k = constantNumber(kNode);
+  if (n === null || k === null) return undefined;
+
+  const kLatex = texOf(kNode, options);
+  const nLatex = texOf(nNode, options);
+  const pLatex = texOf(pNode, options);
+  return `P(X=${kLatex})=\\binom{${nLatex}}{${kLatex}}(${pLatex})^{${kLatex}}(1-${pLatex})^{${n - k}}`;
+};
+
+const abstractProbability = (arity: number, latex: string): CombinatoricsRenderer => (nodeArgs) =>
+  nodeArgs.length === arity ? latex : undefined;
+
+/**
+ * `complementar`/`uniao`/`intersecao_independente` permanecem ABSTRATAS de
+ * propósito (fora do escopo da Sprint V2.8.1): `complementar(0.3)` mostra
+ * "P(A^{c})", nunca "P(0.3^{c})" — os valores só entram na dedução depois
+ * de resolvido (cadeia do backend, reconhecida à parte por
+ * `probabilityResultHeadToLatex` abaixo).
+ */
+const PROBABILITY_LATEX: Record<string, CombinatoricsRenderer> = {
+  probabilidade: probabilityLatex,
+  complementar: abstractProbability(1, "P(A^{c})"),
+  uniao: abstractProbability(3, "P(A\\cup B)"),
+  intersecao_independente: abstractProbability(2, "P(A\\cap B)"),
+  condicional: conditionalLatex,
+  binomial: binomialLatex,
 };
 
 /**
@@ -447,7 +503,7 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
   }
 
   if (name !== null && name in PROBABILITY_LATEX) {
-    const rendered = PROBABILITY_LATEX[name](nodeArgs.length);
+    const rendered = PROBABILITY_LATEX[name](nodeArgs, options);
     if (rendered !== undefined) return rendered;
   }
 
