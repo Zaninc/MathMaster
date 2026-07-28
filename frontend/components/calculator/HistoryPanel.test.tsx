@@ -341,6 +341,104 @@ describe("HistoryPanel", () => {
     expect(annotations.some((latex) => latex.includes("=1680"))).toBe(true);
   });
 
+  // --- Sprint V2.8 (Motor de Probabilidade) — mesmo hotfix pós-V2.7.1: a
+  // notação abstrata do preview ("P(A)") e a cabeça da cadeia do backend
+  // ("P(A) = ...") produzem o MESMO LaTeX, então `resultEchoesExpression`
+  // colapsa em uma única fórmula, sem duplicar a cabeça.
+
+  it("probabilidade clássica: cadeia única, sem 'P(A) = P(A) = ...'", async () => {
+    const { container } = render(
+      <HistoryPanel
+        items={[item("probabilidade(3,10)", "P(A) = 3/10 = 0.3", "2026-01-01T00:00:00Z")]}
+        hiddenTimestamps={new Set()}
+        onSelect={NOOP}
+        onHide={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(1));
+    const [chain] = normalizedAnnotations(container);
+    expect(chain.startsWith("P(A)=")).toBe(true);
+    expect(chain).toContain("=0.3");
+    expect(chain.match(/P\(A\)/g)).toHaveLength(1);
+  });
+
+  it("complementar: cadeia única com o sobrescrito 'c', sem duplicar a cabeça", async () => {
+    const { container } = render(
+      <HistoryPanel
+        items={[item("complementar(0.3)", "P(Aᶜ) = 1-0.3 = 0.7", "2026-01-01T00:00:00Z")]}
+        hiddenTimestamps={new Set()}
+        onSelect={NOOP}
+        onHide={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(1));
+    const [chain] = normalizedAnnotations(container);
+    expect(chain.startsWith("P(A^{c})=")).toBe(true);
+    expect(chain).toContain("=0.7");
+  });
+
+  it("binomial: preview mostra a fórmula geral, resultado mostra a dedução específica (não colapsam — 'P(X=k)' != 'P(X=3)')", async () => {
+    // Diferente das outras cinco operações (preview == cabeça do
+    // resultado, então `resultEchoesExpression` colapsa em uma cadeia
+    // só), o preview de binomial é a fórmula GERAL abstrata
+    // ("P(X=k) = ..."), pedida explicitamente no escopo da sprint — nunca
+    // igual à cabeça ESPECÍFICA da dedução ("P(X=3) = ..."). Mesmo
+    // contrato de "permutação com repetição" em combinatória (resultado
+    // sem cabeça de texto puro correspondente): "expressão = resultado"
+    // continua correto, sem duplicação real (as duas cadeias são
+    // diferentes por construção).
+    const { container } = render(
+      <HistoryPanel
+        items={[
+          item(
+            "binomial(10,3,0.5)",
+            "P(X=3) = C(10,3)*0.5³*0.5⁷ = 120*0.125*0.0078125 = 0.1171875",
+            "2026-01-01T00:00:00Z"
+          ),
+        ]}
+        hiddenTimestamps={new Set()}
+        onSelect={NOOP}
+        onHide={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
+    const annotations = normalizedAnnotations(container);
+    expect(annotations.some((latex) => latex.includes("P(X=k)"))).toBe(true);
+    expect(annotations.some((latex) => latex.includes("\\binom{n}{k}"))).toBe(true);
+    expect(annotations.some((latex) => latex.includes("P(X=3)"))).toBe(true);
+    expect(annotations.some((latex) => latex.includes("\\binom{10}{3}"))).toBe(true);
+    expect(annotations.some((latex) => latex.includes("=0.1171875"))).toBe(true);
+  });
+
+  it("independentes: resultado sem notação KaTeX dedicada cai no texto puro, sem lançar", async () => {
+    // O resultado de `independentes(...)` não casa nenhuma cabeça
+    // reconhecida (não é uma dedução "P(...) = ..." de fórmula única) —
+    // `resultToLatex` devolve null e o componente mostra o texto cru
+    // (ver `HistoryPanel.tsx`: `segments === null` -> `<span>{result}</span>`).
+    // A EXPRESSÃO digitada ainda renderiza via Tier 2 (nunca falha), então
+    // ainda há 1 KaTeX (o eco de "independentes(...)"), não 0.
+    const { container } = render(
+      <HistoryPanel
+        items={[
+          item(
+            "independentes(0.5,0.2,0.1)",
+            "P(A)*P(B) = 0.5*0.2 = 0.1, P(A∩B) = 0.1 -> Eventos independentes",
+            "2026-01-01T00:00:00Z"
+          ),
+        ]}
+        hiddenTimestamps={new Set()}
+        onSelect={NOOP}
+        onHide={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.textContent).toContain("Eventos independentes"));
+    expect(container.querySelectorAll(".katex").length).toBe(1);
+  });
+
   it("resultado simples (equação) continua com expressão = soluções separadas", async () => {
     const { container } = render(
       <HistoryPanel

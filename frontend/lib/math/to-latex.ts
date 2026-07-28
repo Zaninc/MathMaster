@@ -345,6 +345,26 @@ const COMBINATORICS_LATEX: Record<string, CombinatoricsRenderer> = {
 };
 
 /**
+ * Sprint V2.8 (Motor de Probabilidade) — diferente de combinatória (que usa
+ * os ARGUMENTOS reais na notação, ex. combinacao(10,3) -> \binom{10}{3}),
+ * aqui a pré-visualização é sempre ABSTRATA: `probabilidade(3,10)` mostra
+ * "P(A)", nunca "P(3,10)" — os valores só entram na dedução depois de
+ * resolvido (cadeia do backend, reconhecida à parte por
+ * `probabilityResultHeadToLatex` abaixo, já que "Aᶜ"/"∪"/"∩"/"|" caem fora
+ * do que o mathjs tokeniza como uma única expressão). Por isso a tabela
+ * ignora os argumentos, só verificando a ARIDADE — nunca "adivinha" uma
+ * chamada com o número errado de parâmetros.
+ */
+const PROBABILITY_LATEX: Record<string, (arity: number) => string | undefined> = {
+  probabilidade: (n) => (n === 2 ? "P(A)" : undefined),
+  complementar: (n) => (n === 1 ? "P(A^{c})" : undefined),
+  uniao: (n) => (n === 3 ? "P(A\\cup B)" : undefined),
+  intersecao_independente: (n) => (n === 2 ? "P(A\\cap B)" : undefined),
+  condicional: (n) => (n === 2 ? "P(A \\mid B)" : undefined),
+  binomial: (n) => (n === 3 ? "P(X=k) = \\binom{n}{k}p^{k}(1-p)^{n-k}" : undefined),
+};
+
+/**
  * Handler passado ao `toTex` do mathjs — cobre só o vocabulário do produto
  * e os wrappers de cálculo; todo o resto (frações, raízes, potências,
  * trigonometria canônica, matrizes) fica com o serializer default do
@@ -423,6 +443,11 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
 
   if (name !== null && name in COMBINATORICS_LATEX) {
     const rendered = COMBINATORICS_LATEX[name](nodeArgs, options);
+    if (rendered !== undefined) return rendered;
+  }
+
+  if (name !== null && name in PROBABILITY_LATEX) {
+    const rendered = PROBABILITY_LATEX[name](nodeArgs.length);
     if (rendered !== undefined) return rendered;
   }
 
@@ -648,6 +673,9 @@ export async function expressionToLatex(text: string): Promise<string | null> {
   const trimmed = text.trim();
   const sigmaSum = await sigmaSumToLatex(trimmed);
   if (sigmaSum !== null) return sigmaSum;
+
+  const probabilityHead = await probabilityResultHeadToLatex(trimmed);
+  if (probabilityHead !== null) return probabilityHead;
 
   if (trimmed.includes(MATRIX_LITERAL_PREFIX) && MULTI_STATEMENT_MARKER.test(trimmed)) {
     return singleExpressionToLatex(trimmed);
@@ -887,6 +915,46 @@ async function sigmaSumToLatex(trimmed: string): Promise<string | null> {
   return `\\sum_{${variable}=${lower}}^{${upper}} ${bodyLatex}`;
 }
 
+/**
+ * Sprint V2.8 (Motor de Probabilidade) — a cadeia de dedução que o backend
+ * devolve para cinco das sete operações usa uma cabeça "P(...)" com
+ * caracteres fora do que o Tier 1 (mathjs) tokeniza como uma ÚNICA
+ * expressão: "Aᶜ" (sobrescrito de LETRA — `SUPERSCRIPT_TO_ASCII` só
+ * traduz dígitos), "∪"/"∩"/"|" (fora de `SAFE_CHARSET`, e mesmo se
+ * estivesse, "|" seria lido como OU bit a bit pelo mathjs, não como "dado
+ * que"). A cabeça do binomial ("P(X=3)") tem um problema estrutural
+ * diferente: o "=" DENTRO dos parênteses seria cortado pelo split ingênuo
+ * de `EQUATION_SPLIT` em `expressionToLatex` (não é sensível a
+ * profundidade de parênteses), quebrando em "P(X" e "3)" — pedaços
+ * inválidos.
+ *
+ * Mesma técnica de `sigmaSumToLatex`/`parsePolarForm`: casa a cabeça EXATA
+ * que `probability/formatter.py` produz, converte para LaTeX diretamente
+ * (nunca via mathjs) e delega o RESTO da cadeia — que já não contém
+ * nenhum desses caracteres — para o pipeline genérico via recursão.
+ * `null` = cabeça não reconhecida (cai para o pipeline normal) ou resto
+ * malformado (fail-closed, mesmo contrato de sigmaSumToLatex).
+ */
+const PROBABILITY_RESULT_HEADS: { pattern: RegExp; latex: (m: RegExpMatchArray) => string }[] = [
+  { pattern: /^P\(A\)\s*=\s*/, latex: () => "P(A)" },
+  { pattern: /^P\(Aᶜ\)\s*=\s*/, latex: () => "P(A^{c})" },
+  { pattern: /^P\(A∪B\)\s*=\s*/, latex: () => "P(A\\cup B)" },
+  { pattern: /^P\(A∩B\)\s*=\s*/, latex: () => "P(A\\cap B)" },
+  { pattern: /^P\(A\|B\)\s*=\s*/, latex: () => "P(A \\mid B)" },
+  { pattern: /^P\(X=(\d+)\)\s*=\s*/, latex: (m) => `P(X=${m[1]})` },
+];
+
+async function probabilityResultHeadToLatex(trimmed: string): Promise<string | null> {
+  for (const { pattern, latex } of PROBABILITY_RESULT_HEADS) {
+    const match = trimmed.match(pattern);
+    if (!match) continue;
+    const rest = trimmed.slice(match[0].length);
+    const restLatex = await expressionToLatex(rest);
+    return restLatex === null ? null : `${latex(match)} = ${restLatex}`;
+  }
+  return null;
+}
+
 async function boundsToLatex(raw: string, table: Record<string, string> | null): Promise<string | null> {
   const ascii = table === null ? raw : translateRun(raw, table);
   return ascii === null ? null : singleExpressionToLatex(ascii);
@@ -1019,6 +1087,11 @@ const PREVIEW_UNARY_LATEX: Record<string, (arg: string) => string> = {
   fat: (a) => (/^[0-9A-Za-z]*$/.test(a) ? `${a}!` : `\\left(${a}\\right)!`),
   permutacao: (a) => `P_{${a}}`,
   "permutação": (a) => `P_{${a}}`,
+  // Sprint V2.8 (Motor de Probabilidade) — mesma notação ABSTRATA de
+  // `PROBABILITY_LATEX` (Tier 1), duplicada aqui de propósito (o Tier 2
+  // nunca importa do Tier 1). Ignora o argumento digitado — a notação
+  // nunca depende do valor real (ver docstring de `PROBABILITY_LATEX`).
+  complementar: () => "P(A^{c})",
 };
 
 /** Nome da função conhecida -> comando LaTeX "cru" (sem argumento), para o caso de chamada incompleta ("log(" ainda sem fechar). */
@@ -1068,6 +1141,16 @@ const PERMUTATION_REPETITION_NAMES = new Set([
   "permutação_repeticao",
 ]);
 
+// Sprint V2.8 (Motor de Probabilidade) — sem grafia acentuada (nenhum nome
+// do vocabulário leva acento, ver `probability/parsing.py`), então cada
+// Set tem uma única entrada — mantidos como Set, não string, para o mesmo
+// formato de checagem `.has(name)` usado pelas outras áreas acima.
+const PROBABILITY_NAMES = new Set(["probabilidade"]);
+const UNIAO_NAMES = new Set(["uniao"]);
+const INTERSECAO_INDEPENDENTE_NAMES = new Set(["intersecao_independente"]);
+const CONDICIONAL_NAMES = new Set(["condicional"]);
+const BINOMIAL_NAMES = new Set(["binomial"]);
+
 const PREVIEW_IDENTIFIER = /^[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*/;
 const PREVIEW_SUPERSCRIPT_RUN = /^[⁰¹²³⁴⁵⁶⁷⁸⁹⁻ⁿ]+/;
 const PREVIEW_SUBSCRIPT_RUN = /^[₀₁₂₃₄₅₆₇₈₉₋]+/;
@@ -1112,6 +1195,24 @@ function renderCall(name: string, argsText: string): string {
   }
   if (PERMUTATION_REPETITION_NAMES.has(name) && args.length >= 2) {
     return `P_{${args[0]}}^{${args.slice(1).join(",")}}`;
+  }
+  // Sprint V2.8 (Motor de Probabilidade) — mesma notação ABSTRATA do Tier 1
+  // (`PROBABILITY_LATEX`), duplicada de propósito; ignora `args` (a
+  // notação nunca depende do valor real digitado).
+  if (PROBABILITY_NAMES.has(name) && args.length === 2) {
+    return "P(A)";
+  }
+  if (UNIAO_NAMES.has(name) && args.length === 3) {
+    return "P(A\\cup B)";
+  }
+  if (INTERSECAO_INDEPENDENTE_NAMES.has(name) && args.length === 2) {
+    return "P(A\\cap B)";
+  }
+  if (CONDICIONAL_NAMES.has(name) && args.length === 2) {
+    return "P(A \\mid B)";
+  }
+  if (BINOMIAL_NAMES.has(name) && args.length === 3) {
+    return "P(X=k) = \\binom{n}{k}p^{k}(1-p)^{n-k}";
   }
 
   const label = name.length < 3 ? escapeLatexText(name) : `\\operatorname{${escapeLatexText(name)}}`;

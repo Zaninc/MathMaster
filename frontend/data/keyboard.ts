@@ -334,6 +334,66 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
     ],
   },
   {
+    // Sprint V2.8 (Motor de Probabilidade) — mesmo contrato da aba de
+    // Combinatória logo acima: o rótulo/LaTeX mostra a notação abstrata
+    // (P(A), P(A∪B)...), mas o texto INSERIDO é sempre o template ASCII
+    // com parênteses/vírgulas vazios e cursor posicionado logo após "(",
+    // pronto para o primeiro argumento.
+    id: "probabilidade",
+    label: "Probabilidade",
+    keys: [
+      {
+        label: "P(A)",
+        insert: "probabilidade(,)",
+        cursorOffset: "probabilidade(".length,
+        ariaLabel: "Inserir probabilidade clássica",
+        latex: "P(A)",
+      },
+      {
+        label: "P(Aᶜ)",
+        insert: "complementar()",
+        cursorOffset: "complementar(".length,
+        ariaLabel: "Inserir complementar",
+        latex: "P(A^{c})",
+      },
+      {
+        label: "P(A∪B)",
+        insert: "uniao(,,)",
+        cursorOffset: "uniao(".length,
+        ariaLabel: "Inserir união de eventos",
+        latex: "P(A\\cup B)",
+      },
+      {
+        label: "P(A∩B)",
+        insert: "intersecao_independente(,)",
+        cursorOffset: "intersecao_independente(".length,
+        ariaLabel: "Inserir interseção de eventos independentes",
+        latex: "P(A\\cap B)",
+      },
+      {
+        label: "P(A|B)",
+        insert: "condicional(,)",
+        cursorOffset: "condicional(".length,
+        ariaLabel: "Inserir probabilidade condicional",
+        latex: "P(A \\mid B)",
+      },
+      {
+        label: "A⊥B?",
+        insert: "independentes(,,)",
+        cursorOffset: "independentes(".length,
+        ariaLabel: "Verificar independência de eventos",
+        latex: "P(A\\cap B)=P(A)\\cdot P(B)",
+      },
+      {
+        label: "Binomial",
+        insert: "binomial(,,)",
+        cursorOffset: "binomial(".length,
+        ariaLabel: "Inserir distribuição binomial",
+        latex: "\\binom{n}{k}p^{k}(1-p)^{n-k}",
+      },
+    ],
+  },
+  {
     id: "simbolos",
     label: "Símbolos",
     keys: [

@@ -28,6 +28,10 @@ from .polynomials.dispatcher import (
     is_polynomial_domain_expression,
     solve_polynomial_text,
 )
+from .probability.dispatcher import (
+    is_probability_domain_expression,
+    solve_probability_text,
+)
 from .safe_parsing import safe_parse_expr
 from .summation.dispatcher import (
     is_summation_domain_expression,
@@ -111,6 +115,14 @@ def solve_expression(expression: str) -> str:
     # álgebra (fallback), intocados. Ver `combinatorics/dispatcher.py`.
     if is_combinatorics_domain_expression(expression):
         return solve_combinatorics_text(expression)
+
+    # Sprint V2.8 — mesma família de chamada nomeada ancorada de
+    # combinatorics acima ("probabilidade(3,10)", "binomial(10,3,0.5)"...),
+    # posicionada logo depois por ser a mesma convenção. `binomial(...)`
+    # reutiliza `combinatorics.evaluator.evaluate_combination` diretamente
+    # (nunca recalcula C(n,k) na mão) — ver `probability/dispatcher.py`.
+    if is_probability_domain_expression(expression):
+        return solve_probability_text(expression)
 
     # Sprint 12 — precisa vir antes de functions/trigonometry/logarithms:
     # essas áreas casam "sin("/"log(" em qualquer posição do texto, o que

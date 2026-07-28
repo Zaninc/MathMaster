@@ -32,10 +32,17 @@ Este módulo fecha essa brecha em quatro camadas independentes:
 3. Whitelist de caracteres permitidos — rejeita aspas, crase e barra
    invertida (nenhuma expressão matemática legítima usa literais de
    string) e qualquer símbolo fora do conjunto usado pelos dispatchers
-   atuais. `.` foi removido deliberadamente: nenhum caso legítimo hoje
-   testado usa número decimal (confirmado por varredura de todos os casos
-   de regressão); se um domínio futuro precisar de decimais, o caractere
-   deve voltar aqui com um teste que o justifique.
+   atuais. `.` foi reintroduzido na Sprint V2.8 (Motor de Probabilidade —
+   `probabilidade(3,10)`/`complementar(0.3)`/etc. exigem literais decimais
+   como argumento) exatamente como esta docstring antecipava: nenhum caso
+   legítimo testado antes dependia de "." estar ausente por segurança — o
+   único teste que dependia disso (`test_rejects_attribute_access`,
+   payload "x.foo") continua rejeitando o payload pelo motivo já existente
+   (`_reject_ambiguous_identifiers` recusa o identificador de 3 letras
+   "foo"), então a remoção não abre nenhuma brecha nova. Ponto decimal
+   solto sem dígito ao redor (ex. só ".") ou malformado (ex. "1..2") ainda
+   falha no `_sympy_parse_expr` normal, convertido em `ExpressionError`
+   pelo catch-all no fim de `safe_parse_expr`.
 4. Validação estrutural dos delimitadores `()[]{}` com pilha: rejeita
    fechamento sem abertura, pares incompatíveis (ex. "(0]") e delimitador
    não fechado, além de aplicar `settings.max_expression_nesting_depth` —
@@ -169,7 +176,7 @@ _SAFE_GLOBAL_DICT: dict = {
 }
 
 _FORBIDDEN_SUBSTRINGS = ("__",)
-_ALLOWED_CHARS_PATTERN = re.compile(r"^[0-9A-Za-z_+\-*/^%,()\[\]{}=<>!:\s]*$")
+_ALLOWED_CHARS_PATTERN = re.compile(r"^[0-9A-Za-z_+\-*/^%,.()\[\]{}=<>!:\s]*$")
 _BRACKET_PAIRS = {")": "(", "]": "[", "}": "{"}
 _OPENERS = set(_BRACKET_PAIRS.values())
 _CLOSERS = set(_BRACKET_PAIRS.keys())

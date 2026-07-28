@@ -73,6 +73,10 @@ export const QUICK_EXAMPLES: QuickExample[] = [
   // quantidade" (regra explícita da sprint) — a operação continua 100%
   // suportada, só deixou de ocupar espaço na Home.
   { label: "fatorar(x²-9)", expression: "fatorar(x²-9)" },
+  // Sprint V2.8 — Motor de Probabilidade. Os dois exemplos exatos pedidos
+  // na seção EXEMPLOS do escopo da sprint para a Home.
+  { label: "probabilidade(3,10)", expression: "probabilidade(3,10)" },
+  { label: "binomial(10,3,0.5)", expression: "binomial(10,3,0.5)" },
 ];
 
 /**
@@ -105,6 +109,10 @@ export const QUICK_EXAMPLES: QuickExample[] = [
  * Sprint V2.7 — Motor de Combinatória: 4 exemplos (fatorial, combinação,
  * arranjo, permutação), a lista exata pedida na seção EXEMPLOS do escopo
  * da sprint (15 → 19).
+ *
+ * Sprint V2.8 — Motor de Probabilidade: 3 exemplos (probabilidade,
+ * binomial, condicional), a lista exata pedida na seção EXEMPLOS do
+ * escopo da sprint (19 → 22).
  */
 export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "x² - 4 = 0", expression: "x² - 4 = 0" },
@@ -126,6 +134,9 @@ export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "combinacao(10,3)", expression: "combinacao(10,3)" },
   { label: "arranjo(8,3)", expression: "arranjo(8,3)" },
   { label: "permutacao(6)", expression: "permutacao(6)" },
+  { label: "probabilidade(3,10)", expression: "probabilidade(3,10)" },
+  { label: "binomial(10,3,0.5)", expression: "binomial(10,3,0.5)" },
+  { label: "condicional(0.2,0.5)", expression: "condicional(0.2,0.5)" },
 ];
 
 export interface QuickShortcut {

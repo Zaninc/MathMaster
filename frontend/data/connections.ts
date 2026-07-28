@@ -427,6 +427,24 @@ export function isCombinatoricsOperation(expression: string): boolean {
 }
 
 /**
+ * Sprint V2.8 (Motor de Probabilidade) — mesmo critério do backend
+ * (`probability/dispatcher.py:is_probability_domain_expression`, via
+ * `parsing.match_probability_call`): chamada a uma das sete operações,
+ * detectada em qualquer posição do texto. Sem aliases acentuados (nenhum
+ * nome do vocabulário leva acento, ver `probability/parsing.py`) e sem
+ * apelidos de livro didático (diferente de C/A/P em combinatória, não há
+ * letra isolada consagrada para probabilidade) — todo o vocabulário já é
+ * ASCII puro, então um único padrão basta, sem risco de colidir com
+ * `isCombinatoricsOperation` (nomes disjuntos nas duas listas).
+ */
+const PROBABILITY_FUNCTION_PATTERN =
+  /\b(probabilidade|complementar|uniao|intersecao_independente|condicional|independentes|binomial)\s*\(/;
+
+export function isProbabilityOperation(expression: string): boolean {
+  return PROBABILITY_FUNCTION_PATTERN.test(expression);
+}
+
+/**
  * Sprint V2.2.1 (Variáveis Locais para Matrizes) — a expressão INTEIRA já
  * É uma chamada pronta a det/trace (canônico ou alias PT-BR), ex.
  * "det(A)". Usado para decidir quando OMITIR "Ver propriedades": compor
@@ -625,6 +643,25 @@ export function getCalculatorExplorations(expression: string): RelatedLink[] {
         icon: "📚",
         label: "Ver fórmulas relacionadas",
         href: formulasLink({ categoria: "combinatoria" }),
+      },
+      { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-basica") },
+    ];
+  }
+
+  // Sprint V2.8 (Motor de Probabilidade) — checado logo depois de
+  // `isCombinatoricsOperation`, mesma posição da cascata do backend
+  // (`math_engine/dispatcher.py`: probability entra depois de
+  // combinatorics, antes de calculus/functions/trigonometry/logarithms/
+  // equations). Destino válido garantido: a categoria "probabilidade"
+  // existe em `data/formulas.ts` (V2.8); "algebra-basica" reaproveitado
+  // como tópico de Aprendizado pelo mesmo motivo de V2.6/V2.7 — não há
+  // tópico de probabilidade seedado ainda.
+  if (isProbabilityOperation(finalStatement)) {
+    return [
+      {
+        icon: "📚",
+        label: "Ver fórmulas relacionadas",
+        href: formulasLink({ categoria: "probabilidade" }),
       },
       { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-basica") },
     ];

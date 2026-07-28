@@ -18,7 +18,8 @@ export type FormulaCategoryId =
   | "somatorios"
   | "algebra-linear"
   | "numeros-complexos"
-  | "combinatoria";
+  | "combinatoria"
+  | "probabilidade";
 
 export const FORMULA_CATEGORY_LABELS: Record<FormulaCategoryId, string> = {
   algebra: "Álgebra",
@@ -29,6 +30,7 @@ export const FORMULA_CATEGORY_LABELS: Record<FormulaCategoryId, string> = {
   "algebra-linear": "Álgebra Linear",
   "numeros-complexos": "Números Complexos",
   combinatoria: "Combinatória",
+  probabilidade: "Probabilidade",
 };
 
 export interface FormulaEntry {
@@ -514,5 +516,45 @@ export const FORMULAS: FormulaEntry[] = [
     title: "Permutação com repetição",
     latex: String.raw`P_n^{a,b,\ldots} = \frac{n!}{a!\,b!\cdots}`,
     category: "combinatoria",
+  },
+  // Sprint V2.8 — Motor de Probabilidade. Mesmo padrão de "combinatoria"
+  // acima: categoria nova ao final do array, notação alinhada com o motor
+  // (`probability/formatter.py`) e com o teclado (P(A), P(A^c), P(A∪B),
+  // P(A∩B), P(A|B), \binom{n}{k}p^k(1-p)^{n-k}).
+  {
+    id: "probabilidade-classica",
+    title: "Probabilidade Clássica",
+    latex: String.raw`P(A) = \dfrac{\text{casos favoráveis}}{\text{casos possíveis}}`,
+    category: "probabilidade",
+  },
+  {
+    id: "complementar",
+    title: "Complementar",
+    latex: String.raw`P(A^{c}) = 1 - P(A)`,
+    category: "probabilidade",
+  },
+  {
+    id: "uniao-eventos",
+    title: "União",
+    latex: String.raw`P(A\cup B) = P(A) + P(B) - P(A\cap B)`,
+    category: "probabilidade",
+  },
+  {
+    id: "intersecao-eventos-independentes",
+    title: "Interseção (Eventos Independentes)",
+    latex: String.raw`P(A\cap B) = P(A)\cdot P(B)`,
+    category: "probabilidade",
+  },
+  {
+    id: "probabilidade-condicional",
+    title: "Probabilidade Condicional",
+    latex: String.raw`P(A\mid B) = \dfrac{P(A\cap B)}{P(B)}`,
+    category: "probabilidade",
+  },
+  {
+    id: "distribuicao-binomial",
+    title: "Distribuição Binomial",
+    latex: String.raw`P(X=k) = \binom{n}{k}p^{k}(1-p)^{n-k}`,
+    category: "probabilidade",
   },
 ];

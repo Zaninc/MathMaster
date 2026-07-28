@@ -277,10 +277,13 @@ describe("KEYBOARD_CATEGORIES", () => {
 
   // --- Sprint V2.7 (Motor de Combinatória) -------------------------------
 
-  it("a aba Combinatória existe, entre Geometria e Símbolos, com as 5 teclas da sprint", () => {
+  it("a aba Combinatória existe, entre Geometria e Probabilidade, com as 5 teclas da sprint", () => {
     const ids = KEYBOARD_CATEGORIES.map((category) => category.id);
     expect(ids.indexOf("combinatoria")).toBe(ids.indexOf("geometria") + 1);
-    expect(ids.indexOf("simbolos")).toBe(ids.indexOf("combinatoria") + 1);
+    // Sprint V2.8 — "probabilidade" entra logo depois de "combinatoria",
+    // empurrando "simbolos" mais uma posição (ver bloco de testes dedicado
+    // abaixo, "Sprint V2.8 (Motor de Probabilidade)").
+    expect(ids.indexOf("probabilidade")).toBe(ids.indexOf("combinatoria") + 1);
 
     const combinatoria = KEYBOARD_CATEGORIES.find((category) => category.id === "combinatoria");
     expect(combinatoria?.label).toBe("Combinatória");
@@ -337,5 +340,67 @@ describe("KEYBOARD_CATEGORIES", () => {
         expect(key.insert, `${category.id}/${key.label}`).not.toMatch(/^[*/+\-^]+$/);
       }
     }
+  });
+
+  // --- Sprint V2.8 (Motor de Probabilidade) -------------------------------
+
+  it("a aba Probabilidade existe, entre Combinatória e Símbolos, com as 7 teclas da sprint", () => {
+    const ids = KEYBOARD_CATEGORIES.map((category) => category.id);
+    expect(ids.indexOf("simbolos")).toBe(ids.indexOf("probabilidade") + 1);
+
+    const probabilidade = KEYBOARD_CATEGORIES.find((category) => category.id === "probabilidade");
+    expect(probabilidade?.label).toBe("Probabilidade");
+    expect(probabilidade?.keys.map((key) => key.insert)).toEqual([
+      "probabilidade(,)",
+      "complementar()",
+      "uniao(,,)",
+      "intersecao_independente(,)",
+      "condicional(,)",
+      "independentes(,,)",
+      "binomial(,,)",
+    ]);
+  });
+
+  it("tecla unária de probabilidade insere parênteses vazios com cursor dentro", () => {
+    const probabilidade = KEYBOARD_CATEGORIES.find((category) => category.id === "probabilidade");
+    const key = probabilidade?.keys.find((candidate) => candidate.insert === "complementar()");
+    expect(key).toBeDefined();
+    expect(key!.insert[key!.cursorOffset - 1]).toBe("(");
+    expect(key!.insert[key!.cursorOffset]).toBe(")");
+    expect(key!.ariaLabel).toBeDefined();
+    expect(key!.latex).toBeDefined();
+  });
+
+  it("teclas binárias/variádicas de probabilidade inserem o template com vírgula e cursor no primeiro argumento", () => {
+    const probabilidade = KEYBOARD_CATEGORIES.find((category) => category.id === "probabilidade");
+    for (const insert of [
+      "probabilidade(,)",
+      "uniao(,,)",
+      "intersecao_independente(,)",
+      "condicional(,)",
+      "independentes(,,)",
+      "binomial(,,)",
+    ]) {
+      const key = probabilidade?.keys.find((candidate) => candidate.insert === insert);
+      expect(key, insert).toBeDefined();
+      expect(key!.insert[key!.cursorOffset - 1]).toBe("(");
+      expect(key!.insert[key!.cursorOffset]).toBe(",");
+      expect(key!.ariaLabel).toBeDefined();
+      expect(key!.latex).toBeDefined();
+    }
+  });
+
+  it("teclas de probabilidade inserem sempre a forma ASCII e mostram a notação abstrata", () => {
+    const probabilidade = KEYBOARD_CATEGORIES.find((category) => category.id === "probabilidade");
+    for (const key of probabilidade?.keys ?? []) {
+      expect(key.insert, key.label).toMatch(/^[a-z_(),]+$/);
+    }
+    const latexByInsert = new Map(probabilidade?.keys.map((key) => [key.insert, key.latex]));
+    expect(latexByInsert.get("probabilidade(,)")).toBe("P(A)");
+    expect(latexByInsert.get("complementar()")).toBe("P(A^{c})");
+    expect(latexByInsert.get("uniao(,,)")).toBe("P(A\\cup B)");
+    expect(latexByInsert.get("intersecao_independente(,)")).toBe("P(A\\cap B)");
+    expect(latexByInsert.get("condicional(,)")).toBe("P(A \\mid B)");
+    expect(latexByInsert.get("binomial(,,)")).toBe("\\binom{n}{k}p^{k}(1-p)^{n-k}");
   });
 });

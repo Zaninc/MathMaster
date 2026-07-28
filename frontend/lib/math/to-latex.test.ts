@@ -323,6 +323,30 @@ describe("expressionToLatex", () => {
     expect(normalized(await expressionToLatex("2.5"))).toBe("2.5");
   });
 
+  // --- Sprint V2.8 (Motor de Probabilidade) — notação ABSTRATA (nunca usa
+  // os argumentos reais, ver `PROBABILITY_LATEX`): a preview de
+  // "probabilidade(3,10)" mostra "P(A)", não "P(3,10)".
+
+  it("converte as chamadas de probabilidade para a notação abstrata P(A)/P(Aᶜ)/P(A∪B)/P(A∩B)/P(A|B)", async () => {
+    expect(normalized(await expressionToLatex("probabilidade(3,10)"))).toBe("P(A)");
+    expect(normalized(await expressionToLatex("complementar(0.3)"))).toBe("P(A^{c})");
+    expect(normalized(await expressionToLatex("uniao(0.4,0.5,0.2)"))).toBe("P(A\\cupB)");
+    expect(normalized(await expressionToLatex("intersecao_independente(0.5,0.3)"))).toBe(
+      "P(A\\capB)"
+    );
+    expect(normalized(await expressionToLatex("condicional(0.2,0.5)"))).toBe("P(A\\midB)");
+  });
+
+  it("converte binomial(...) para a fórmula geral \\binom{n}{k}p^k(1-p)^{n-k}", async () => {
+    const latex = normalized(await expressionToLatex("binomial(10,3,0.5)"));
+    expect(latex).toBe("P(X=k)=\\binom{n}{k}p^{k}(1-p)^{n-k}");
+  });
+
+  it("aridade errada de probabilidade não vira notação dedicada (fail-closed p/ o genérico)", async () => {
+    const latex = normalized(await expressionToLatex("probabilidade(3,10,5)"));
+    expect(latex).not.toBe("P(A)");
+  });
+
   // --- Sprint V2.4 (Sistemas Lineares) ------------------------------------
 
   it("converte um sistema linear (quebra de linha) em \\begin{cases}...\\end{cases}", async () => {
@@ -718,6 +742,77 @@ describe("resultToLatex", () => {
 
   it("sistema não linear indeterminado ('Sistema com infinitas soluções (indeterminado).') cai no fallback de texto puro, sem lançar", async () => {
     expect(await resultToLatex("Sistema com infinitas soluções (indeterminado).")).toBeNull();
+  });
+
+  // --- Sprint V2.8 (Motor de Probabilidade) — a cabeça "P(...)" da cadeia
+  // do backend usa caracteres fora do que o mathjs tokeniza como uma
+  // única expressão ("Aᶜ", "∪", "∩", "|", e o "=" DENTRO de "P(X=3)") —
+  // reconhecimento estrutural dedicado (`probabilityResultHeadToLatex`),
+  // não conversão genérica via mathjs. Ver docstring da função.
+
+  it("converte a dedução de probabilidade clássica (P(A) = 3/10 = 0.3)", async () => {
+    const segments = await resultToLatex("P(A) = 3/10 = 0.3");
+    expect(segments).toHaveLength(1);
+    const latex = normalized(segments![0].latex);
+    expect(latex).toContain("P(A)=");
+    expect(latex).toContain("\\frac{3}{10}");
+    expect(latex).toContain("=0.3");
+    assertRendersSafely(segments![0].latex!, "dedução de probabilidade clássica");
+  });
+
+  it("converte a dedução do complementar, com o sobrescrito 'c' (P(Aᶜ) = 1-0.3 = 0.7)", async () => {
+    const segments = await resultToLatex("P(Aᶜ) = 1-0.3 = 0.7");
+    expect(segments).toHaveLength(1);
+    const latex = normalized(segments![0].latex);
+    expect(latex).toContain("P(A^{c})=");
+    expect(latex).toContain("=0.7");
+    assertRendersSafely(segments![0].latex!, "dedução de complementar");
+  });
+
+  it("converte a dedução de união com \\cup (P(A∪B) = 0.4+0.5-0.2 = 0.7)", async () => {
+    const segments = await resultToLatex("P(A∪B) = 0.4+0.5-0.2 = 0.7");
+    expect(segments).toHaveLength(1);
+    const latex = normalized(segments![0].latex);
+    expect(latex).toContain("P(A\\cupB)=");
+    expect(latex).toContain("=0.7");
+    assertRendersSafely(segments![0].latex!, "dedução de união");
+  });
+
+  it("converte a dedução de interseção independente com \\cap (P(A∩B) = 0.5*0.3 = 0.15)", async () => {
+    const segments = await resultToLatex("P(A∩B) = 0.5*0.3 = 0.15");
+    expect(segments).toHaveLength(1);
+    const latex = normalized(segments![0].latex);
+    expect(latex).toContain("P(A\\capB)=");
+    expect(latex).toContain("=0.15");
+    assertRendersSafely(segments![0].latex!, "dedução de interseção independente");
+  });
+
+  it("converte a dedução condicional com \\mid, nunca '|' bruto (P(A|B) = 0.2/0.5 = 0.4)", async () => {
+    const segments = await resultToLatex("P(A|B) = 0.2/0.5 = 0.4");
+    expect(segments).toHaveLength(1);
+    const latex = normalized(segments![0].latex);
+    expect(latex).toContain("P(A\\midB)=");
+    expect(latex).not.toContain("|");
+    expect(latex).toContain("=0.4");
+    assertRendersSafely(segments![0].latex!, "dedução condicional");
+  });
+
+  it("converte a dedução binomial completa, incluindo o '=' interno da cabeça P(X=3)", async () => {
+    const segments = await resultToLatex(
+      "P(X=3) = C(10,3)*0.5³*0.5⁷ = 120*0.125*0.0078125 = 0.1171875"
+    );
+    expect(segments).toHaveLength(1);
+    const latex = normalized(segments![0].latex);
+    expect(latex).toContain("P(X=3)=");
+    expect(latex).toContain("\\binom{10}{3}");
+    expect(latex).toContain("=0.1171875");
+    assertRendersSafely(segments![0].latex!, "dedução binomial");
+  });
+
+  it("independentes(...) cai no fallback de texto puro (sem notação KaTeX dedicada), sem lançar", async () => {
+    expect(
+      await resultToLatex("P(A)*P(B) = 0.5*0.2 = 0.1, P(A∩B) = 0.1 -> Eventos independentes")
+    ).toBeNull();
   });
 });
 
@@ -1192,6 +1287,38 @@ describe("previewLatex (pipeline único da pré-visualização e do histórico)"
 
   it("digitação incompleta de combinatória nunca lança e sempre renderiza em segurança (Tier 2)", async () => {
     for (const input of ["combinacao(", "combinacao(10,", "arranjo(8", "fatorial(", "permutacao_repeticao(8,3,"]) {
+      const latex = await previewLatex(input);
+      expect(latex, input).not.toBeNull();
+      assertRendersSafely(latex as string, input);
+    }
+  });
+
+  // --- Sprint V2.8 (Motor de Probabilidade) -------------------------------
+
+  it("mostra a notação abstrata assim que a chamada de probabilidade fica completa", async () => {
+    expect(normalized(await previewLatex("probabilidade(3,10)"))).toBe("P(A)");
+    expect(normalized(await previewLatex("complementar(0.3)"))).toBe("P(A^{c})");
+    expect(normalized(await previewLatex("uniao(0.4,0.5,0.2)"))).toBe("P(A\\cupB)");
+    expect(normalized(await previewLatex("intersecao_independente(0.5,0.3)"))).toBe(
+      "P(A\\capB)"
+    );
+    expect(normalized(await previewLatex("condicional(0.2,0.5)"))).toBe("P(A\\midB)");
+    expect(normalized(await previewLatex("binomial(10,3,0.5)"))).toBe(
+      "P(X=k)=\\binom{n}{k}p^{k}(1-p)^{n-k}"
+    );
+  });
+
+  it("digitação incompleta de probabilidade nunca lança e sempre renderiza em segurança (Tier 2)", async () => {
+    for (const input of [
+      "probabilidade(",
+      "probabilidade(3,",
+      "complementar(",
+      "uniao(0.4,",
+      "intersecao_independente(0.5,",
+      "condicional(0.2,",
+      "independentes(0.5,0.2,",
+      "binomial(10,3,",
+    ]) {
       const latex = await previewLatex(input);
       expect(latex, input).not.toBeNull();
       assertRendersSafely(latex as string, input);

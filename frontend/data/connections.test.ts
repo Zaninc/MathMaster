@@ -13,6 +13,7 @@ import {
   isLinearSystem,
   isNonlinearSystem,
   isPolynomialOperation,
+  isProbabilityOperation,
 } from "./connections";
 
 describe("URL helpers", () => {
@@ -397,6 +398,37 @@ describe("getCalculatorExplorations", () => {
     expect(getCalculatorExplorations("5!")).toEqual([]);
   });
 
+  // --- Sprint V2.8 (Motor de Probabilidade) -------------------------------
+
+  it("chamada de probabilidade sugere fórmulas de Probabilidade e exercícios", () => {
+    const links = getCalculatorExplorations("probabilidade(3,10)");
+    expect(links).toEqual([
+      { icon: "📚", label: "Ver fórmulas relacionadas", href: formulasLink({ categoria: "probabilidade" }) },
+      { icon: "📝", label: "Exercícios semelhantes", href: exercisesLink("algebra-basica") },
+    ]);
+  });
+
+  it("todas as sete operações de probabilidade acionam o bloco", () => {
+    for (const call of [
+      "probabilidade(3,10)",
+      "complementar(0.3)",
+      "uniao(0.4,0.5,0.2)",
+      "intersecao_independente(0.5,0.3)",
+      "condicional(0.2,0.5)",
+      "independentes(0.5,0.2,0.1)",
+      "binomial(10,3,0.5)",
+    ]) {
+      const links = getCalculatorExplorations(call);
+      expect(links, call).toHaveLength(2);
+      expect(links[0].href, call).toBe(formulasLink({ categoria: "probabilidade" }));
+    }
+  });
+
+  it("probabilidade nunca colide com combinatória (cascata do backend replicada)", () => {
+    const links = getCalculatorExplorations("combinacao(10,3)");
+    expect(links[0].href).toBe(formulasLink({ categoria: "combinatoria" }));
+  });
+
   // --- Sprint V2.4 (Sistemas Lineares) ------------------------------------
 
   it("sistema linear (quebra de linha) sugere fórmula e exercícios de Álgebra Linear, sem 'Ver propriedades'", () => {
@@ -675,5 +707,36 @@ describe("isCombinatoricsOperation (Sprint V2.7)", () => {
     expect(isCombinatoricsOperation("fatorar(x²-9)")).toBe(false);
     expect(isCombinatoricsOperation("5!")).toBe(false);
     expect(isCombinatoricsOperation("2 + 2")).toBe(false);
+  });
+});
+
+describe("isProbabilityOperation (Sprint V2.8)", () => {
+  it("reconhece as sete operações", () => {
+    for (const call of [
+      "probabilidade(3,10)",
+      "complementar(0.3)",
+      "uniao(0.4,0.5,0.2)",
+      "intersecao_independente(0.5,0.3)",
+      "condicional(0.2,0.5)",
+      "independentes(0.5,0.2,0.1)",
+      "binomial(10,3,0.5)",
+    ]) {
+      expect(isProbabilityOperation(call), call).toBe(true);
+    }
+  });
+
+  it("reconhece a chamada em qualquer posição do texto (mesmo critério de combinatória)", () => {
+    expect(isProbabilityOperation("2*probabilidade(3,10)")).toBe(true);
+  });
+
+  it("nunca colide com combinatória (vocabulários disjuntos)", () => {
+    expect(isProbabilityOperation("combinacao(10,3)")).toBe(false);
+    expect(isProbabilityOperation("fatorial(6)")).toBe(false);
+    expect(isCombinatoricsOperation("probabilidade(3,10)")).toBe(false);
+  });
+
+  it("expressão sem nenhuma das sete operações não é reconhecida", () => {
+    expect(isProbabilityOperation("x^2 - 9")).toBe(false);
+    expect(isProbabilityOperation("2 + 2")).toBe(false);
   });
 });
