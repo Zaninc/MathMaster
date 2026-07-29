@@ -839,10 +839,35 @@ describe("resultToLatex", () => {
     assertRendersSafely(segments![0].latex!, "dedução binomial");
   });
 
-  it("independentes(...) cai no fallback de texto puro (sem notação KaTeX dedicada), sem lançar", async () => {
-    expect(
-      await resultToLatex("P(A)*P(B) = 0.5*0.2 = 0.1, P(A∩B) = 0.1 -> Eventos independentes")
-    ).toBeNull();
+  // --- Hotfix V2.8.1b (Resultado de independentes(...) em KaTeX) ---------
+
+  it("converte a dedução de independentes(...) (caso independente) em KaTeX, sem fallback de texto puro", async () => {
+    const segments = await resultToLatex(
+      "P(A)*P(B) = 0.5*0.2 = 0.1, P(A∩B) = 0.1 -> Eventos independentes"
+    );
+    expect(segments).toHaveLength(1);
+    expect(segments![0].latex).not.toBeNull();
+    const latex = normalized(segments![0].latex);
+    expect(latex).toContain("P(A)\\cdotP(B)");
+    expect(latex).toContain("P(A\\capB)=0.1");
+    expect(latex).toContain("\\therefore");
+    expect(latex).toContain("\\text{Eventosindependentes}");
+    expect(latex).not.toContain("*");
+    expect(latex).not.toContain("->");
+    assertRendersSafely(segments![0].latex!, "dedução de independentes (independente)");
+  });
+
+  it("converte a dedução de independentes(...) (caso dependente) em KaTeX, sem fallback de texto puro", async () => {
+    const segments = await resultToLatex(
+      "P(A)*P(B) = 0.2*1 = 0.2, P(A∩B) = 0.1 -> Eventos dependentes"
+    );
+    expect(segments).toHaveLength(1);
+    expect(segments![0].latex).not.toBeNull();
+    const latex = normalized(segments![0].latex);
+    expect(latex).toContain("P(A)\\cdotP(B)=0.2\\cdot1=0.2");
+    expect(latex).toContain("P(A\\capB)=0.1");
+    expect(latex).toContain("\\text{Eventosdependentes}");
+    assertRendersSafely(segments![0].latex!, "dedução de independentes (dependente)");
   });
 });
 

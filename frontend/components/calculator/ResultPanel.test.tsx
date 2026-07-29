@@ -794,3 +794,49 @@ describe("ResultPanel — variáveis locais de matriz (Sprint V2.2.1)", () => {
     expect(href).toContain("det(A)");
   });
 });
+
+describe("ResultPanel — probabilidade (Hotfix V2.8.1b)", () => {
+  it("renderiza a dedução de independentes(...) em KaTeX (nunca texto cru), incluindo o veredito", async () => {
+    const { container } = render(
+      <ResultPanel
+        status="success"
+        expression="independentes(0.5,0.2,0.1)"
+        result="P(A)*P(B) = 0.5*0.2 = 0.1, P(A∩B) = 0.1 -> Eventos independentes"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    expect(annotations.some((latex) => latex?.includes("\\therefore"))).toBe(true);
+    expect(annotations.some((latex) => latex?.includes("\\text{Eventos independentes}"))).toBe(
+      true
+    );
+    expect(screen.queryByText(/->/)).not.toBeInTheDocument();
+  });
+
+  it("veredito dependente também renderiza em KaTeX", async () => {
+    const { container } = render(
+      <ResultPanel
+        status="success"
+        expression="independentes(0.2,1,0.1)"
+        result="P(A)*P(B) = 0.2*1 = 0.2, P(A∩B) = 0.1 -> Eventos dependentes"
+        approx={null}
+        errorMessage={null}
+        errorId="err"
+        onRetry={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    expect(annotations.some((latex) => latex?.includes("\\text{Eventos dependentes}"))).toBe(true);
+  });
+});

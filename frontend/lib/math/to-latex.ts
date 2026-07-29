@@ -836,6 +836,17 @@ export async function valueToLatex(text: string): Promise<string | null> {
   const trimmed = text.trim();
   if (trimmed in SET_GLYPH_LATEX) return SET_GLYPH_LATEX[trimmed];
 
+  // Hotfix V2.8.1b — precisa vir ANTES do bloco "lista de igualdades
+  // separada por vírgula" logo abaixo: a dedução de `independentes(...)`
+  // tem DUAS cadeias com "=" unidas por vírgula ("P(A)*P(B) = ... = ...,
+  // P(A∩B) = ..."), então esse heurístico (pensado para várias soluções,
+  // ex. "x = 1, y = 2") a reconheceria erroneamente como uma lista comum
+  // e se comprometeria com ela — a conversão então falha no meio (a seta
+  // "->" e o veredito em texto não são mathjs válido) e nunca chega a
+  // tentar esta forma dedicada. Ver docstring de `independentesResultToLatex`.
+  const independentesResult = independentesResultToLatex(trimmed);
+  if (independentesResult !== null) return independentesResult;
+
   // Precisa vir ANTES de `pairToLatex`: o regex de tupla/intervalo aceita
   // "[...]" com exatamente duas partes separadas por vírgula de nível
   // mais alto — uma matriz de exatamente duas linhas ("[[1,2],[3,4]]")
@@ -1026,6 +1037,46 @@ async function probabilityResultHeadToLatex(trimmed: string): Promise<string | n
     return restLatex === null ? null : `${latex(match)} = ${restLatex}`;
   }
   return null;
+}
+
+/**
+ * Hotfix V2.8.1b — `independentes(...)` é a ÚNICA dedução de
+ * `probability/formatter.py` (`format_independentes`) com uma forma
+ * estrutural diferente das outras seis: duas cadeias de igualdade unidas
+ * por vírgula ("P(A)*P(B) = ... = ...", "P(A∩B) = ...") seguidas de um
+ * veredito em texto puro introduzido por uma seta ASCII ("-> Eventos
+ * independentes"/"-> Eventos dependentes"). Isso quebra o pipeline
+ * genérico em dois pontos:
+ *
+ * 1. `valueToLatex` — como AMBAS as cadeias contêm "=", o heurístico de
+ *    "lista de igualdades separada por vírgula" (pensado para várias
+ *    soluções, ex. "x = 1, y = 2") assume esta forma e se COMPROMETE com
+ *    ela, mesmo que a conversão falhe depois — nunca tenta outra forma.
+ * 2. A seta "->" não é um operador mathjs válido (`parse("0.1 -> texto")`
+ *    lança "Value expected") e o veredito ("Eventos dependentes") não tem
+ *    reconhecimento dedicado — juntos, fazem a segunda cadeia (mesmo
+ *    reconhecida por `probabilityResultHeadToLatex` via a cabeça
+ *    "P(A∩B) = ") retornar `null` no RESTO, derrubando a conversão
+ *    inteira.
+ *
+ * Mesma técnica de `parsePolarForm`/`PROBABILITY_RESULT_HEADS`: casa a
+ * forma EXATA e determinística que `format_independentes` produz (nunca
+ * digitada pelo usuário, só devolvida como resultado) e reconstrói em
+ * LaTeX diretamente — sem depender do mathjs para a multiplicação
+ * "P(A)*P(B)" nem para o veredito. `null` = forma não reconhecida (cai
+ * para o pipeline normal).
+ */
+const INDEPENDENTES_RESULT =
+  /^P\(A\)\*P\(B\)\s*=\s*(-?\d+(?:\.\d+)?)\*(-?\d+(?:\.\d+)?)\s*=\s*(-?\d+(?:\.\d+)?),\s*P\(A∩B\)\s*=\s*(-?\d+(?:\.\d+)?)\s*->\s*(Eventos (?:in)?dependentes)$/;
+
+function independentesResultToLatex(trimmed: string): string | null {
+  const match = trimmed.match(INDEPENDENTES_RESULT);
+  if (!match) return null;
+  const [, pa, pb, product, pinter, veredicto] = match;
+  return (
+    `P(A)\\cdot P(B)=${pa}\\cdot${pb}=${product},\\quad ` +
+    `P(A\\cap B)=${pinter}\\;\\therefore\\;\\text{${veredicto}}`
+  );
 }
 
 async function boundsToLatex(raw: string, table: Record<string, string> | null): Promise<string | null> {

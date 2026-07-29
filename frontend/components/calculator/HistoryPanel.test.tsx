@@ -412,13 +412,7 @@ describe("HistoryPanel", () => {
     expect(annotations.some((latex) => latex.includes("120"))).toBe(true);
   });
 
-  it("independentes: resultado sem notação KaTeX dedicada cai no texto puro, sem lançar", async () => {
-    // O resultado de `independentes(...)` não casa nenhuma cabeça
-    // reconhecida (não é uma dedução "P(...) = ..." de fórmula única) —
-    // `resultToLatex` devolve null e o componente mostra o texto cru
-    // (ver `HistoryPanel.tsx`: `segments === null` -> `<span>{result}</span>`).
-    // A EXPRESSÃO digitada ainda renderiza via Tier 2 (nunca falha), então
-    // ainda há 1 KaTeX (o eco de "independentes(...)"), não 0.
+  it("Hotfix V2.8.1b: independentes(...) renderiza expressão E resultado em KaTeX (dois blocos, sem fallback de texto)", async () => {
     const { container } = render(
       <HistoryPanel
         items={[
@@ -434,8 +428,14 @@ describe("HistoryPanel", () => {
       />
     );
 
-    await waitFor(() => expect(container.textContent).toContain("Eventos independentes"));
-    expect(container.querySelectorAll(".katex").length).toBe(1);
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    expect(annotations.some((latex) => latex?.includes("\\text{Eventos independentes}"))).toBe(
+      true
+    );
+    expect(container.textContent).not.toContain("->");
   });
 
   it("resultado simples (equação) continua com expressão = soluções separadas", async () => {
@@ -512,6 +512,30 @@ describe("HistoryPanel", () => {
     );
     expect(annotations.some((latex) => latex?.includes("\\begin{cases}"))).toBe(true);
     expect(annotations.some((latex) => latex?.includes("\\text{ou}"))).toBe(true);
+  });
+
+  it("Hotfix V2.8.1b: mostra a dedução de independentes(...) em KaTeX no histórico, sem fallback de texto puro", async () => {
+    const { container } = render(
+      <HistoryPanel
+        items={[
+          item(
+            "independentes(0.2,1,0.1)",
+            "P(A)*P(B) = 0.2*1 = 0.2, P(A∩B) = 0.1 -> Eventos dependentes",
+            "2026-01-01T00:00:00Z"
+          ),
+        ]}
+        hiddenTimestamps={new Set()}
+        onSelect={NOOP}
+        onHide={NOOP}
+      />
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(2));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    expect(annotations.some((latex) => latex?.includes("\\text{Eventos dependentes}"))).toBe(true);
+    expect(annotations.some((latex) => latex?.includes("\\therefore"))).toBe(true);
   });
 
   it("filtra itens ocultos", () => {
