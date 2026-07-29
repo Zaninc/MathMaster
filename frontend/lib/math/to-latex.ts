@@ -361,22 +361,48 @@ function constantNumber(node: MathNode): number | null {
 }
 
 /**
- * Sprint V2.8 (Motor de Probabilidade) — diferente das operações ABSTRATAS
- * abaixo (complementar/uniao/intersecao_independente, sem notação
- * dependente de valor), estas três usam os ARGUMENTOS reais na notação
- * (mesmo espírito de `COMBINATORICS_LATEX`), mostrando a expressão já
- * instanciada, mas SEM reduzir a fração/potência (Sprint V2.8.1 — antes,
- * a tabela inteira era abstrata; ver histórico do arquivo). O resultado
- * numérico continua sendo trabalho exclusivo do backend.
+ * Sprint V2.8/V2.8.1 (Motor de Probabilidade) — todas as sete operações
+ * usam os ARGUMENTOS reais na notação (mesmo espírito de
+ * `COMBINATORICS_LATEX`), mostrando a expressão já instanciada, mas SEM
+ * reduzir a fração/soma/produto (Sprint V2.8.1a — antes, quatro operações
+ * ainda eram abstratas; ver histórico do arquivo). O resultado numérico
+ * continua sendo trabalho exclusivo do backend — nenhuma validação ou
+ * cálculo acontece aqui, só eco dos valores digitados via `texOf`.
  */
 const probabilityLatex: CombinatoricsRenderer = (nodeArgs, options) =>
   nodeArgs.length === 2
     ? `P(A)=\\frac{${texOf(nodeArgs[0], options)}}{${texOf(nodeArgs[1], options)}}`
     : undefined;
 
+const complementarLatex: CombinatoricsRenderer = (nodeArgs, options) =>
+  nodeArgs.length === 1 ? `P(A^{c})=1-${texOf(nodeArgs[0], options)}` : undefined;
+
+const uniaoLatex: CombinatoricsRenderer = (nodeArgs, options) =>
+  nodeArgs.length === 3
+    ? `P(A\\cup B)=${texOf(nodeArgs[0], options)}+${texOf(nodeArgs[1], options)}-${texOf(nodeArgs[2], options)}`
+    : undefined;
+
+const intersecaoIndependenteLatex: CombinatoricsRenderer = (nodeArgs, options) =>
+  nodeArgs.length === 2
+    ? `P(A\\cap B)=${texOf(nodeArgs[0], options)}\\cdot${texOf(nodeArgs[1], options)}`
+    : undefined;
+
 const conditionalLatex: CombinatoricsRenderer = (nodeArgs, options) =>
   nodeArgs.length === 2
     ? `P(A \\mid B)=\\frac{${texOf(nodeArgs[0], options)}}{${texOf(nodeArgs[1], options)}}`
+    : undefined;
+
+/**
+ * `independentes(pa,pb,pinter)` — verificação de independência, sem
+ * concluir no preview (fica a cargo do backend). Notação: a igualdade que
+ * está sendo testada, "P(A\cap B) = pinter", seguida do teste em si com um
+ * "?" sobre o "=" (`\stackrel{?}{=}`, suportado nativamente pelo KaTeX)
+ * comparando o valor digitado de `pinter` contra o produto `pa*pb` — nunca
+ * calculado, só justaposto.
+ */
+const independentesLatex: CombinatoricsRenderer = (nodeArgs, options) =>
+  nodeArgs.length === 3
+    ? `P(A\\cap B)=${texOf(nodeArgs[2], options)}\\stackrel{?}{=}${texOf(nodeArgs[0], options)}\\cdot${texOf(nodeArgs[1], options)}`
     : undefined;
 
 /**
@@ -401,22 +427,13 @@ const binomialLatex: CombinatoricsRenderer = (nodeArgs, options) => {
   return `P(X=${kLatex})=\\binom{${nLatex}}{${kLatex}}(${pLatex})^{${kLatex}}(1-${pLatex})^{${n - k}}`;
 };
 
-const abstractProbability = (arity: number, latex: string): CombinatoricsRenderer => (nodeArgs) =>
-  nodeArgs.length === arity ? latex : undefined;
-
-/**
- * `complementar`/`uniao`/`intersecao_independente` permanecem ABSTRATAS de
- * propósito (fora do escopo da Sprint V2.8.1): `complementar(0.3)` mostra
- * "P(A^{c})", nunca "P(0.3^{c})" — os valores só entram na dedução depois
- * de resolvido (cadeia do backend, reconhecida à parte por
- * `probabilityResultHeadToLatex` abaixo).
- */
 const PROBABILITY_LATEX: Record<string, CombinatoricsRenderer> = {
   probabilidade: probabilityLatex,
-  complementar: abstractProbability(1, "P(A^{c})"),
-  uniao: abstractProbability(3, "P(A\\cup B)"),
-  intersecao_independente: abstractProbability(2, "P(A\\cap B)"),
+  complementar: complementarLatex,
+  uniao: uniaoLatex,
+  intersecao_independente: intersecaoIndependenteLatex,
   condicional: conditionalLatex,
+  independentes: independentesLatex,
   binomial: binomialLatex,
 };
 
@@ -1143,11 +1160,10 @@ const PREVIEW_UNARY_LATEX: Record<string, (arg: string) => string> = {
   fat: (a) => (/^[0-9A-Za-z]*$/.test(a) ? `${a}!` : `\\left(${a}\\right)!`),
   permutacao: (a) => `P_{${a}}`,
   "permutação": (a) => `P_{${a}}`,
-  // Sprint V2.8 (Motor de Probabilidade) — mesma notação ABSTRATA de
-  // `PROBABILITY_LATEX` (Tier 1), duplicada aqui de propósito (o Tier 2
-  // nunca importa do Tier 1). Ignora o argumento digitado — a notação
-  // nunca depende do valor real (ver docstring de `PROBABILITY_LATEX`).
-  complementar: () => "P(A^{c})",
+  // Sprint V2.8.1a (Motor de Probabilidade) — mesma notação CONTEXTUAL de
+  // `complementarLatex` (Tier 1), duplicada aqui de propósito (o Tier 2
+  // nunca importa do Tier 1): usa o valor real digitado, sem calcular.
+  complementar: (a) => `P(A^{c})=1-${a}`,
 };
 
 /** Nome da função conhecida -> comando LaTeX "cru" (sem argumento), para o caso de chamada incompleta ("log(" ainda sem fechar). */
@@ -1205,6 +1221,7 @@ const PROBABILITY_NAMES = new Set(["probabilidade"]);
 const UNIAO_NAMES = new Set(["uniao"]);
 const INTERSECAO_INDEPENDENTE_NAMES = new Set(["intersecao_independente"]);
 const CONDICIONAL_NAMES = new Set(["condicional"]);
+const INDEPENDENTES_NAMES = new Set(["independentes"]);
 const BINOMIAL_NAMES = new Set(["binomial"]);
 
 const PREVIEW_IDENTIFIER = /^[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*/;
@@ -1252,20 +1269,28 @@ function renderCall(name: string, argsText: string): string {
   if (PERMUTATION_REPETITION_NAMES.has(name) && args.length >= 2) {
     return `P_{${args[0]}}^{${args.slice(1).join(",")}}`;
   }
-  // Sprint V2.8 (Motor de Probabilidade) — mesma notação ABSTRATA do Tier 1
-  // (`PROBABILITY_LATEX`), duplicada de propósito; ignora `args` (a
-  // notação nunca depende do valor real digitado).
+  // Sprint V2.8 (Motor de Probabilidade) — `probabilidade`/`condicional`/
+  // `binomial` mantêm a notação ABSTRATA histórica do Tier 2 aqui (Tier 1
+  // já cobre o caso completo via mathjs; este ramo só existe para
+  // digitação incompleta/aninhada, ver docstring de `PROBABILITY_LATEX`).
   if (PROBABILITY_NAMES.has(name) && args.length === 2) {
     return "P(A)";
   }
+  // `uniao`/`intersecao_independente`/`independentes` (Sprint V2.8.1a) usam
+  // os valores reais — mesma notação CONTEXTUAL de `uniaoLatex`/
+  // `intersecaoIndependenteLatex`/`independentesLatex` (Tier 1), duplicada
+  // de propósito (o Tier 2 nunca importa do Tier 1).
   if (UNIAO_NAMES.has(name) && args.length === 3) {
-    return "P(A\\cup B)";
+    return `P(A\\cup B)=${args[0]}+${args[1]}-${args[2]}`;
   }
   if (INTERSECAO_INDEPENDENTE_NAMES.has(name) && args.length === 2) {
-    return "P(A\\cap B)";
+    return `P(A\\cap B)=${args[0]}\\cdot${args[1]}`;
   }
   if (CONDICIONAL_NAMES.has(name) && args.length === 2) {
     return "P(A \\mid B)";
+  }
+  if (INDEPENDENTES_NAMES.has(name) && args.length === 3) {
+    return `P(A\\cap B)=${args[2]}\\stackrel{?}{=}${args[0]}\\cdot${args[1]}`;
   }
   if (BINOMIAL_NAMES.has(name) && args.length === 3) {
     return "P(X=k) = \\binom{n}{k}p^{k}(1-p)^{n-k}";

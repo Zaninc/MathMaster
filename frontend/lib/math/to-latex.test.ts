@@ -323,11 +323,10 @@ describe("expressionToLatex", () => {
     expect(normalized(await expressionToLatex("2.5"))).toBe("2.5");
   });
 
-  // --- Sprint V2.8.1 (Preview Contextual de Probabilidade) —
-  // probabilidade/condicional/binomial mostram a expressão já instanciada
-  // com os argumentos reais, SEM resolver (mesmo padrão de combinatória);
-  // complementar/uniao/intersecao_independente permanecem ABSTRATAS
-  // (fora do escopo desta sprint, ver `PROBABILITY_LATEX`).
+  // --- Sprint V2.8.1/V2.8.1a (Preview Contextual de Probabilidade) — as
+  // sete operações mostram a expressão já instanciada com os argumentos
+  // reais, SEM resolver (mesmo padrão de combinatória, ver
+  // `PROBABILITY_LATEX`).
 
   it("converte probabilidade(a,b)/condicional(pa,pb) para P(A)/P(A|B) com os argumentos reais, sem simplificar", async () => {
     expect(normalized(await expressionToLatex("probabilidade(3,10)"))).toBe("P(A)=\\frac{3}{10}");
@@ -338,12 +337,29 @@ describe("expressionToLatex", () => {
     expect(normalized(await expressionToLatex("condicional(3,8)"))).toBe("P(A\\midB)=\\frac{3}{8}");
   });
 
-  it("mantém complementar/uniao/intersecao_independente na notação abstrata P(Aᶜ)/P(A∪B)/P(A∩B) (fora do escopo da V2.8.1)", async () => {
-    expect(normalized(await expressionToLatex("complementar(0.3)"))).toBe("P(A^{c})");
-    expect(normalized(await expressionToLatex("uniao(0.4,0.5,0.2)"))).toBe("P(A\\cupB)");
-    expect(normalized(await expressionToLatex("intersecao_independente(0.5,0.3)"))).toBe(
-      "P(A\\capB)"
+  it("converte complementar(p)/uniao(pa,pb,pinter)/intersecao_independente(pa,pb) com os argumentos reais, sem calcular (hotfix V2.8.1a)", async () => {
+    expect(normalized(await expressionToLatex("complementar(0.25)"))).toBe("P(A^{c})=1-0.25");
+    expect(normalized(await expressionToLatex("complementar(2)"))).toBe("P(A^{c})=1-2");
+    expect(normalized(await expressionToLatex("uniao(0.4,0.5,0.2)"))).toBe(
+      "P(A\\cupB)=0.4+0.5-0.2"
     );
+    expect(normalized(await expressionToLatex("uniao(1,1,0)"))).toBe("P(A\\cupB)=1+1-0");
+    expect(normalized(await expressionToLatex("intersecao_independente(0.5,0.3)"))).toBe(
+      "P(A\\capB)=0.5\\cdot0.3"
+    );
+    expect(normalized(await expressionToLatex("intersecao_independente(0,1)"))).toBe(
+      "P(A\\capB)=0\\cdot1"
+    );
+  });
+
+  it("converte independentes(pa,pb,pinter) para o teste P(A∩B) ?= P(A)·P(B) com os argumentos reais, sem concluir (hotfix V2.8.1a)", async () => {
+    const raw = await expressionToLatex("independentes(0.5,0.2,0.1)");
+    expect(normalized(raw)).toBe("P(A\\capB)=0.1\\stackrel{?}{=}0.5\\cdot0.2");
+    assertRendersSafely(raw as string, "independentes(0.5,0.2,0.1)");
+
+    const raw2 = await expressionToLatex("independentes(1,3,2)");
+    expect(normalized(raw2)).toBe("P(A\\capB)=2\\stackrel{?}{=}1\\cdot3");
+    assertRendersSafely(raw2 as string, "independentes(1,3,2)");
   });
 
   it("converte binomial(n,k,p) para P(X=k)=\\binom{n}{k}(p)^k(1-p)^{n-k} com os valores reais, sem calcular", async () => {
@@ -1319,12 +1335,17 @@ describe("previewLatex (pipeline único da pré-visualização e do histórico)"
     );
   });
 
-  it("mantém complementar/uniao/intersecao_independente na notação abstrata na pré-visualização (fora do escopo da V2.8.1)", async () => {
-    expect(normalized(await previewLatex("complementar(0.3)"))).toBe("P(A^{c})");
-    expect(normalized(await previewLatex("uniao(0.4,0.5,0.2)"))).toBe("P(A\\cupB)");
-    expect(normalized(await previewLatex("intersecao_independente(0.5,0.3)"))).toBe(
-      "P(A\\capB)"
+  it("mostra complementar/uniao/intersecao_independente/independentes já instanciados na pré-visualização (hotfix V2.8.1a)", async () => {
+    expect(normalized(await previewLatex("complementar(0.3)"))).toBe("P(A^{c})=1-0.3");
+    expect(normalized(await previewLatex("uniao(0.4,0.5,0.2)"))).toBe(
+      "P(A\\cupB)=0.4+0.5-0.2"
     );
+    expect(normalized(await previewLatex("intersecao_independente(0.5,0.3)"))).toBe(
+      "P(A\\capB)=0.5\\cdot0.3"
+    );
+    const independentesRaw = await previewLatex("independentes(1,3,2)");
+    expect(normalized(independentesRaw)).toBe("P(A\\capB)=2\\stackrel{?}{=}1\\cdot3");
+    assertRendersSafely(independentesRaw as string, "independentes(1,3,2) na pré-visualização");
   });
 
   it("digitação incompleta de probabilidade nunca lança e sempre renderiza em segurança (Tier 2)", async () => {
