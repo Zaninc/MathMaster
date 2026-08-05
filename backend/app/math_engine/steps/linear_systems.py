@@ -15,27 +15,14 @@ sem passo a passo — `TOO_MANY_UNKNOWNS_MESSAGE`, nunca "fingido"."""
 from __future__ import annotations
 
 from sympy import Eq, expand, linear_eq_to_matrix
-from sympy.core.expr import Expr
-from sympy.core.symbol import Symbol
 
-from ..equations.dispatcher import split_equation_sides, split_equations
+from ..equations.dispatcher import split_equations
 from ..equations.nonlinear_validation import is_linear_system
 from ..errors import ExpressionError
-from ..safe_parsing import safe_parse_expr
 from .formatting import eq_text
-from .linear_equations import reduce_to_value
+from .linear_equations import parse_equation_sides, reduce_to_value
 from .models import MathStep
 from .validation import TOO_MANY_UNKNOWNS_MESSAGE, UNSUPPORTED_SYSTEM_MESSAGE
-
-
-def _parse_equation_sides(text: str) -> tuple[Expr, Expr]:
-    lhs_text, rhs_text = split_equation_sides(text)
-    try:
-        return safe_parse_expr(lhs_text), safe_parse_expr(rhs_text)
-    except ExpressionError:
-        raise
-    except Exception as exc:
-        raise ExpressionError(f"Não foi possível interpretar a equação: {text}") from exc
 
 
 def generate_linear_system_steps(text: str) -> list[MathStep]:
@@ -43,7 +30,7 @@ def generate_linear_system_steps(text: str) -> list[MathStep]:
     if len(parts) != 2:
         raise ExpressionError(TOO_MANY_UNKNOWNS_MESSAGE if len(parts) > 2 else UNSUPPORTED_SYSTEM_MESSAGE)
 
-    sides = [_parse_equation_sides(part) for part in parts]
+    sides = [parse_equation_sides(part) for part in parts]
     symbols = sorted(
         {symbol for lhs, rhs in sides for symbol in (lhs.free_symbols | rhs.free_symbols)},
         key=str,

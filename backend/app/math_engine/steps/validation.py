@@ -11,12 +11,12 @@ from sympy import degree
 from ..errors import ExpressionError
 
 UNSUPPORTED_DOMAIN_MESSAGE = (
-    "Passo a passo disponível apenas para equações lineares de uma incógnita "
-    "e sistemas lineares 2x2 nesta versão."
+    "Passo a passo disponível apenas para equações lineares e quadráticas de "
+    "uma incógnita e sistemas lineares 2x2 nesta versão."
 )
 UNSUPPORTED_EQUATION_MESSAGE = (
-    "Passo a passo disponível apenas para equações lineares de uma única "
-    "incógnita nesta versão."
+    "Passo a passo disponível apenas para equações lineares e quadráticas de "
+    "uma única incógnita nesta versão."
 )
 UNSUPPORTED_INEQUALITY_MESSAGE = (
     "Passo a passo ainda não está disponível para inequações nesta versão."
@@ -39,8 +39,11 @@ def require_linear_degree(diff, symbol) -> None:
     """`diff` é `lhs - rhs` já expandido. Sem símbolo nenhum sobrando =
     identidade/contradição (grau é irrelevante, tratado à parte por
     `linear_equations.reduce_to_value`); com símbolo, exige grau exatamente
-    1 — grau >= 2 (ou não-polinomial, capturado pela exceção) fica fora do
-    escopo desta sprint."""
+    1 — checagem defensiva própria de `linear_equations.py` para uso
+    isolado/direto (o roteamento normal via `steps/dispatcher.py` já filtra
+    por grau ANTES de chamar este módulo, então isto nunca dispara no fluxo
+    real). Grau 2 tem seu próprio motor (`quadratic_equations.py`); grau
+    >= 3 ou não-polinomial continua fora de escopo desta versão."""
     if not diff.free_symbols:
         return
     try:

@@ -57,9 +57,11 @@ def test_invalid_expression_raises() -> None:
         generate_steps("2x+=10")
 
 
-def test_nonlinear_equation_rejected_with_clear_message() -> None:
-    with pytest.raises(ExpressionError, match="lineares"):
-        generate_steps("x**2+2=6")
+def test_cubic_equation_rejected_with_clear_message() -> None:
+    # Sprint V2.9.1 — grau 2 agora é suportado (`quadratic_equations.py`);
+    # grau 3 continua fora do escopo do passo a passo.
+    with pytest.raises(ExpressionError, match="lineares e quadráticas"):
+        generate_steps("x**3+2=6")
 
 
 def test_inequality_rejected_with_clear_message() -> None:

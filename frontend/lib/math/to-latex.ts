@@ -143,6 +143,22 @@ const _TRAÇO_ALIAS_PATTERN = /\btraço\s*\(/g;
 /** Palavra pura ("crescente", "vertical") nunca é fórmula — fica texto. */
 const BARE_WORD = /^[A-Za-z]{3,}$/;
 
+/**
+ * Sprint V2.9.1 (Passo a Passo — Quadráticas) — exceção pontual ao
+ * `BARE_WORD` acima: "Delta" é o nome ASCII do discriminante (`Δ=b²-4ac`)
+ * que `math_engine/steps/quadratic_equations.py` envia como um LADO
+ * INTEIRO de uma equação (ex. "Delta=49") — sem esta tabela, esse lado
+ * cai no bare-word guard (5 letras, nenhum dígito/operador) e a conversão
+ * INTEIRA falha (`expressionToLatex` exige os dois lados reconhecidos).
+ * "Delta" nunca é digitado pelo usuário como rótulo solto neste produto
+ * (não é um alias de nenhuma função/constante em `parser/normalize.py`),
+ * então esta exceção não colide com nenhum caso de "palavra pura"
+ * legítimo já coberto pelo guard geral.
+ */
+const NAMED_SYMBOL_LATEX: Record<string, string> = {
+  Delta: "\\Delta",
+};
+
 const SUBSCRIPT_VARIABLE = /^([A-Za-z])([₀₁₂₃₄₅₆₇₈₉]+)$/;
 
 function translateRun(run: string, table: Record<string, string>): string | null {
@@ -576,6 +592,7 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
 /** Converte UMA expressão (sem "="). Null = forma não reconhecida. */
 async function singleExpressionToLatex(text: string): Promise<string | null> {
   const trimmed = text.trim();
+  if (trimmed in NAMED_SYMBOL_LATEX) return NAMED_SYMBOL_LATEX[trimmed];
   if (trimmed === "" || BARE_WORD.test(trimmed)) return null;
 
   const subscripted = trimmed.match(SUBSCRIPT_VARIABLE);

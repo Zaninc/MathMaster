@@ -10,15 +10,30 @@ livremente por dentro (ex. `A=[[1,2],[3,4]]` é matriz, não equação;
 texto de outro domínio cairia no parser de equação linear e falharia de
 forma confusa (ou, em casos como matriz, um `AttributeError` cru em vez de
 `ExpressionError`) em vez de reportar com clareza que aquela área ainda
-não tem passo a passo nesta versão."""
+não tem passo a passo nesta versão.
+
+Sprint V2.9.1 — uma única equação agora é roteada por GRAU real (via
+`sympy.degree` sobre `lhs - rhs` já expandido, nunca por regex): grau 1
+(ou identidade/contradição, onde a diferença não sobra símbolo nenhum) vai
+para `linear_equations`; grau exatamente 2 vai para `quadratic_equations`
+(nova); qualquer outro grau continua rejeitado com mensagem amigável. Uma
+entrada como "0x²+2x=4" (coeficiente de x² nulo) expande para grau 1 e cai
+em `linear_equations` automaticamente — nenhum código dedicado a "casos
+degenerados" existe neste módulo nem em `quadratic_equations.py`."""
 from __future__ import annotations
+
+from sympy import degree, expand
 
 from ..analytic_geometry.dispatcher import is_analytic_geometry_domain_expression
 from ..calculus.dispatcher import is_calculus_domain_expression
 from ..combinatorics.dispatcher import is_combinatorics_domain_expression
 from ..complex.dispatcher import is_complex_domain_expression
 from ..dispatcher import normalize_all
-from ..equations.dispatcher import is_equation_domain_expression, split_equations
+from ..equations.dispatcher import (
+    is_equation_domain_expression,
+    looks_like_inequality,
+    split_equations,
+)
 from ..errors import ExpressionError
 from ..functions.dispatcher import is_function_domain_expression
 from ..logarithms.dispatcher import is_logarithm_domain_expression
@@ -27,10 +42,17 @@ from ..polynomials.dispatcher import is_polynomial_domain_expression
 from ..probability.dispatcher import is_probability_domain_expression
 from ..summation.dispatcher import is_summation_domain_expression
 from ..trigonometry.dispatcher import is_trigonometry_domain_expression
-from .linear_equations import generate_linear_equation_steps
+from .linear_equations import generate_linear_equation_steps, parse_equation_sides
 from .linear_systems import generate_linear_system_steps
 from .models import MathStep
-from .validation import EMPTY_EXPRESSION_MESSAGE, UNSUPPORTED_DOMAIN_MESSAGE
+from .quadratic_equations import generate_quadratic_equation_steps
+from .validation import (
+    EMPTY_EXPRESSION_MESSAGE,
+    UNSUPPORTED_DOMAIN_MESSAGE,
+    UNSUPPORTED_EQUATION_MESSAGE,
+    UNSUPPORTED_INEQUALITY_MESSAGE,
+    require_single_symbol,
+)
 
 _NON_EQUATION_DOMAIN_CHECKS = (
     is_analytic_geometry_domain_expression,
@@ -45,6 +67,33 @@ _NON_EQUATION_DOMAIN_CHECKS = (
     is_trigonometry_domain_expression,
     is_logarithm_domain_expression,
 )
+
+
+def _generate_single_equation_steps(text: str) -> list[MathStep]:
+    if looks_like_inequality(text):
+        raise ExpressionError(UNSUPPORTED_INEQUALITY_MESSAGE)
+
+    lhs, rhs = parse_equation_sides(text)
+    symbols = lhs.free_symbols | rhs.free_symbols
+    require_single_symbol(symbols)
+    symbol = next(iter(symbols))
+
+    diff = expand(lhs - rhs)
+    if not diff.free_symbols:
+        # Identidade/contradição ("2x+1=2x+1"/"2x+1=2x+3") — grau
+        # irrelevante, `linear_equations.reduce_to_value` já sabe tratar.
+        return generate_linear_equation_steps(text)
+
+    try:
+        grau = degree(diff, symbol)
+    except Exception as exc:
+        raise ExpressionError(UNSUPPORTED_EQUATION_MESSAGE) from exc
+
+    if grau == 1:
+        return generate_linear_equation_steps(text)
+    if grau == 2:
+        return generate_quadratic_equation_steps(text)
+    raise ExpressionError(UNSUPPORTED_EQUATION_MESSAGE)
 
 
 def generate_steps(expression: str) -> list[MathStep]:
@@ -63,4 +112,4 @@ def generate_steps(expression: str) -> list[MathStep]:
     parts = split_equations(normalized)
     if len(parts) > 1:
         return generate_linear_system_steps(normalized)
-    return generate_linear_equation_steps(normalized)
+    return _generate_single_equation_steps(normalized)

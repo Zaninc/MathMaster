@@ -27,7 +27,11 @@ from .validation import (
 )
 
 
-def _parse_sides(text: str) -> tuple[Expr, Expr]:
+def parse_equation_sides(text: str) -> tuple[Expr, Expr]:
+    """Ponto único de parsing de uma equação de um único "=" para o resto
+    de `steps/` (Sprint V2.9.1: também usado por `linear_systems.py` e
+    `quadratic_equations.py` — antes duplicado em `linear_systems.py` como
+    `_parse_equation_sides`, unificado aqui)."""
     lhs_text, rhs_text = split_equation_sides(text)
     try:
         lhs = safe_parse_expr(lhs_text)
@@ -92,7 +96,7 @@ def generate_linear_equation_steps(text: str) -> list[MathStep]:
     if looks_like_inequality(text):
         raise ExpressionError(UNSUPPORTED_INEQUALITY_MESSAGE)
 
-    lhs, rhs = _parse_sides(text)
+    lhs, rhs = parse_equation_sides(text)
 
     symbols = lhs.free_symbols | rhs.free_symbols
     require_single_symbol(symbols)

@@ -119,3 +119,97 @@ describe("MathSteps", () => {
     expect(screen.getByRole("region", { name: "Passo a passo" })).toBeInTheDocument();
   });
 });
+
+/**
+ * Sprint V2.9.1 (Passo a Passo — Quadráticas) — ZERO componente novo
+ * (`MathSteps`/`MathStepItem` intocados): estes casos só confirmam que o
+ * texto matemático puro que o backend agora envia para quadráticas
+ * (`Delta=...`, raízes fracionárias/complexas) continua passando pelo
+ * MESMO pipeline `valueToLatex` (não mockado aqui, só `apiClient`) sem
+ * precisar de nenhuma alteração no frontend.
+ */
+describe("MathSteps — compatibilidade com passos de equações quadráticas (Sprint V2.9.1)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.solveSteps).mockReset();
+  });
+
+  it("renderiza fatoração, Δ e raízes fracionária/negativa em KaTeX", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "2*x**2+3*x-5=0",
+      result: "x₁ = 1, x₂ = -5/2",
+      steps: [
+        { title: "Equação inicial", expression: "2*x**2 + 3*x - 5=0", explanation: null },
+        {
+          title: "Identificando os coeficientes (a=2, b=3, c=-5) e calculando o discriminante Δ=b²-4ac",
+          expression: "Delta=9-4*2*(-5)",
+          explanation: null,
+        },
+        { title: "Discriminante calculado", expression: "Delta=49", explanation: null },
+        { title: "Primeira raiz", expression: "x=1", explanation: null },
+        { title: "Segunda raiz", expression: "x=-5/2", explanation: null },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="2*x**2+3*x-5=0" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(5));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    // "Delta" (ASCII, nunca "Δ" bruto no backend) já é reconhecido pelo
+    // serializer default do mathjs como o símbolo grego \Delta.
+    expect(annotations.some((latex) => latex?.includes("\\Delta=9-4\\cdot2\\cdot"))).toBe(true);
+    expect(annotations.some((latex) => latex === "\\Delta=49")).toBe(true);
+    expect(annotations.some((latex) => latex === "x=1")).toBe(true);
+    expect(annotations.some((latex) => latex?.includes("x=\\frac{-5}{2}"))).toBe(true);
+  });
+
+  it("renderiza raízes complexas (unidade imaginária minúscula) em KaTeX", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "x**2+1=0",
+      result: "x₁ = -i, x₂ = i",
+      steps: [
+        { title: "Equação inicial", expression: "x**2 + 1=0", explanation: null },
+        { title: "Discriminante calculado", expression: "Delta=-4", explanation: null },
+        { title: "Δ negativo — a equação possui duas raízes complexas", expression: "x=i", explanation: null },
+        { title: "Segunda raiz complexa", expression: "x=-i", explanation: null },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="x**2+1=0" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(4));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map(
+      (node) => node.textContent
+    );
+    expect(annotations.some((latex) => latex?.replace(/\s/g, "") === "x=i")).toBe(true);
+    expect(annotations.some((latex) => latex?.replace(/\s/g, "") === "x=-i")).toBe(true);
+  });
+
+  it("passos numerados sequencialmente (1, 2, 3, ...) também para quadráticas", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "x**2-9=0",
+      result: "x₁ = -3, x₂ = 3",
+      steps: [
+        { title: "Equação inicial", expression: "x**2 - 9=0", explanation: null },
+        { title: "Somando 9 dos dois lados", expression: "x**2=9", explanation: null },
+        { title: "Primeira raiz", expression: "x=3", explanation: null },
+        { title: "Segunda raiz", expression: "x=-3", explanation: null },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="x**2-9=0" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(screen.getByText("Equação inicial")).toBeInTheDocument());
+    // Os números do KaTeX renderizado (ex. "x**2", "9") também casam com
+    // um seletor de texto solto "1-4" — usa o badge `aria-hidden` dedicado
+    // do número do passo (`MathStepItem.tsx`), nunca o conteúdo matemático.
+    const badges = Array.from(container.querySelectorAll('li > div > span[aria-hidden="true"]')).map(
+      (node) => node.textContent
+    );
+    expect(badges).toEqual(["1", "2", "3", "4"]);
+  });
+});

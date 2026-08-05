@@ -17,6 +17,15 @@ def test_solve_steps_success(client: TestClient) -> None:
     assert body["steps"][-1]["expression"] == "x=3"
 
 
+def test_solve_steps_quadratic(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "x**2-9=0"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "x₁ = -3, x₂ = 3"
+    expressions = {s["expression"] for s in body["steps"]}
+    assert {"x=3", "x=-3"} <= expressions
+
+
 def test_solve_steps_system(client: TestClient) -> None:
     response = client.post("/solve/steps", json={"expression": "x+y=5\nx-y=1"})
     assert response.status_code == 200
@@ -26,9 +35,10 @@ def test_solve_steps_system(client: TestClient) -> None:
 
 
 def test_solve_steps_unsupported_domain_returns_400(client: TestClient) -> None:
-    response = client.post("/solve/steps", json={"expression": "x**2+2=6"})
+    # Sprint V2.9.1 — grau 2 já é suportado; grau 3 continua fora de escopo.
+    response = client.post("/solve/steps", json={"expression": "x**3+2=6"})
     assert response.status_code == 400
-    assert "lineares" in response.json()["detail"]
+    assert "lineares e quadráticas" in response.json()["detail"]
 
 
 def test_solve_steps_three_by_three_returns_friendly_400(client: TestClient) -> None:

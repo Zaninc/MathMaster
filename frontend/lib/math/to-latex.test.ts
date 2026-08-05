@@ -138,6 +138,13 @@ describe("expressionToLatex", () => {
     expect(await expressionToLatex("")).toBeNull();
   });
 
+  it("Sprint V2.9.1 (Passo a Passo — Quadráticas): 'Delta' é a única exceção ao bare-word guard, renderizando como \\Delta", async () => {
+    expect(normalized(await expressionToLatex("Delta=49"))).toBe("\\Delta=49");
+    expect(normalized(await expressionToLatex("Delta=9-4*2*(-5)"))).toContain("\\Delta=9-4");
+    // Qualquer outra palavra solta continua bare-word (nenhuma brecha geral).
+    expect(await expressionToLatex("Gamma=1")).toBeNull();
+  });
+
   it("chamada de função vazia (template em digitação) nunca converte — cai no fallback", async () => {
     expect(await expressionToLatex("sqrt()")).toBeNull();
     expect(await expressionToLatex("√()")).toBeNull();
