@@ -64,3 +64,60 @@ def test_solve_steps_step_item_has_optional_title_and_explanation(client: TestCl
         assert "expression" in step
         assert "title" in step
         assert "explanation" in step
+
+
+# --- Hotfix V2.9.1a: title_segments -----------------------------------------
+
+
+def test_linear_steps_have_no_title_segments_regression(client: TestClient) -> None:
+    """Nenhum título de equação linear tem matemática embutida — o campo
+    novo é sempre `None`, comportamento idêntico ao contrato pré-hotfix."""
+    response = client.post("/solve/steps", json={"expression": "2*x+4=10"})
+    for step in response.json()["steps"]:
+        assert step["title_segments"] is None
+
+
+def test_system_steps_have_no_title_segments_regression(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "x+y=5\nx-y=1"})
+    for step in response.json()["steps"]:
+        assert step["title_segments"] is None
+
+
+def test_quadratic_bhaskara_steps_return_structured_title_segments(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "2*x**2+3*x-5=0"})
+    steps = response.json()["steps"]
+
+    coeff_step = next(s for s in steps if "Identificando os coeficientes" in s["title"])
+    assert coeff_step["title_segments"] == [
+        {"type": "text", "content": "Identificando os coeficientes"},
+        {"type": "math", "content": "a=2, b=3, c=-5"},
+        {"type": "text", "content": "e calculando o discriminante"},
+        {"type": "math", "content": "Delta=b**2-4*a*c"},
+    ]
+    # `title` (texto puro) nunca é removido, mesmo quando `title_segments` existe.
+    assert coeff_step["title"] == (
+        "Identificando os coeficientes (a=2, b=3, c=-5) e calculando o discriminante Δ=b²-4ac"
+    )
+
+    root_steps = [s for s in steps if "Aplicando a fórmula de Bhaskara" in s["title"]]
+    assert len(root_steps) == 2
+    for step in root_steps:
+        types = [seg["type"] for seg in step["title_segments"]]
+        assert types == ["text", "math", "text"]
+        assert step["title_segments"][0]["content"] == "Aplicando a fórmula de Bhaskara"
+
+    # Nenhum HTML/JSX nos segmentos — só texto/matemática pura.
+    for step in steps:
+        for seg in step.get("title_segments") or []:
+            assert "<" not in seg["content"]
+            assert ">" not in seg["content"]
+
+
+def test_quadratic_factoring_and_direct_root_steps_have_no_title_segments() -> None:
+    """Só os títulos de Bhaskara têm matemática embutida hoje — fatoração e
+    raiz direta continuam com `title_segments=None` (nada a segmentar)."""
+    from app.math_engine.steps import generate_steps
+
+    for expr in ["x**2-5*x+6=0", "x**2=16"]:
+        for step in generate_steps(expr):
+            assert step.title_segments is None

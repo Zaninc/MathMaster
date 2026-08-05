@@ -8,9 +8,25 @@ from __future__ import annotations
 
 from sympy.core.expr import Expr
 
+from .models import TitleSegment
+
 
 def eq_text(lhs: Expr, rhs: Expr) -> str:
     return f"{lhs}={rhs}"
+
+
+def text_segment(content: str) -> TitleSegment:
+    """Hotfix V2.9.1a — pedaço de título em texto comum (nunca passa pelo
+    pipeline de KaTeX do frontend)."""
+    return TitleSegment(type="text", content=content)
+
+
+def math_segment(content: Expr | str) -> TitleSegment:
+    """Hotfix V2.9.1a — pedaço de título com matemática embutida. `content`
+    é sempre texto matemático puro (mesmo contrato de `MathStep.expression`
+    — `str()` de um objeto SymPy real, ou uma string já nesse formato),
+    nunca LaTeX bruto."""
+    return TitleSegment(type="math", content=str(content))
 
 
 def _clean(term: Expr) -> str:

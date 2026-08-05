@@ -29,9 +29,9 @@ describe("MathSteps", () => {
       expression: "2*x+4=10",
       result: "x = 3",
       steps: [
-        { title: "Equação inicial", expression: "2*x + 4=10", explanation: null },
-        { title: "Subtraindo 4 dos dois lados", expression: "2*x=6", explanation: null },
-        { title: "Dividindo os dois lados por 2", expression: "x=3", explanation: null },
+        { title: "Equação inicial", expression: "2*x + 4=10", explanation: null, title_segments: null },
+        { title: "Subtraindo 4 dos dois lados", expression: "2*x=6", explanation: null, title_segments: null },
+        { title: "Dividindo os dois lados por 2", expression: "x=3", explanation: null, title_segments: null },
       ],
     });
 
@@ -70,7 +70,7 @@ describe("MathSteps", () => {
     vi.mocked(apiClient.solveSteps).mockResolvedValue({
       expression: "5*x-15=0",
       result: "x = 3",
-      steps: [{ title: "Equação inicial", expression: "5*x - 15=0", explanation: null }],
+      steps: [{ title: "Equação inicial", expression: "5*x - 15=0", explanation: null, title_segments: null }],
     });
 
     render(<MathSteps expression="5*x-15=0" />);
@@ -90,7 +90,7 @@ describe("MathSteps", () => {
       Promise.resolve({
         expression,
         result: "x = 3",
-        steps: [{ title: "Equação inicial", expression, explanation: null }],
+        steps: [{ title: "Equação inicial", expression, explanation: null, title_segments: null }],
       })
     );
 
@@ -138,22 +138,30 @@ describe("MathSteps — compatibilidade com passos de equações quadráticas (S
       expression: "2*x**2+3*x-5=0",
       result: "x₁ = 1, x₂ = -5/2",
       steps: [
-        { title: "Equação inicial", expression: "2*x**2 + 3*x - 5=0", explanation: null },
+        { title: "Equação inicial", expression: "2*x**2 + 3*x - 5=0", explanation: null, title_segments: null },
         {
           title: "Identificando os coeficientes (a=2, b=3, c=-5) e calculando o discriminante Δ=b²-4ac",
+          title_segments: [
+            { type: "text", content: "Identificando os coeficientes" },
+            { type: "math", content: "a=2, b=3, c=-5" },
+            { type: "text", content: "e calculando o discriminante" },
+            { type: "math", content: "Delta=b**2-4*a*c" },
+          ],
           expression: "Delta=9-4*2*(-5)",
           explanation: null,
         },
-        { title: "Discriminante calculado", expression: "Delta=49", explanation: null },
-        { title: "Primeira raiz", expression: "x=1", explanation: null },
-        { title: "Segunda raiz", expression: "x=-5/2", explanation: null },
+        { title: "Discriminante calculado", expression: "Delta=49", explanation: null, title_segments: null },
+        { title: "Primeira raiz", expression: "x=1", explanation: null, title_segments: null },
+        { title: "Segunda raiz", expression: "x=-5/2", explanation: null, title_segments: null },
       ],
     });
 
     const { container } = render(<MathSteps expression="2*x**2+3*x-5=0" />);
     fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
 
-    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(5));
+    // 5 expressões de passo + 2 segmentos "math" do título com Δ/discriminante
+    // (Hotfix V2.9.1a) = 7 elementos `.katex`.
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(7));
     const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
       node.textContent?.replace(/\s/g, "")
     );
@@ -163,6 +171,12 @@ describe("MathSteps — compatibilidade com passos de equações quadráticas (S
     expect(annotations.some((latex) => latex === "\\Delta=49")).toBe(true);
     expect(annotations.some((latex) => latex === "x=1")).toBe(true);
     expect(annotations.some((latex) => latex?.includes("x=\\frac{-5}{2}"))).toBe(true);
+    // Título misto (Hotfix V2.9.1a): texto continua texto, "a=2, b=3, c=-5"
+    // e "Δ=b²-4ac" renderizam em KaTeX (b² como b^2, b em itálico normal).
+    expect(screen.getByText("Identificando os coeficientes")).toBeInTheDocument();
+    expect(screen.getByText("e calculando o discriminante")).toBeInTheDocument();
+    expect(annotations.some((latex) => latex?.includes("a=2,\\;b=3,\\;c=-5"))).toBe(true);
+    expect(annotations.some((latex) => latex === "\\Delta={b}^{2}-4\\cdota\\cdotc")).toBe(true);
   });
 
   it("renderiza raízes complexas (unidade imaginária minúscula) em KaTeX", async () => {
@@ -170,10 +184,10 @@ describe("MathSteps — compatibilidade com passos de equações quadráticas (S
       expression: "x**2+1=0",
       result: "x₁ = -i, x₂ = i",
       steps: [
-        { title: "Equação inicial", expression: "x**2 + 1=0", explanation: null },
-        { title: "Discriminante calculado", expression: "Delta=-4", explanation: null },
-        { title: "Δ negativo — a equação possui duas raízes complexas", expression: "x=i", explanation: null },
-        { title: "Segunda raiz complexa", expression: "x=-i", explanation: null },
+        { title: "Equação inicial", expression: "x**2 + 1=0", explanation: null, title_segments: null },
+        { title: "Discriminante calculado", expression: "Delta=-4", explanation: null, title_segments: null },
+        { title: "Δ negativo — a equação possui duas raízes complexas", expression: "x=i", explanation: null, title_segments: null },
+        { title: "Segunda raiz complexa", expression: "x=-i", explanation: null, title_segments: null },
       ],
     });
 
@@ -188,15 +202,96 @@ describe("MathSteps — compatibilidade com passos de equações quadráticas (S
     expect(annotations.some((latex) => latex?.replace(/\s/g, "") === "x=-i")).toBe(true);
   });
 
+  it("Hotfix V2.9.1a: título da fórmula de Bhaskara vira fração real, com sinal +/- correto na primeira/segunda raiz", async () => {
+    // Expressão própria deste teste (nunca reutilizada em outro `it` deste
+    // describe): o cache de `MathSteps` é um `Map` de módulo compartilhado
+    // entre testes do mesmo arquivo — reutilizar "2*x**2+3*x-5=0" bateria
+    // no cache já populado por um teste anterior e mascararia esta asserção.
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "4*x**2+3*x-6=0",
+      result: "x₁ = 1, x₂ = -5/2",
+      steps: [
+        {
+          title: "Aplicando a fórmula de Bhaskara (x=(-b+√Δ)/(2a)) — primeira raiz",
+          title_segments: [
+            { type: "text", content: "Aplicando a fórmula de Bhaskara" },
+            { type: "math", content: "x=(-b+sqrt(Delta))/(2*a)" },
+            { type: "text", content: "— primeira raiz" },
+          ],
+          expression: "x=1",
+          explanation: null,
+        },
+        {
+          title: "Aplicando a fórmula de Bhaskara (x=(-b-√Δ)/(2a)) — segunda raiz",
+          title_segments: [
+            { type: "text", content: "Aplicando a fórmula de Bhaskara" },
+            { type: "math", content: "x=(-b-sqrt(Delta))/(2*a)" },
+            { type: "text", content: "— segunda raiz" },
+          ],
+          expression: "x=-5/2",
+          explanation: null,
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="4*x**2+3*x-6=0" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    // 2 expressões de passo + 2 fórmulas de título = 4 elementos `.katex`.
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(4));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+
+    expect(screen.getAllByText("Aplicando a fórmula de Bhaskara")).toHaveLength(2);
+    expect(screen.getByText("— primeira raiz")).toBeInTheDocument();
+    expect(screen.getByText("— segunda raiz")).toBeInTheDocument();
+    expect(
+      annotations.some((latex) =>
+        latex?.includes("\\frac{\\left(-b+\\sqrt{\\Delta}\\right)}{\\left(2\\cdota\\right)}")
+      )
+    ).toBe(true);
+    expect(
+      annotations.some((latex) =>
+        latex?.includes("\\frac{\\left(-b-\\sqrt{\\Delta}\\right)}{\\left(2\\cdota\\right)}")
+      )
+    ).toBe(true);
+  });
+
+  it("equação linear sem matemática embutida no título permanece como texto puro (title_segments=null, regressão)", async () => {
+    // Expressão própria deste teste — "2*x+4=10" já é usada (e cacheada)
+    // por outro `it` neste mesmo arquivo (cache de `MathSteps` é um `Map`
+    // de módulo, compartilhado por TODOS os testes do arquivo).
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "6*x+12=30",
+      result: "x = 3",
+      steps: [
+        { title: "Equação inicial", title_segments: null, expression: "6*x + 12=30", explanation: null },
+        {
+          title: "Subtraindo 12 dos dois lados",
+          title_segments: null,
+          expression: "6*x=18",
+          explanation: null,
+        },
+      ],
+    });
+
+    render(<MathSteps expression="6*x+12=30" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(screen.getByText("Equação inicial")).toBeInTheDocument());
+    expect(screen.getByText("Subtraindo 12 dos dois lados")).toBeInTheDocument();
+  });
+
   it("passos numerados sequencialmente (1, 2, 3, ...) também para quadráticas", async () => {
     vi.mocked(apiClient.solveSteps).mockResolvedValue({
       expression: "x**2-9=0",
       result: "x₁ = -3, x₂ = 3",
       steps: [
-        { title: "Equação inicial", expression: "x**2 - 9=0", explanation: null },
-        { title: "Somando 9 dos dois lados", expression: "x**2=9", explanation: null },
-        { title: "Primeira raiz", expression: "x=3", explanation: null },
-        { title: "Segunda raiz", expression: "x=-3", explanation: null },
+        { title: "Equação inicial", expression: "x**2 - 9=0", explanation: null, title_segments: null },
+        { title: "Somando 9 dos dois lados", expression: "x**2=9", explanation: null, title_segments: null },
+        { title: "Primeira raiz", expression: "x=3", explanation: null, title_segments: null },
+        { title: "Segunda raiz", expression: "x=-3", explanation: null, title_segments: null },
       ],
     });
 

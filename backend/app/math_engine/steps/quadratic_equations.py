@@ -41,7 +41,7 @@ from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
 from ..errors import ExpressionError
-from .formatting import eq_text
+from .formatting import eq_text, math_segment, text_segment
 from .linear_equations import parse_equation_sides, reduce_to_value
 from .models import MathStep
 from .validation import UNSUPPORTED_EQUATION_MESSAGE, require_single_symbol
@@ -156,6 +156,12 @@ def _bhaskara_steps(a: Expr, b: Expr, c: Expr, symbol: Symbol) -> list[MathStep]
                 f"Identificando os coeficientes (a={a}, b={b}, c={c}) e calculando "
                 "o discriminante Δ=b²-4ac"
             ),
+            title_segments=[
+                text_segment("Identificando os coeficientes"),
+                math_segment(f"a={a}, b={b}, c={c}"),
+                text_segment("e calculando o discriminante"),
+                math_segment("Delta=b**2-4*a*c"),
+            ],
             expression=delta_substituted,
         )
     )
@@ -170,12 +176,22 @@ def _bhaskara_steps(a: Expr, b: Expr, c: Expr, symbol: Symbol) -> list[MathStep]
         steps.append(
             MathStep(
                 title="Aplicando a fórmula de Bhaskara (x=(-b+√Δ)/(2a)) — primeira raiz",
+                title_segments=[
+                    text_segment("Aplicando a fórmula de Bhaskara"),
+                    math_segment(f"{symbol}=(-b+sqrt(Delta))/(2*a)"),
+                    text_segment("— primeira raiz"),
+                ],
                 expression=eq_text(symbol, root1),
             )
         )
         steps.append(
             MathStep(
                 title="Aplicando a fórmula de Bhaskara (x=(-b-√Δ)/(2a)) — segunda raiz",
+                title_segments=[
+                    text_segment("Aplicando a fórmula de Bhaskara"),
+                    math_segment(f"{symbol}=(-b-sqrt(Delta))/(2*a)"),
+                    text_segment("— segunda raiz"),
+                ],
                 expression=eq_text(symbol, root2),
             )
         )

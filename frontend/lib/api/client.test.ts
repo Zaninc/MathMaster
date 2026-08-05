@@ -52,7 +52,11 @@ describe("apiClient", () => {
   });
 
   it("solveSteps() faz POST /solve/steps com o corpo correto e devolve a resposta tipada", async () => {
-    const body = { expression: "2*x+4=10", result: "x = 3", steps: [{ title: "Equação inicial", expression: "2*x + 4=10", explanation: null }] };
+    const body = {
+      expression: "2*x+4=10",
+      result: "x = 3",
+      steps: [{ title: "Equação inicial", title_segments: null, expression: "2*x + 4=10", explanation: null }],
+    };
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(body));
     vi.stubGlobal("fetch", fetchMock);
 

@@ -16,7 +16,15 @@ from app.formatter import format_result, render_math
 from app.history import add_entry, get_history
 from app.math_engine import ExpressionError, normalize_all, solve_expression
 from app.rate_limit import enforce_rate_limit
-from app.schemas import HistoryItem, SolveRequest, SolveResponse, StepItem, StepsRequest, StepsResponse
+from app.schemas import (
+    HistoryItem,
+    SolveRequest,
+    SolveResponse,
+    StepItem,
+    StepsRequest,
+    StepsResponse,
+    TitleSegment,
+)
 
 logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger("mathmaster")
@@ -141,6 +149,18 @@ def solve_steps(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     normalized_expression = normalize_all(request.expression)
     result = render_math(format_result(normalized_expression, raw_result))
-    steps = [StepItem(title=step.title, expression=step.expression, explanation=step.explanation) for step in raw_steps]
+    steps = [
+        StepItem(
+            title=step.title,
+            title_segments=(
+                [TitleSegment(type=seg.type, content=seg.content) for seg in step.title_segments]
+                if step.title_segments is not None
+                else None
+            ),
+            expression=step.expression,
+            explanation=step.explanation,
+        )
+        for step in raw_steps
+    ]
     logger.info("Passo a passo gerado: %r -> %d passos", request.expression, len(steps))
     return StepsResponse(expression=request.expression, result=result, steps=steps)

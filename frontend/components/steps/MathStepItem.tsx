@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { MathFormula } from "@/components/shared/MathFormula";
+import { MixedMathText } from "@/components/shared/MixedMathText";
 import type { StepItem } from "@/lib/api/types";
 import { valueToLatex } from "@/lib/math/to-latex";
 
@@ -58,8 +59,15 @@ export function MathStepItem({ index, step }: MathStepItemProps) {
         >
           {index}
         </span>
-        {step.title !== null && (
-          <span className="text-sm font-medium text-text-secondary">{step.title}</span>
+        {step.title_segments !== null ? (
+          <MixedMathText
+            segments={step.title_segments}
+            className="text-sm font-medium text-text-secondary"
+          />
+        ) : (
+          step.title !== null && (
+            <span className="text-sm font-medium text-text-secondary">{step.title}</span>
+          )
         )}
       </div>
       <div className="min-w-0 pl-7 text-base text-text-primary">

@@ -461,7 +461,18 @@ const PROBABILITY_LATEX: Record<string, CombinatoricsRenderer> = {
  */
 function productHandler(node: MathNode, options: TexOptions): string | undefined {
   if (node.type === "SymbolNode") {
-    return (node as unknown as { name?: string }).name === "Infinity" ? "\\infty" : undefined;
+    const name = (node as unknown as { name?: string }).name;
+    if (name === "Infinity") return "\\infty";
+    // Hotfix V2.9.1a (títulos mistos de passo a passo, ex. fórmula de
+    // Bhaskara "x=(-b+√Δ)/(2a)") — o serializer default do mathjs trata o
+    // símbolo solto "b" como uma UNIDADE embutida (bel), renderizando
+    // "\mathrm{b}" (romano) em vez do itálico normal de variável que "a"/
+    // "c"/"x" já recebem sem esta exceção (confirmado empiricamente: só
+    // "b" tem esse comportamento entre as letras usadas nas fórmulas deste
+    // produto). Devolver o nome cru preserva o itálico padrão do KaTeX
+    // para uma única letra, sem precisar de nenhum comando extra.
+    if (name === "b") return "b";
+    return undefined;
   }
 
   // Hotfix pós-V2.7.1 — o serializer default do mathjs formata inteiros
