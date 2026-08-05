@@ -1,7 +1,7 @@
 import { env } from "@/lib/config/env";
 import { normalizeForBackend } from "@/lib/math/backend-normalize";
 import { ApiError, classifyResponseError } from "./errors";
-import type { HistoryItem, SolveResponse } from "./types";
+import type { HistoryItem, SolveResponse, StepsResponse } from "./types";
 
 /**
  * Margem sobre os `compute_timeout_seconds` (5s) do backend + latência de
@@ -59,6 +59,18 @@ export const apiClient = {
   },
   getHistory(): Promise<HistoryItem[]> {
     return request<HistoryItem[]>("/history");
+  },
+  /**
+   * Sprint V2.9 (Passo a Passo) — rota nova e opcional, `/solve/steps`;
+   * `/solve` continua 100% intocado. Mesma fronteira de normalização de
+   * `solve()` acima (templates visuais do teclado traduzidos aqui, nunca
+   * no valor exibido no input).
+   */
+  solveSteps(expression: string): Promise<StepsResponse> {
+    return request<StepsResponse>("/solve/steps", {
+      method: "POST",
+      body: JSON.stringify({ expression: normalizeForBackend(expression) }),
+    });
   },
   health(): Promise<{ status: string }> {
     return request<{ status: string }>("/health");

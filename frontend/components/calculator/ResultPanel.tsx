@@ -6,6 +6,7 @@ import { Button } from "@/components/shared/Button";
 import { ContextActions } from "@/components/shared/ContextActions";
 import { FadeIn } from "@/components/shared/FadeIn";
 import { ProgressiveMathResult } from "@/components/shared/ProgressiveMathResult";
+import { MathSteps } from "@/components/steps/MathSteps";
 import { getCalculatorExplorations } from "@/data/connections";
 import { useSolveLatex } from "@/hooks/useSolveLatex";
 
@@ -151,9 +152,9 @@ export function ResultPanel({
               <Button type="button" variant="secondary" onClick={onRetry}>
                 Tentar outro
               </Button>
-              <Button type="button" variant="ghost" disabled aria-label="Ver explicação — recurso em breve">
-                Ver explicação (em breve)
-              </Button>
+            </div>
+            <div className="mt-4">
+              <MathSteps expression={expression} />
             </div>
           </div>
         </FadeIn>

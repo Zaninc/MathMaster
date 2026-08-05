@@ -41,8 +41,26 @@ def is_equation_domain_expression(expression: str) -> bool:
     return looks_like_equation(expression) or looks_like_inequality(expression)
 
 
-def _split_equations(expression: str) -> list[str]:
+def split_equations(expression: str) -> list[str]:
     return [part.strip() for part in _SPLIT_PATTERN.split(expression) if part.strip()]
+
+
+def split_equation_sides(text: str) -> tuple[str, str]:
+    """Sprint V2.9 (Passo a Passo) — divide uma equação de um único "="
+    em (lado_esquerdo, lado_direito) SEM deixar o SymPy avaliar a
+    igualdade. `_parse_equation` (usado por `solve_equation_text`) passa
+    por `convert_equals_signs` + `Eq(...)`, e o SymPy, quando consegue
+    PROVAR que a igualdade é sempre verdadeira ou sempre falsa
+    independente de x (ex. "2x+1=2x+3", "2x+1=2x+1"), devolve
+    `BooleanFalse`/`BooleanTrue` em vez de um `Eq` — exatamente os casos
+    de identidade/contradição que a infraestrutura de passos precisa
+    apresentar com passos próprios, não rejeitar. Esta função nunca
+    constrói um `Eq`; devolve os dois lados como texto, para cada um ser
+    parseado separadamente por quem chamar (`math_engine.steps`)."""
+    parts = _EQUALS_PATTERN.split(text)
+    if len(parts) != 2 or not parts[0].strip() or not parts[1].strip():
+        raise ExpressionError(f"Não foi possível interpretar a equação: {text}")
+    return parts[0].strip(), parts[1].strip()
 
 
 def _parse_equation(text: str) -> Eq:
@@ -79,7 +97,7 @@ def solve_equation_text(expression: str) -> str:
     if looks_like_inequality(expression):
         return _solve_single_inequality(expression)
 
-    parts = _split_equations(expression)
+    parts = split_equations(expression)
     equations = [_parse_equation(part) for part in parts]
 
     if len(equations) > 1:

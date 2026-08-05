@@ -25,3 +25,21 @@ export interface HistoryItem {
   approx: string | null;
   timestamp: string;
 }
+
+/**
+ * Sprint V2.9 (Passo a Passo) — espelha `backend/app/schemas.py:StepItem`.
+ * `expression` é sempre texto matemático puro (nunca LaTeX bruto) — o
+ * mesmo pipeline de `lib/math/to-latex.ts` já usado para o eco da
+ * expressão/histórico converte cada passo.
+ */
+export interface StepItem {
+  title: string | null;
+  expression: string;
+  explanation: string | null;
+}
+
+export interface StepsResponse {
+  expression: string;
+  result: string;
+  steps: StepItem[];
+}

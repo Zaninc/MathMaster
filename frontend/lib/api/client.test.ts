@@ -51,6 +51,20 @@ describe("apiClient", () => {
     expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ expression: "√(9)" });
   });
 
+  it("solveSteps() faz POST /solve/steps com o corpo correto e devolve a resposta tipada", async () => {
+    const body = { expression: "2*x+4=10", result: "x = 3", steps: [{ title: "Equação inicial", expression: "2*x + 4=10", explanation: null }] };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(body));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await apiClient.solveSteps("2*x+4=10");
+
+    expect(result).toEqual(body);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://api.test/solve/steps");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({ expression: "2*x+4=10" });
+  });
+
   it("getHistory() faz GET /history e devolve a lista", async () => {
     const items = [{ expression: "2+2", result: "4", timestamp: "2026-01-01T00:00:00Z" }];
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(items)));

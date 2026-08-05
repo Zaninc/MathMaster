@@ -51,6 +51,7 @@ from typing import Callable, TypeVar
 from app.config import settings
 from app.math_engine import ExpressionError, solve_expression, solve_expression_with_approx
 from app.math_engine.errors import ComputationTimeoutError
+from app.math_engine.steps import MathStep, generate_steps
 
 T = TypeVar("T")
 
@@ -103,6 +104,21 @@ def _run_solve_with_approx(expression: str, result_queue: multiprocessing.Queue)
     especial)."""
     try:
         result = solve_expression_with_approx(expression)
+    except ExpressionError as exc:
+        result_queue.put(("expression_error", str(exc)))
+    except Exception as exc:
+        result_queue.put(("internal_error", f"{type(exc).__name__}: {exc}"))
+    else:
+        result_queue.put(("ok", result))
+
+
+def _run_generate_steps(expression: str, result_queue: multiprocessing.Queue) -> None:
+    """Sprint V2.9 (Passo a Passo) — mesmo protocolo de `_run_solve`, só
+    troca `solve_expression` por `math_engine.steps.generate_steps` (o
+    payload "ok" vira a lista de `MathStep`, um `dataclass` simples,
+    picklable sem tratamento especial pela fila entre processos)."""
+    try:
+        result = generate_steps(expression)
     except ExpressionError as exc:
         result_queue.put(("expression_error", str(exc)))
     except Exception as exc:
@@ -188,3 +204,12 @@ def solve_expression_with_timeout_and_approx(expression: str) -> tuple[str, str 
     testes existente.
     """
     return _run_in_subprocess_with_timeout(_run_solve_with_approx, expression)
+
+
+def generate_steps_with_timeout(expression: str) -> list[MathStep]:
+    """Sprint V2.9 (Passo a Passo) — mesma proteção de timeout/isolamento
+    por processo de `solve_expression_with_timeout`, chamando
+    `math_engine.steps.generate_steps` dentro do processo isolado. Usada
+    só pela rota nova `/solve/steps`; nenhuma função existente aqui é
+    alterada."""
+    return _run_in_subprocess_with_timeout(_run_generate_steps, expression)

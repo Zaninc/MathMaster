@@ -6,12 +6,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.execution import shutdown_active_processes, solve_expression_with_timeout_and_approx
+from app.execution import (
+    generate_steps_with_timeout,
+    shutdown_active_processes,
+    solve_expression_with_timeout,
+    solve_expression_with_timeout_and_approx,
+)
 from app.formatter import format_result, render_math
 from app.history import add_entry, get_history
 from app.math_engine import ExpressionError, normalize_all, solve_expression
 from app.rate_limit import enforce_rate_limit
-from app.schemas import HistoryItem, SolveRequest, SolveResponse
+from app.schemas import HistoryItem, SolveRequest, SolveResponse, StepItem, StepsRequest, StepsResponse
 
 logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger("mathmaster")
@@ -112,3 +117,30 @@ def solve(
 @app.get("/history", response_model=list[HistoryItem])
 def history() -> list[HistoryItem]:
     return get_history()
+
+
+# Sprint V2.9 (Passo a Passo) — fluxo NOVO e opcional, sem tocar em
+# `/solve` (contrato `{expression, result, approx}` intocado, ver
+# CLAUDE_RULES.md "não alterar endpoints sem necessidade"). Duas chamadas
+# isoladas em processos próprios (`generate_steps_with_timeout` +
+# `solve_expression_with_timeout`, a MESMA função já usada por `/solve`
+# hoje) em vez de uma só: mantém `execution.py` com uma função por
+# responsabilidade, sem acoplar o cálculo do resultado final à geração de
+# passos — se o passo a passo falhar por algo fora do escopo desta versão
+# (ex. sistema 3x3), o motor "de verdade" nem chega a ser chamado, então
+# não há resultado nenhum para devolver.
+@app.post("/solve/steps", response_model=StepsResponse)
+def solve_steps(
+    request: StepsRequest, _rate_limit: None = Depends(enforce_rate_limit)
+) -> StepsResponse:
+    try:
+        raw_steps = generate_steps_with_timeout(request.expression)
+        raw_result = solve_expression_with_timeout(request.expression)
+    except ExpressionError as exc:
+        logger.warning("ExpressionError (steps) para %r: %s", request.expression, exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    normalized_expression = normalize_all(request.expression)
+    result = render_math(format_result(normalized_expression, raw_result))
+    steps = [StepItem(title=step.title, expression=step.expression, explanation=step.explanation) for step in raw_steps]
+    logger.info("Passo a passo gerado: %r -> %d passos", request.expression, len(steps))
+    return StepsResponse(expression=request.expression, result=result, steps=steps)
