@@ -121,3 +121,50 @@ def test_quadratic_factoring_and_direct_root_steps_have_no_title_segments() -> N
     for expr in ["x**2-5*x+6=0", "x**2=16"]:
         for step in generate_steps(expr):
             assert step.title_segments is None
+
+
+# --- Sprint V2.10: derivadas --------------------------------------------------
+
+
+def test_solve_steps_derivative_polynomial(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "d/dx(x**2+3*x)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Derivada: 2x + 3"
+    assert body["steps"][0]["title"] == "Função original"
+    assert body["steps"][-1]["title"] == "Somando os resultados"
+    assert body["steps"][-1]["expression"] == "2*x + 3"
+
+
+def test_solve_steps_derivative_technical_syntax_also_works(client: TestClient) -> None:
+    # `d/dx(...)` normaliza para `derivada(...)`, mas a sintaxe técnica
+    # (o que o /solve já aceita) também deve funcionar sem tradução extra.
+    response = client.post("/solve/steps", json={"expression": "derivada(x**2, x)"})
+    assert response.status_code == 200
+    assert response.json()["steps"][-1]["expression"] == "2*x"
+
+
+def test_solve_steps_derivative_with_title_segments(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "d/dx(x**5)"})
+    assert response.status_code == 200
+    step = response.json()["steps"][-1]
+    assert step["title_segments"] == [
+        {"type": "text", "content": "Derivando"},
+        {"type": "math", "content": "x**5"},
+        {"type": "text", "content": "pela regra da potência"},
+    ]
+
+
+def test_solve_steps_derivative_unsupported_returns_friendly_400(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "d/dx(sin(x))"})
+    assert response.status_code == 400
+    assert "ainda não foi implementado" in response.json()["detail"]
+
+
+def test_solve_endpoint_unaffected_by_unsupported_derivative_steps(client: TestClient) -> None:
+    """`/solve` continua calculando normalmente qualquer derivada, mesmo
+    quando `/solve/steps` ainda não sabe explicá-la passo a passo — o
+    motor de cálculo (`calculus/derivatives.py`) nunca foi alterado."""
+    response = client.post("/solve", json={"expression": "d/dx(sin(x))"})
+    assert response.status_code == 200
+    assert response.json()["result"] == "Derivada: cos(x)"

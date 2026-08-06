@@ -41,7 +41,7 @@ from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
 from ..errors import ExpressionError
-from .formatting import eq_text, math_segment, text_segment
+from .formatting import eq_text, math_segment, paren_if_negative, text_segment
 from .linear_equations import parse_equation_sides, reduce_to_value
 from .models import MathStep
 from .validation import UNSUPPORTED_EQUATION_MESSAGE, require_single_symbol
@@ -57,10 +57,6 @@ def _standard_form_steps(lhs: Expr, rhs: Expr) -> tuple[list[MathStep], Expr]:
             MathStep(title="Organizando em ax²+bx+c=0", expression=eq_text(standard, Integer(0)))
         )
     return steps, standard
-
-
-def _paren_if_negative(value: Expr) -> str:
-    return f"({value})" if value.is_negative else str(value)
 
 
 def _complex_root_text(root: Expr) -> str:
@@ -149,7 +145,7 @@ def _bhaskara_steps(a: Expr, b: Expr, c: Expr, symbol: Symbol) -> list[MathStep]
     steps: list[MathStep] = []
 
     b_squared = b**2
-    delta_substituted = f"Delta={b_squared}-4*{_paren_if_negative(a)}*{_paren_if_negative(c)}"
+    delta_substituted = f"Delta={b_squared}-4*{paren_if_negative(a)}*{paren_if_negative(c)}"
     steps.append(
         MathStep(
             title=(

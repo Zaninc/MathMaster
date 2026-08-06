@@ -308,3 +308,133 @@ describe("MathSteps — compatibilidade com passos de equações quadráticas (S
     expect(badges).toEqual(["1", "2", "3", "4"]);
   });
 });
+
+/**
+ * Sprint V2.10 (Passo a Passo — Derivadas) — ZERO componente novo
+ * (`MathSteps`/`MathStepItem`/`MixedMathText` intocados): confirma que o
+ * texto matemático puro que o backend agora envia para derivadas
+ * (`derivada(expr, x)`, somas/diferenças de `derivada(...)`, títulos com
+ * `title_segments`) já passa pelo MESMO pipeline `valueToLatex` usado
+ * desde a V2.9, sem precisar de nenhuma alteração no frontend.
+ */
+describe("MathSteps — compatibilidade com passos de derivadas (Sprint V2.10)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.solveSteps).mockReset();
+  });
+
+  it("renderiza a notação d/dx e a linearidade da soma em KaTeX", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "d/dx(x**2+3*x)",
+      result: "Derivada: 2x + 3",
+      steps: [
+        {
+          title: "Função original",
+          title_segments: null,
+          expression: "derivada(x**2 + 3*x, x)",
+          explanation: null,
+        },
+        {
+          title: "Aplicando a linearidade da derivada",
+          title_segments: null,
+          expression: "derivada(x**2, x)+derivada(3*x, x)",
+          explanation: null,
+        },
+        {
+          title: "Derivando x² pela regra da potência",
+          title_segments: [
+            { type: "text", content: "Derivando" },
+            { type: "math", content: "x**2" },
+            { type: "text", content: "pela regra da potência" },
+          ],
+          expression: "2*x",
+          explanation: null,
+        },
+        {
+          title: "Derivando 3x",
+          title_segments: [
+            { type: "text", content: "Derivando" },
+            { type: "math", content: "3*x" },
+          ],
+          expression: "3",
+          explanation: null,
+        },
+        { title: "Somando os resultados", title_segments: null, expression: "2*x + 3", explanation: null },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="d/dx(x**2+3*x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    // 5 expressões de passo + 2 segmentos "math" de título = 7 elementos `.katex`.
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(7));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex?.includes("\\frac{d}{dx}\\left({x}^{2}+3\\cdotx\\right)"))).toBe(
+      true
+    );
+    expect(
+      annotations.some((latex) => latex?.includes("\\frac{d}{dx}\\left({x}^{2}\\right)+\\frac{d}{dx}"))
+    ).toBe(true);
+    expect(screen.getAllByText("Derivando").length).toBeGreaterThan(0);
+    expect(screen.getByText("pela regra da potência")).toBeInTheDocument();
+    expect(annotations.some((latex) => latex === "2\\cdotx+3")).toBe(true);
+  });
+
+  it("renderiza o coeficiente negativo (parênteses corretos) e o passo de simplificação", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "d/dx(-4*x**3)",
+      result: "Derivada: -12x²",
+      steps: [
+        {
+          title: "Função original",
+          title_segments: null,
+          expression: "derivada(-4*x**3, x)",
+          explanation: null,
+        },
+        {
+          title: "Derivando -4x³ pela regra da potência",
+          title_segments: [
+            { type: "text", content: "Derivando" },
+            { type: "math", content: "-4*x**3" },
+            { type: "text", content: "pela regra da potência" },
+          ],
+          expression: "3*(-4)*x**2",
+          explanation: null,
+        },
+        { title: "Simplificando", title_segments: null, expression: "-12*x**2", explanation: null },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="d/dx(-4*x**3)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(4));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex === "3\\cdot\\left(-4\\right)\\cdot{x}^{2}")).toBe(true);
+    expect(screen.getByText("Simplificando")).toBeInTheDocument();
+    expect(annotations.some((latex) => latex === "-12\\cdot{x}^{2}")).toBe(true);
+  });
+
+  it("mostra erro amigável para derivada fora do escopo (ex. seno), sem quebrar a tela", async () => {
+    const { ApiError } = await import("@/lib/api/errors");
+    vi.mocked(apiClient.solveSteps).mockRejectedValue(
+      new ApiError(
+        "invalid_expression",
+        "O passo a passo para este tipo de derivada ainda não foi implementado nesta versão."
+      )
+    );
+
+    render(<MathSteps expression="d/dx(sin(x))" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("O passo a passo para este tipo de derivada ainda não foi implementado nesta versão.")
+      ).toBeInTheDocument()
+    );
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});

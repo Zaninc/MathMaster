@@ -19,13 +19,21 @@ para `linear_equations`; grau exatamente 2 vai para `quadratic_equations`
 (nova); qualquer outro grau continua rejeitado com mensagem amigável. Uma
 entrada como "0x²+2x=4" (coeficiente de x² nulo) expande para grau 1 e cai
 em `linear_equations` automaticamente — nenhum código dedicado a "casos
-degenerados" existe neste módulo nem em `quadratic_equations.py`."""
+degenerados" existe neste módulo nem em `quadratic_equations.py`.
+
+Sprint V2.10 — `derivada(expr, var)` é verificado ANTES da exclusão geral
+de domínio de cálculo (`is_calculus_domain_expression`, que casaria
+QUALQUER chamada de cálculo, incl. `integral`/`limite`, ainda fora de
+escopo do passo a passo): `is_derivative_call` decide especificamente
+"isto é uma derivada?" e, se for, delega para `derivatives.py` — o resto
+do domínio de cálculo continua caindo na exclusão geral, com a mesma
+mensagem amigável de sempre."""
 from __future__ import annotations
 
 from sympy import degree, expand
 
 from ..analytic_geometry.dispatcher import is_analytic_geometry_domain_expression
-from ..calculus.dispatcher import is_calculus_domain_expression
+from ..calculus.dispatcher import is_calculus_domain_expression, is_derivative_call
 from ..combinatorics.dispatcher import is_combinatorics_domain_expression
 from ..complex.dispatcher import is_complex_domain_expression
 from ..dispatcher import normalize_all
@@ -42,6 +50,7 @@ from ..polynomials.dispatcher import is_polynomial_domain_expression
 from ..probability.dispatcher import is_probability_domain_expression
 from ..summation.dispatcher import is_summation_domain_expression
 from ..trigonometry.dispatcher import is_trigonometry_domain_expression
+from .derivatives import generate_derivative_steps
 from .linear_equations import generate_linear_equation_steps, parse_equation_sides
 from .linear_systems import generate_linear_system_steps
 from .models import MathStep
@@ -102,6 +111,9 @@ def generate_steps(expression: str) -> list[MathStep]:
         raise ExpressionError(EMPTY_EXPRESSION_MESSAGE)
 
     normalized = normalize_all(expression)
+
+    if is_derivative_call(normalized):
+        return generate_derivative_steps(normalized)
 
     if any(check(normalized) for check in _NON_EQUATION_DOMAIN_CHECKS):
         raise ExpressionError(UNSUPPORTED_DOMAIN_MESSAGE)

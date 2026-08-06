@@ -31,6 +31,7 @@ from __future__ import annotations
 import re
 
 from sympy import Symbol
+from sympy.core.expr import Expr
 from sympy.parsing.sympy_parser import (
     implicit_multiplication_application,
     standard_transformations,
@@ -60,6 +61,16 @@ def _rename_natural_log(text: str) -> str:
 
 def is_calculus_domain_expression(expression: str) -> bool:
     return bool(_CALL_PATTERN.match(expression))
+
+
+def is_derivative_call(expression: str) -> bool:
+    """Sprint V2.10 (Passo a Passo — Derivadas) — mesmo padrão de
+    `is_calculus_domain_expression`, mas restrito à operação `derivada`
+    especificamente (`integral`/`limite` continuam fora do escopo do
+    passo a passo). Usado por `steps/dispatcher.py` para decidir o
+    roteamento ANTES da exclusão geral de domínio de cálculo."""
+    match = _CALL_PATTERN.match(expression)
+    return bool(match) and match.group(1) == "derivada"
 
 
 def _split_top_level_args(text: str) -> list[str]:
@@ -102,6 +113,29 @@ def _parse_fragment(text: str, symbol: Symbol):
         return safe_parse_expr(text, transformations=_TRANSFORMATIONS, local_dict=local_dict)
     except Exception as exc:
         raise ExpressionError(f"Não foi possível interpretar a expressão: {text}") from exc
+
+
+def parse_derivative_call(expression: str) -> tuple[Expr, Symbol]:
+    """Sprint V2.10 (Passo a Passo — Derivadas) — reaproveitável por
+    `math_engine.steps.derivatives`: mesmo parsing que `solve_calculus_text`
+    já faz para `derivada(expr, var)` (`_CALL_PATTERN`, `_split_top_level_
+    args`, `_parse_variable`, `_parse_fragment` — nunca regex frágil
+    novo), devolvendo `(expr, symbol)` já prontos em vez de já calcular a
+    derivada. `compute_derivative`/`solve_calculus_text` continuam
+    100% intocados — esta função só expõe o parsing que eles já usavam
+    internamente."""
+    match = _CALL_PATTERN.match(expression)
+    if not match or match.group(1) != "derivada":
+        raise ExpressionError(f"Não foi possível interpretar a expressão: {expression}")
+    _, argumentos = match.groups()
+    partes = _split_top_level_args(argumentos)
+    if len(partes) != 2:
+        raise ExpressionError(
+            "derivada(...) espera exatamente 2 argumentos: expressão e variável."
+        )
+    symbol = _parse_variable(partes[1])
+    expr = _parse_fragment(partes[0], symbol)
+    return expr, symbol
 
 
 def solve_calculus_text(expression: str) -> str:

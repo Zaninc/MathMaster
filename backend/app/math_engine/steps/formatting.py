@@ -58,3 +58,11 @@ def isolate_title(coeff: Expr) -> str:
     if coeff.is_Rational and coeff.p == 1 and coeff.q != 1:
         return f"Multiplicando os dois lados por {coeff.q}"
     return f"Dividindo os dois lados por {_clean(coeff)}"
+
+
+def paren_if_negative(value: Expr) -> str:
+    """Sprint V2.9.1 (originalmente privado em `quadratic_equations.py`,
+    promovido na V2.10 para reuso por `derivatives.py`) — parênteses só
+    quando o valor é negativo, evitando ambiguidade ao montar strings
+    manuais de substituição (ex. "3*(-4)*x**2", nunca "3*-4*x**2")."""
+    return f"({value})" if value.is_negative else str(value)
