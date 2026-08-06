@@ -5,6 +5,7 @@ from sympy.parsing.sympy_parser import (
     standard_transformations,
 )
 
+from ...canonical_constants import canonicalize_euler_constant
 from ..errors import ExpressionError
 from ..log_convention import LOCAL_DICT as _LOCAL_DICT
 from ..safe_parsing import safe_parse_expr
@@ -75,6 +76,14 @@ def solve_logarithm_text(expression: str) -> str:
         raise ExpressionError(
             f"Não foi possível interpretar a expressão: {expression}"
         ) from exc
+
+    # Hotfix V2.12.2a — puramente sintático (nunca recalcula nada): o
+    # símbolo solto "e" sempre significa Euler nesta convenção, então
+    # reclassificar ANTES de decidir avaliação-numérica vs. simplificação
+    # geral deixa o resto do pipeline seguir sem nenhuma regra especial
+    # (ex. "2*ln(e)" vira "2*log(E)", já uma AVALIAÇÃO numérica sem
+    # símbolo livre nenhum, resolvida normalmente).
+    expr = canonicalize_euler_constant(expr)
 
     kind = classify_log_expression(expr)
     if kind == AVALIACAO:

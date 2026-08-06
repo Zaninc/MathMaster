@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import time
 
-from sympy import Rational, cos, factorial, sin, symbols
+from sympy import Rational, Symbol, cos, exp, factorial, ln, sin, symbols
 from sympy.abc import x
 
 from app.formatter.expr_clean import clean_expr, evalf_expr
@@ -75,3 +75,19 @@ def test_clean_expr_skips_trigsimp_above_the_atom_threshold_but_stays_fast() -> 
     # antes da correção — margem generosa para variação de máquina/CI.
     assert elapsed < 2.5, f"levou {elapsed:.2f}s, deveria pular trigsimp"
     assert result == expr
+
+
+# --- Hotfix V2.12.2a: símbolo solto "e" reinterpretado como Euler ---------
+
+
+def test_clean_expr_collapses_ln_of_bare_e_symbol() -> None:
+    e = Symbol("e")
+    assert clean_expr(ln(e)) == 1
+
+
+def test_clean_expr_collapses_derivative_shaped_expression_with_bare_e() -> None:
+    # Forma real produzida quando o usuário digita "e**(3*x)" em vez de
+    # "exp(3*x)": SymPy trata "e" como constante livre genérica.
+    e = Symbol("e")
+    before = 3 * e ** (3 * x) * ln(e)
+    assert clean_expr(before) == 3 * exp(3 * x)

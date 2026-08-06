@@ -66,6 +66,27 @@ def test_natural_notation_matches_technical_syntax() -> None:
     assert _final_expression("lim x→0 (exp(x)-1)/x") == "1"
 
 
+# --- Hotfix V2.12.2a: símbolo solto "e" nunca deixa "ln(e)"/"log(e)" nos passos --
+
+
+def test_bare_e_syntax_never_shows_ln_of_e_in_any_step() -> None:
+    # "e**(2*x)" (em vez de "exp(2*x)") faz o SymPy tratar "e" como um
+    # Symbol genérico — sem a canonicalização, a derivada real trazia
+    # "log(e)" em vários passos (numerador, novo limite, substituindo,
+    # calculando). Puramente apresentação: o valor final sempre bateu com
+    # o motor real, só o texto intermediário estava errado.
+    steps = generate_steps("limite((e**(2*x)-1)/x, x, 0)")
+    for step in steps:
+        assert "log(e)" not in step.expression
+        assert "ln(e)" not in step.expression
+
+    numer_step = next(s for s in steps if s.title == "Derivando o numerador")
+    assert numer_step.expression == "2*exp(2*x)"
+    substituted_step = next(s for s in steps if s.title == "Substituindo")
+    assert substituted_step.expression == "2*exp(2*(0))"
+    assert steps[-1].expression == "2"
+
+
 # --- Caso 2: infinito/infinito, quociente tende a 0 ----------------------------
 
 

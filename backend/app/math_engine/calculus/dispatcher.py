@@ -37,6 +37,7 @@ from sympy.parsing.sympy_parser import (
     standard_transformations,
 )
 
+from ...canonical_constants import canonicalize_euler_constant
 from ..errors import ExpressionError
 from ..log_convention import LOCAL_DICT as _LOG_LOCAL_DICT
 from ..safe_parsing import extract_safe_symbols, safe_parse_expr
@@ -254,7 +255,7 @@ def solve_calculus_text(expression: str) -> str:
             )
         symbol = _parse_variable(partes[1])
         expr = _parse_fragment(partes[0], symbol)
-        resultado = compute_derivative(expr, symbol)
+        resultado = canonicalize_euler_constant(compute_derivative(expr, symbol))
         return _rename_natural_log(f"Derivada: {resultado}")
 
     if operacao == "limite":
@@ -265,21 +266,21 @@ def solve_calculus_text(expression: str) -> str:
         symbol = _parse_variable(partes[1])
         expr = _parse_fragment(partes[0], symbol)
         ponto = _parse_fragment(partes[2], symbol)
-        resultado = compute_limit(expr, symbol, ponto)
+        resultado = canonicalize_euler_constant(compute_limit(expr, symbol, ponto))
         return _rename_natural_log(f"Limite: {resultado}")
 
     if operacao == "integral":
         if len(partes) == 2:
             symbol = _parse_variable(partes[1])
             expr = _parse_fragment(partes[0], symbol)
-            resultado = compute_indefinite_integral(expr, symbol)
+            resultado = canonicalize_euler_constant(compute_indefinite_integral(expr, symbol))
             return _rename_natural_log(f"Integral: {resultado} + C")
         if len(partes) == 4:
             symbol = _parse_variable(partes[1])
             expr = _parse_fragment(partes[0], symbol)
             inferior = _parse_fragment(partes[2], symbol)
             superior = _parse_fragment(partes[3], symbol)
-            resultado = compute_definite_integral(expr, symbol, inferior, superior)
+            resultado = canonicalize_euler_constant(compute_definite_integral(expr, symbol, inferior, superior))
             return _rename_natural_log(f"Integral definida: {resultado}")
         raise ExpressionError(
             "integral(...) espera 2 argumentos (indefinida) ou 4 argumentos (definida)."

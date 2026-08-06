@@ -46,6 +46,23 @@ def test_limit_at_infinity() -> None:
     assert _solve("limite(1/x, x, oo)") == "Limite: 0"
 
 
+# --- Hotfix V2.12.2a: símbolo solto "e" reinterpretado como Euler ---------
+#
+# Quando o usuário digita "e**(...)" em vez de `exp(...)`, o SymPy trata
+# "e" como um Symbol genérico (não sabe que é Euler), então a regra de
+# derivação de a^u deixa "ln(e)" no resultado — puramente apresentação,
+# nunca o cálculo (`compute_derivative`/`compute_limit` continuam
+# intocados, ver `app/canonical_constants.py`).
+
+
+def test_derivative_of_bare_e_power_never_shows_ln_of_e() -> None:
+    assert _solve("derivada(e**(3*x), x)") == "Derivada: 3*exp(3x)"
+
+
+def test_limit_with_bare_e_power_never_shows_ln_of_e() -> None:
+    assert _solve("limite((e**(2*x)-1)/x, x, 0)") == "Limite: 2"
+
+
 def test_limit_diverging_sides_raises_without_leaking_internal_repr() -> None:
     with pytest.raises(ExpressionError) as exc_info:
         _solve("limite(1/x, x, 0)")

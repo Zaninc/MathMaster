@@ -33,6 +33,7 @@ from sympy import oo
 from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
+from ...canonical_constants import canonicalize_euler_constant
 from ..calculus.derivatives import compute_derivative
 from ..calculus.dispatcher import parse_limit_call
 from ..calculus.limits import compute_limit
@@ -90,8 +91,14 @@ def generate_lhopital_steps(text: str) -> list[MathStep]:
         )
     )
 
-    diff_numer = compute_derivative(numer, symbol)
-    diff_denom = compute_derivative(denom, symbol)
+    # Hotfix V2.12.2a — canonicaliza IMEDIATAMENTE após calcular (nunca
+    # dentro de `compute_derivative`, que continua intocado): se o usuário
+    # digitou o símbolo solto "e" em vez de `exp(...)`, a derivada real
+    # traz "log(e)" (SymPy não sabe que esse "e" é Euler) — puramente uma
+    # questão de apresentação, corrigida ANTES de qualquer string ser
+    # construída a partir destes valores.
+    diff_numer = canonicalize_euler_constant(compute_derivative(numer, symbol))
+    diff_denom = canonicalize_euler_constant(compute_derivative(denom, symbol))
     steps.append(MathStep(title="Derivando o numerador", expression=str(diff_numer)))
     steps.append(MathStep(title="Derivando o denominador", expression=str(diff_denom)))
 
@@ -115,6 +122,6 @@ def generate_lhopital_steps(text: str) -> list[MathStep]:
             substituted_text = f"{numer_text}/({denom_text})"
         steps.append(MathStep(title="Substituindo", expression=substituted_text))
 
-    result = compute_limit(expr, symbol, point)
+    result = canonicalize_euler_constant(compute_limit(expr, symbol, point))
     steps.append(MathStep(title="Calculando", expression=str(result)))
     return steps

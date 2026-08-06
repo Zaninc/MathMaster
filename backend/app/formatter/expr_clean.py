@@ -12,6 +12,8 @@ from sympy import cancel, factor, radsimp, trigsimp
 from sympy.core.expr import Expr
 from sympy.functions.elementary.trigonometric import TrigonometricFunction
 
+from ..canonical_constants import canonicalize_euler_constant
+
 # NOTE: simplify(), sqrtdenest() and cancel() were deliberately excluded from
 # (or restricted in) this battery after a real regression was caught during
 # Sprint 7.2 testing: all three turn an already-factored expression like
@@ -62,7 +64,16 @@ def _is_equivalent(candidate: Expr, original: Expr) -> bool:
 def clean_expr(expr: Expr) -> Expr:
     """Try a battery of safe SymPy simplifications and keep the shortest
     representation that is provably equal to the original. Falls back to
-    the original expression untouched if nothing safely improves it."""
+    the original expression untouched if nothing safely improves it.
+
+    Hotfix V2.12.2a: `canonicalize_euler_constant` runs FIRST and
+    unconditionally (never gated by `_is_equivalent`, unlike the battery
+    below) — it's a domain convention (the bare symbol "e" always means
+    Euler's number in this product, same as "pi"), not a candidate
+    competing on string length. Everything downstream (`best`, the
+    equivalence checks) operates on the already-canonicalized expression.
+    """
+    expr = canonicalize_euler_constant(expr)
     best = expr
     simplifiers = _SIMPLIFIERS + ((cancel,) if "/" in str(expr) else ())
     for simplifier in simplifiers:
