@@ -216,9 +216,10 @@ def test_solve_steps_integral_unsupported_returns_friendly_400(client: TestClien
     assert "ainda não foi implementado" in response.json()["detail"]
 
 
-def test_solve_steps_definite_integral_unsupported_returns_400(client: TestClient) -> None:
+def test_solve_steps_definite_integral_now_supported_since_v2_10_2(client: TestClient) -> None:
     response = client.post("/solve/steps", json={"expression": "integral(x**2, x, 0, 1)"})
-    assert response.status_code == 400
+    assert response.status_code == 200
+    assert response.json()["steps"][-1]["expression"] == "1/3"
 
 
 def test_solve_endpoint_unaffected_by_unsupported_integral_steps(client: TestClient) -> None:
@@ -228,3 +229,58 @@ def test_solve_endpoint_unaffected_by_unsupported_integral_steps(client: TestCli
     response = client.post("/solve", json={"expression": "integral(sin(x), x)"})
     assert response.status_code == 200
     assert response.json()["result"] == "Integral: -cos(x) + C"
+
+
+# --- Sprint V2.10.2: integrais definidas -----------------------------------------
+
+
+def test_solve_steps_definite_integral(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(x**2, x, 0, 2)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Integral definida: 8/3"
+    titles = [s["title"] for s in body["steps"]]
+    assert titles == [
+        "Integral original",
+        "Integrando x² pela regra da potência",
+        "Aplicando o Teorema Fundamental do Cálculo",
+        "Substituindo os limites",
+        "Calculando",
+    ]
+    assert body["steps"][-1]["expression"] == "8/3"
+
+
+def test_solve_steps_definite_integral_never_has_plus_c(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(x**2+3*x, x, 0, 2)"})
+    for step in response.json()["steps"]:
+        assert "+ C" not in step["expression"]
+
+
+def test_solve_steps_definite_integral_equal_bounds_returns_zero(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(x**2, x, 3, 3)"})
+    assert response.status_code == 200
+    steps = response.json()["steps"]
+    assert steps[-1]["expression"] == "0"
+    assert steps[-1]["explanation"] is not None
+
+
+def test_solve_steps_definite_integral_inverted_bounds_preserves_sign(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(x**2, x, 2, 0)"})
+    assert response.status_code == 200
+    assert response.json()["steps"][-1]["expression"] == "-8/3"
+
+
+def test_solve_steps_definite_integral_unsupported_returns_friendly_400(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(sin(x), x, 0, 1)"})
+    assert response.status_code == 400
+    assert "ainda não foi implementado" in response.json()["detail"]
+
+
+def test_solve_endpoint_unaffected_by_unsupported_definite_integral_steps(client: TestClient) -> None:
+    """`/solve` continua calculando normalmente qualquer integral definida,
+    mesmo quando `/solve/steps` ainda não sabe explicá-la — o motor de
+    cálculo (`calculus/integrals.py:compute_definite_integral`) nunca foi
+    alterado."""
+    response = client.post("/solve", json={"expression": "integral(sin(x), x, 0, 1)"})
+    assert response.status_code == 200
+    assert response.json()["result"] == "Integral definida: 1 - cos(1)"

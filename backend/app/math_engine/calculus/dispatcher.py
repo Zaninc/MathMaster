@@ -76,14 +76,25 @@ def is_derivative_call(expression: str) -> bool:
 def is_indefinite_integral_call(expression: str) -> bool:
     """Sprint V2.10.1 (Passo a Passo — Integrais) — mesmo padrão de
     `is_derivative_call`, restrito a `integral(expr, var)` com EXATAMENTE 2
-    argumentos (indefinida): a forma de 4 argumentos (definida,
-    `integral(expr, var, inferior, superior)`) fica fora do escopo do
-    passo a passo nesta versão e continua caindo na exclusão geral de
-    cálculo, com a mesma mensagem amigável de sempre."""
+    argumentos (indefinida). A forma de 4 argumentos (definida,
+    `integral(expr, var, inferior, superior)`) tem seu próprio par
+    `is_definite_integral_call`/`parse_definite_integral_call` desde a
+    V2.10.2 — as duas nunca colidem (contagem de argumentos é mutuamente
+    exclusiva)."""
     match = _CALL_PATTERN.match(expression)
     if not match or match.group(1) != "integral":
         return False
     return len(_split_top_level_args(match.group(2))) == 2
+
+
+def is_definite_integral_call(expression: str) -> bool:
+    """Sprint V2.10.2 (Passo a Passo — Integrais Definidas) — mesmo padrão
+    de `is_indefinite_integral_call`, restrito a `integral(expr, var,
+    inferior, superior)` com EXATAMENTE 4 argumentos."""
+    match = _CALL_PATTERN.match(expression)
+    if not match or match.group(1) != "integral":
+        return False
+    return len(_split_top_level_args(match.group(2))) == 4
 
 
 def _split_top_level_args(text: str) -> list[str]:
@@ -171,6 +182,29 @@ def parse_integral_call(expression: str) -> tuple[Expr, Symbol]:
     symbol = _parse_variable(partes[1])
     expr = _parse_fragment(partes[0], symbol)
     return expr, symbol
+
+
+def parse_definite_integral_call(expression: str) -> tuple[Expr, Symbol, Expr, Expr]:
+    """Sprint V2.10.2 (Passo a Passo — Integrais Definidas) — mesmo
+    espírito de `parse_integral_call`, restrito à forma DEFINIDA (4
+    argumentos). `compute_definite_integral`/`solve_calculus_text`
+    continuam 100% intocados."""
+    match = _CALL_PATTERN.match(expression)
+    if not match or match.group(1) != "integral":
+        raise ExpressionError(f"Não foi possível interpretar a expressão: {expression}")
+    _, argumentos = match.groups()
+    partes = _split_top_level_args(argumentos)
+    if len(partes) != 4:
+        raise ExpressionError(
+            "Passo a passo disponível apenas para integrais definidas (4 "
+            "argumentos: expressão, variável, limite inferior e limite "
+            "superior) nesta versão."
+        )
+    symbol = _parse_variable(partes[1])
+    expr = _parse_fragment(partes[0], symbol)
+    lower = _parse_fragment(partes[2], symbol)
+    upper = _parse_fragment(partes[3], symbol)
+    return expr, symbol, lower, upper
 
 
 def solve_calculus_text(expression: str) -> str:

@@ -169,10 +169,14 @@ def test_sin_still_works_via_solve_despite_steps_rejection() -> None:
     assert solve_expression("integral(sin(x), x)") == "Integral: -cos(x) + C"
 
 
-def test_definite_integral_rejected_by_domain_exclusion() -> None:
-    # 4 argumentos (definida) fora de escopo do passo a passo nesta versão.
-    with pytest.raises(ExpressionError, match="lineares e quadráticas"):
-        generate_steps("integral(x**2, x, 0, 1)")
+def test_definite_integral_has_own_dedicated_module_since_v2_10_2() -> None:
+    # 4 argumentos (definida) tinha seu próprio módulo, `definite_
+    # integrals.py`, desde a Sprint V2.10.2 — ver `test_steps_definite_
+    # integrals.py` para a cobertura completa; aqui só confirma que não
+    # cai mais na exclusão geral de domínio de cálculo.
+    steps = generate_steps("integral(x**2, x, 0, 1)")
+    assert steps[-1].title == "Calculando"
+    assert steps[-1].expression == "1/3"
 
 
 def test_definite_integral_still_works_via_solve() -> None:

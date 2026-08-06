@@ -72,9 +72,15 @@ def _term_steps(coeff: Expr, exponent: int, symbol: Symbol, *, standalone: bool)
     return [MathStep(title=title, title_segments=title_segments, expression=str(result))]
 
 
-def generate_integral_steps(text: str) -> list[MathStep]:
-    expr, symbol = parse_integral_call(text)
-
+def find_primitive_steps(expr: Expr, symbol: Symbol) -> tuple[Expr, list[MathStep]]:
+    """Núcleo compartilhado: os passos que levam da expressão original até a
+    primitiva F(x) — SEM "+ C" (decisão de quem chama: integral indefinida
+    acrescenta a constante depois; a definida da V2.10.2 aplica o Teorema
+    Fundamental depois). Devolve a primitiva (valor real de
+    `compute_indefinite_integral`, nunca recalculado à mão) e a lista de
+    passos até ela — linearidade + termo a termo para polinômios de vários
+    termos, ou só o passo do termo único. `ExpressionError` amigável se
+    qualquer termo estiver fora do formato "coeficiente*x^n" suportado."""
     # Mesma convenção de leitura em grau decrescente da V2.10
     # (`as_ordered_terms()`, nunca `Add.make_args`).
     terms = expand(expr).as_ordered_terms()
@@ -82,30 +88,38 @@ def generate_integral_steps(text: str) -> list[MathStep]:
     if any(item is None for item in classified):
         raise ExpressionError(UNSUPPORTED_INTEGRAL_MESSAGE)
 
-    steps = [MathStep(title="Integral original", expression=f"integral({expr}, {symbol})")]
-
     if len(terms) == 1:
         coeff, exponent = classified[0]
-        steps.extend(_term_steps(coeff, exponent, symbol, standalone=True))
-        without_constant = compute_indefinite_integral(expr, symbol)
-    else:
-        steps.append(
-            MathStep(
-                title="Aplicando a linearidade da integral",
-                expression=linear_combination_expression(terms, symbol, "integral"),
-            )
-        )
-        for coeff, exponent in classified:
-            steps.extend(_term_steps(coeff, exponent, symbol, standalone=False))
+        steps = _term_steps(coeff, exponent, symbol, standalone=True)
+        primitive = compute_indefinite_integral(expr, symbol)
+        return primitive, steps
 
-        without_constant = compute_indefinite_integral(expr, symbol)
-        steps.append(MathStep(title="Somando os resultados", expression=str(without_constant)))
+    steps = [
+        MathStep(
+            title="Aplicando a linearidade da integral",
+            expression=linear_combination_expression(terms, symbol, "integral"),
+        )
+    ]
+    for coeff, exponent in classified:
+        steps.extend(_term_steps(coeff, exponent, symbol, standalone=False))
+
+    primitive = compute_indefinite_integral(expr, symbol)
+    steps.append(MathStep(title="Somando os resultados", expression=str(primitive)))
+    return primitive, steps
+
+
+def generate_integral_steps(text: str) -> list[MathStep]:
+    expr, symbol = parse_integral_call(text)
+
+    steps = [MathStep(title="Integral original", expression=f"integral({expr}, {symbol})")]
+    primitive, primitive_steps = find_primitive_steps(expr, symbol)
+    steps.extend(primitive_steps)
 
     steps.append(
         MathStep(
             title="Adicionando a constante de integração",
             explanation=_INTEGRATION_CONSTANT_EXPLANATION,
-            expression=f"{without_constant} + C",
+            expression=f"{primitive} + C",
         )
     )
     return steps

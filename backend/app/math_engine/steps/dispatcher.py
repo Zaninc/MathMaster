@@ -31,9 +31,12 @@ mensagem amigável de sempre.
 
 Sprint V2.10.1 — mesmo tratamento para `integral(expr, var)` INDEFINIDA
 (2 argumentos): `is_indefinite_integral_call` decide "isto é uma integral
-indefinida?" e delega para `integrals.py`. Integral DEFINIDA (4
-argumentos, `integral(expr, var, inferior, superior)`) continua fora de
-escopo do passo a passo e cai na exclusão geral, junto de `limite`."""
+indefinida?" e delega para `integrals.py`.
+
+Sprint V2.10.2 — mesmo tratamento para `integral(expr, var, inferior,
+superior)` DEFINIDA (4 argumentos): `is_definite_integral_call` delega
+para `definite_integrals.py`. `limite` continua sendo o único caso do
+domínio de cálculo ainda fora de escopo, caindo na exclusão geral."""
 from __future__ import annotations
 
 from sympy import degree, expand
@@ -41,6 +44,7 @@ from sympy import degree, expand
 from ..analytic_geometry.dispatcher import is_analytic_geometry_domain_expression
 from ..calculus.dispatcher import (
     is_calculus_domain_expression,
+    is_definite_integral_call,
     is_derivative_call,
     is_indefinite_integral_call,
 )
@@ -60,6 +64,7 @@ from ..polynomials.dispatcher import is_polynomial_domain_expression
 from ..probability.dispatcher import is_probability_domain_expression
 from ..summation.dispatcher import is_summation_domain_expression
 from ..trigonometry.dispatcher import is_trigonometry_domain_expression
+from .definite_integrals import generate_definite_integral_steps
 from .derivatives import generate_derivative_steps
 from .integrals import generate_integral_steps
 from .linear_equations import generate_linear_equation_steps, parse_equation_sides
@@ -128,6 +133,9 @@ def generate_steps(expression: str) -> list[MathStep]:
 
     if is_indefinite_integral_call(normalized):
         return generate_integral_steps(normalized)
+
+    if is_definite_integral_call(normalized):
+        return generate_definite_integral_steps(normalized)
 
     if any(check(normalized) for check in _NON_EQUATION_DOMAIN_CHECKS):
         raise ExpressionError(UNSUPPORTED_DOMAIN_MESSAGE)

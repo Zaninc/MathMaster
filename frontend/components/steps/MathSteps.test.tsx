@@ -581,3 +581,176 @@ describe("MathSteps — compatibilidade com passos de integrais (Sprint V2.10.1)
     expect(screen.getByRole("alert")).toBeInTheDocument();
   });
 });
+
+/**
+ * Sprint V2.10.2 (Passo a Passo — Integrais Definidas) — ZERO componente
+ * novo (`MathSteps`/`MathStepItem`/`MixedMathText` intocados): confirma
+ * que o texto matemático puro do Teorema Fundamental do Cálculo
+ * (`integral(expr, x, a, b)`, "F(b)-F(a)", limites entre parênteses) já
+ * passa pelo MESMO pipeline `valueToLatex` usado desde a V2.9, sem
+ * precisar de nenhuma alteração no frontend.
+ */
+describe("MathSteps — compatibilidade com passos de integrais definidas (Sprint V2.10.2)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.solveSteps).mockReset();
+  });
+
+  it("renderiza o Teorema Fundamental do Cálculo em KaTeX, nunca com +C", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(x**2, x, 0, 2)",
+      result: "Integral definida: 8/3",
+      steps: [
+        {
+          title: "Integral original",
+          title_segments: null,
+          expression: "integral(x**2, x, 0, 2)",
+          explanation: null,
+        },
+        {
+          title: "Integrando x² pela regra da potência",
+          title_segments: [
+            { type: "text", content: "Integrando" },
+            { type: "math", content: "x**2" },
+            { type: "text", content: "pela regra da potência" },
+          ],
+          expression: "x**3/3",
+          explanation: null,
+        },
+        {
+          title: "Aplicando o Teorema Fundamental do Cálculo",
+          title_segments: null,
+          expression: "F(2)-F(0)",
+          explanation: "Encontramos uma primitiva F(x) e calculamos F(b) - F(a), o Teorema Fundamental do Cálculo.",
+        },
+        {
+          title: "Substituindo os limites",
+          title_segments: null,
+          expression: "(2)**3/3-((0)**3/3)",
+          explanation: null,
+        },
+        { title: "Calculando", title_segments: null, expression: "8/3", explanation: null },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral(x**2, x, 0, 2)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    // 5 expressões de passo + 1 segmento "math" de título = 6 elementos `.katex`.
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(6));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex?.includes("\\int_{0}^{2}{x}^{2}\\,dx"))).toBe(true);
+    expect(annotations.some((latex) => latex === "\\mathrm{F}\\left(2\\right)-\\mathrm{F}\\left(0\\right)")).toBe(
+      true
+    );
+    expect(annotations.some((latex) => latex === "\\frac{8}{3}")).toBe(true);
+    // Nenhum passo mostra "+ C" (integral definida nunca leva constante).
+    expect(container.textContent).not.toContain("+ C");
+    expect(
+      screen.getByText(
+        "Encontramos uma primitiva F(x) e calculamos F(b) - F(a), o Teorema Fundamental do Cálculo."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("renderiza limites iguais (intervalo de comprimento nulo) com explicação, sem calcular primitiva", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(x**2, x, 3, 3)",
+      result: "Integral definida: 0",
+      steps: [
+        {
+          title: "Integral original",
+          title_segments: null,
+          expression: "integral(x**2, x, 3, 3)",
+          explanation: null,
+        },
+        {
+          title: "O intervalo de integração tem comprimento nulo (os limites são iguais)",
+          title_segments: null,
+          expression: "0",
+          explanation:
+            "Quando o limite inferior é igual ao superior, o intervalo não tem largura nenhuma — a integral definida vale sempre zero.",
+        },
+      ],
+    });
+
+    render(<MathSteps expression="integral(x**2, x, 3, 3)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("O intervalo de integração tem comprimento nulo (os limites são iguais)")
+      ).toBeInTheDocument()
+    );
+    expect(
+      screen.getByText(
+        "Quando o limite inferior é igual ao superior, o intervalo não tem largura nenhuma — a integral definida vale sempre zero."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("renderiza limites invertidos preservando o sinal (área orientada, nunca valor absoluto)", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(x**2, x, 2, 0)",
+      result: "Integral definida: -8/3",
+      steps: [
+        {
+          title: "Integral original",
+          title_segments: null,
+          expression: "integral(x**2, x, 2, 0)",
+          explanation: null,
+        },
+        {
+          title: "Integrando x² pela regra da potência",
+          title_segments: null,
+          expression: "x**3/3",
+          explanation: null,
+        },
+        {
+          title: "Aplicando o Teorema Fundamental do Cálculo",
+          title_segments: null,
+          expression: "F(0)-F(2)",
+          explanation: null,
+        },
+        {
+          title: "Substituindo os limites",
+          title_segments: null,
+          expression: "(0)**3/3-((2)**3/3)",
+          explanation: null,
+        },
+        { title: "Calculando", title_segments: null, expression: "-8/3", explanation: null },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral(x**2, x, 2, 0)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(5));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    // Fração negativa preservada, nunca convertida para valor absoluto.
+    expect(annotations.some((latex) => latex === "\\frac{-8}{3}")).toBe(true);
+  });
+
+  it("mostra erro amigável para integral definida fora do escopo (ex. seno), sem quebrar a tela", async () => {
+    const { ApiError } = await import("@/lib/api/errors");
+    vi.mocked(apiClient.solveSteps).mockRejectedValue(
+      new ApiError(
+        "invalid_expression",
+        "O passo a passo para este tipo de integral ainda não foi implementado nesta versão."
+      )
+    );
+
+    render(<MathSteps expression="integral(sin(x), x, 0, 1)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("O passo a passo para este tipo de integral ainda não foi implementado nesta versão.")
+      ).toBeInTheDocument()
+    );
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});

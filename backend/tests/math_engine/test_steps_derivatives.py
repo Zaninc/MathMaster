@@ -142,15 +142,11 @@ def test_negative_or_fractional_exponent_rejected() -> None:
 # --- Regressão: integral/limite continuam fora do passo a passo -------------------
 
 
-def test_definite_integral_still_rejected_by_domain_exclusion() -> None:
-    # Sprint V2.10.1 — integral INDEFINIDA (2 argumentos) já é suportada
-    # (`test_steps_integrals.py`); a forma DEFINIDA (4 argumentos)
-    # continua fora de escopo do passo a passo.
-    with pytest.raises(ExpressionError, match="lineares e quadráticas"):
-        generate_steps("integral(x**2, x, 0, 1)")
-
-
 def test_limit_still_rejected_by_domain_exclusion() -> None:
+    # Sprint V2.10.1/V2.10.2 — integral indefinida (2 argumentos, `test_
+    # steps_integrals.py`) e definida (4 argumentos, `test_steps_definite_
+    # integrals.py`) já são suportadas; `limite` continua sendo o único
+    # caso do domínio de cálculo ainda fora de escopo.
     with pytest.raises(ExpressionError, match="lineares e quadráticas"):
         generate_steps("limite(x**2, x, 0)")
 
