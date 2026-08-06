@@ -139,12 +139,18 @@ def test_infinite_limit_numerator_smaller_degree_matches_ticket_example() -> Non
 # --- Fora de escopo: erro amigável, nunca interno ---------------------------
 
 
-def test_sin_over_x_rejected_with_friendly_message() -> None:
-    with pytest.raises(ExpressionError, match="ainda não foi implementado"):
-        generate_steps("limite(sin(x)/x, x, 0)")
+def test_sin_over_x_has_own_dedicated_module_since_v2_12_1() -> None:
+    # sen(x)/x (e os demais limites trigonométricos fundamentais) tinha
+    # seu próprio módulo, `trigonometric_limits.py`, desde a Sprint
+    # V2.12.1 — ver `test_steps_trigonometric_limits.py` para a cobertura
+    # completa; aqui só confirma que não cai mais na rejeição amigável do
+    # caminho racional desta sprint (V2.12).
+    steps = generate_steps("limite(sin(x)/x, x, 0)")
+    assert steps[-1].title == "Calculando"
+    assert steps[-1].expression == "1"
 
 
-def test_sin_over_x_still_works_via_solve_despite_steps_rejection() -> None:
+def test_sin_over_x_still_works_via_solve() -> None:
     from app.math_engine.dispatcher import solve_expression
 
     assert solve_expression("limite(sin(x)/x, x, 0)") == "Limite: 1"

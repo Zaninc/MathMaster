@@ -53,7 +53,17 @@ Sprint V2.12 — mesmo tratamento para `limite(expr, var, ponto)`:
 `limits.py`, que classifica o caso (substituição direta, indeterminação
 0/0, infinito por comparação de graus) sobre a árvore já parseada e
 levanta sua própria mensagem amigável para o que ainda não é suportado —
-nunca mais cai na exclusão geral de cálculo."""
+nunca mais cai na exclusão geral de cálculo.
+
+Sprint V2.12.1 — dentro de uma chamada `limite(expr, var, ponto)` já
+confirmada, uma segunda decisão
+(`trigonometric_limits.is_trigonometric_fundamental_shape`, sobre a
+ÁRVORE já parseada, nunca regex) escolhe entre `limits.py` (V2.12,
+racionais) e `trigonometric_limits.py` (`sen(ax)/x`, `x/sen(x)`,
+`sen(ax)/sen(bx)`, `(1-cos(ax))/x²`) — ANTES do caminho racional, porque
+esses casos usam `sin`/`cos` (nunca polinomiais) e precisam da
+manipulação algébrica específica do limite fundamental, não da
+comparação de graus."""
 from __future__ import annotations
 
 from sympy import degree, expand
@@ -66,6 +76,7 @@ from ..calculus.dispatcher import (
     is_indefinite_integral_call,
     is_limit_call,
     parse_derivative_call,
+    parse_limit_call,
 )
 from ..combinatorics.dispatcher import is_combinatorics_domain_expression
 from ..complex.dispatcher import is_complex_domain_expression
@@ -92,6 +103,10 @@ from .linear_equations import generate_linear_equation_steps, parse_equation_sid
 from .linear_systems import generate_linear_system_steps
 from .models import MathStep
 from .quadratic_equations import generate_quadratic_equation_steps
+from .trigonometric_limits import (
+    generate_trigonometric_limit_steps,
+    is_trigonometric_fundamental_shape,
+)
 from .validation import (
     EMPTY_EXPRESSION_MESSAGE,
     UNSUPPORTED_DOMAIN_MESSAGE,
@@ -162,6 +177,9 @@ def generate_steps(expression: str) -> list[MathStep]:
         return generate_definite_integral_steps(normalized)
 
     if is_limit_call(normalized):
+        expr, symbol, point = parse_limit_call(normalized)
+        if is_trigonometric_fundamental_shape(expr, symbol, point):
+            return generate_trigonometric_limit_steps(normalized)
         return generate_limit_steps(normalized)
 
     if any(check(normalized) for check in _NON_EQUATION_DOMAIN_CHECKS):

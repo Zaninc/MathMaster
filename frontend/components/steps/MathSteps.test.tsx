@@ -1168,7 +1168,10 @@ describe("MathSteps — compatibilidade com passos de limites (Sprint V2.12)", (
     expect(annotations.some((latex) => latex === "3")).toBe(true);
   });
 
-  it("mostra erro amigável para limite trigonométrico (ex. sen(x)/x), sem quebrar a tela", async () => {
+  it("mostra erro amigável para limite trigonométrico fora de escopo (ex. tan(x)/x), sem quebrar a tela", async () => {
+    // sen(x)/x deixou de ser um exemplo de rejeição desde a Sprint
+    // V2.12.1 (agora suportado — ver describe block dedicado abaixo);
+    // tan(x)/x continua fora de escopo.
     const { ApiError } = await import("@/lib/api/errors");
     vi.mocked(apiClient.solveSteps).mockRejectedValue(
       new ApiError(
@@ -1177,7 +1180,227 @@ describe("MathSteps — compatibilidade com passos de limites (Sprint V2.12)", (
       )
     );
 
-    render(<MathSteps expression="limite(sin(x)/x, x, 0)" />);
+    render(<MathSteps expression="limite(tan(x)/x, x, 0)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("O passo a passo para este tipo de limite ainda não foi implementado nesta versão.")
+      ).toBeInTheDocument()
+    );
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Sprint V2.12.1 (Passo a Passo — Limites Trigonométricos Fundamentais) —
+ * ZERO componente novo (`MathSteps`/`MathStepItem`/`MixedMathText`
+ * intocados) e ZERO mudança em `to-latex.ts`: o texto matemático puro dos
+ * novos passos ("limite(sin(u)/u, u, 0)=1", "3*sin(3*x)/(3*x)", frações ao
+ * quadrado como "(sen(x/2)/(x/2))²") já passa pelo MESMO pipeline
+ * `valueToLatex` usado desde a V2.9 — confirmado por debug-render antes de
+ * escrever este arquivo, sem precisar de nenhuma correção pontual de
+ * símbolo (o placeholder "u" já era seguro desde a V2.11).
+ */
+describe("MathSteps — compatibilidade com passos de limites trigonométricos fundamentais (Sprint V2.12.1)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.solveSteps).mockReset();
+  });
+
+  it("renderiza sen(x)/x reduzido diretamente ao limite fundamental", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "limite(sin(x)/x, x, 0)",
+      result: "Limite: 1",
+      steps: [
+        {
+          title: "Expressão original",
+          title_segments: null,
+          expression: "limite(sin(x)/x, x, 0)",
+          explanation: null,
+        },
+        {
+          title: "Reconhecendo o limite fundamental",
+          title_segments: null,
+          expression: "limite(sin(x)/x, x, 0)=1",
+          explanation: "Este é o limite trigonométrico fundamental: quando u→0, sen(u)/u tende a 1.",
+        },
+        { title: "Calculando", title_segments: null, expression: "1", explanation: null },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="limite(sin(x)/x, x, 0)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(3));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex === "\\lim_{x\\to0}\\frac{\\sin\\left(x\\right)}{x}=1")).toBe(
+      true
+    );
+    expect(
+      screen.getByText("Este é o limite trigonométrico fundamental: quando u→0, sen(u)/u tende a 1.")
+    ).toBeInTheDocument();
+    expect(annotations.some((latex) => latex === "1")).toBe(true);
+  });
+
+  it("renderiza sen(3x)/x reescrito para isolar o limite fundamental (coeficiente 3)", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "limite(sin(3*x)/x, x, 0)",
+      result: "Limite: 3",
+      steps: [
+        {
+          title: "Expressão original",
+          title_segments: null,
+          expression: "limite(sin(3*x)/x, x, 0)",
+          explanation: null,
+        },
+        {
+          title: "Reconhecendo o limite fundamental",
+          title_segments: null,
+          expression: "limite(sin(u)/u, u, 0)=1",
+          explanation: null,
+        },
+        {
+          title: "Reescrevendo para isolar o limite fundamental",
+          title_segments: null,
+          expression: "3*sin(3*x)/(3*x)",
+          explanation: null,
+        },
+        {
+          title: "Aplicando o limite fundamental",
+          title_segments: null,
+          expression: "3*1",
+          explanation: null,
+        },
+        { title: "Calculando", title_segments: null, expression: "3", explanation: null },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="limite(sin(3*x)/x, x, 0)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(5));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex === "\\lim_{u\\to0}\\frac{\\sin\\left(u\\right)}{u}=1")).toBe(
+      true
+    );
+    expect(
+      annotations.some((latex) => latex === "\\frac{3\\cdot\\sin\\left(3\\cdotx\\right)}{\\left(3\\cdotx\\right)}")
+    ).toBe(true);
+    expect(annotations.some((latex) => latex === "3\\cdot1")).toBe(true);
+    expect(annotations.some((latex) => latex === "3")).toBe(true);
+  });
+
+  it("renderiza (1-cos(3x))/x² com a identidade trigonométrica e a fração ao quadrado", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "limite((1-cos(3*x))/x**2, x, 0)",
+      result: "Limite: 9/2",
+      steps: [
+        {
+          title: "Expressão original",
+          title_segments: null,
+          expression: "limite((1 - cos(3*x))/x**2, x, 0)",
+          explanation: null,
+        },
+        {
+          title: "Aplicando a identidade 1-cos(θ)=2sen²(θ/2)",
+          title_segments: null,
+          expression: "1-cos(3*x)=2*sin(3*x/2)**2",
+          explanation: null,
+        },
+        {
+          title: "Reorganizando a fração",
+          title_segments: null,
+          expression: "9/2*(sin(3*x/2)/(3*x/2))**2",
+          explanation: null,
+        },
+        {
+          title: "Reconhecendo o limite fundamental",
+          title_segments: null,
+          expression: "limite(sin(u)/u, u, 0)=1",
+          explanation: null,
+        },
+        {
+          title: "Aplicando o limite fundamental",
+          title_segments: null,
+          expression: "9/2*1**2",
+          explanation: null,
+        },
+        { title: "Calculando", title_segments: null, expression: "9/2", explanation: null },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="limite((1-cos(3*x))/x**2, x, 0)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(6));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(
+      annotations.some(
+        (latex) => latex === "1-\\cos\\left(3\\cdotx\\right)=2\\cdot{\\sin\\left(\\frac{3\\cdotx}{2}\\right)}^{2}"
+      )
+    ).toBe(true);
+    expect(
+      annotations.some(
+        (latex) =>
+          latex ===
+          "\\frac{9}{2}\\cdot{\\left(\\frac{\\sin\\left(\\frac{3\\cdotx}{2}\\right)}{\\left(\\frac{3\\cdotx}{2}\\right)}\\right)}^{2}"
+      )
+    ).toBe(true);
+    expect(annotations.some((latex) => latex === "\\frac{9}{2}")).toBe(true);
+  });
+
+  it("nunca esconde os limites racionais atrás do caminho trigonométrico (regressão)", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "limite((x**2-4)/(x-2), x, 2)",
+      result: "Limite: 4",
+      steps: [
+        {
+          title: "Expressão original",
+          title_segments: null,
+          expression: "limite((x**2 - 4)/(x - 2), x, 2)",
+          explanation: null,
+        },
+        { title: "Substituindo", title_segments: null, expression: "0/0", explanation: null },
+        {
+          title: "Reconhecemos uma indeterminação.",
+          title_segments: null,
+          expression: "0/0",
+          explanation: null,
+        },
+        { title: "Fatorando", title_segments: null, expression: "(x - 2)*(x + 2)", explanation: null },
+        {
+          title: "Cancelando o fator comum",
+          title_segments: null,
+          expression: "x + 2",
+          explanation: null,
+        },
+        { title: "Substituindo", title_segments: null, expression: "4", explanation: null },
+      ],
+    });
+
+    render(<MathSteps expression="limite((x**2-4)/(x-2), x, 2)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(screen.getByText("Fatorando")).toBeInTheDocument());
+    expect(screen.queryByText("Reconhecendo o limite fundamental")).not.toBeInTheDocument();
+  });
+
+  it("mostra erro amigável para limite trigonométrico com expoente na variável (ex. sen(x²)/x), sem quebrar a tela", async () => {
+    const { ApiError } = await import("@/lib/api/errors");
+    vi.mocked(apiClient.solveSteps).mockRejectedValue(
+      new ApiError(
+        "invalid_expression",
+        "O passo a passo para este tipo de limite ainda não foi implementado nesta versão."
+      )
+    );
+
+    render(<MathSteps expression="limite(sin(x**2)/x, x, 0)" />);
     fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
 
     await waitFor(() =>

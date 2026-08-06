@@ -443,15 +443,89 @@ def test_solve_steps_limit_infinite_numerator_smaller_degree(client: TestClient)
 
 
 def test_solve_steps_limit_unsupported_returns_friendly_400(client: TestClient) -> None:
-    response = client.post("/solve/steps", json={"expression": "limite(sin(x)/x, x, 0)"})
+    # sen(x)/x deixou de ser um exemplo válido de rejeição desde a Sprint
+    # V2.12.1 (agora suportado — ver seção "Sprint V2.12.1" abaixo);
+    # tan(x)/x continua fora de escopo (nem racional nem limite
+    # trigonométrico fundamental reconhecido).
+    response = client.post("/solve/steps", json={"expression": "limite(tan(x)/x, x, 0)"})
     assert response.status_code == 400
     assert "ainda não foi implementado" in response.json()["detail"]
 
 
 def test_solve_endpoint_unaffected_by_unsupported_limit_steps(client: TestClient) -> None:
-    """`/solve` continua calculando normalmente um limite trigonométrico,
-    mesmo sem passo a passo (regra de L'Hôpital/limites trigonométricos
-    ficam para versões futuras) — motor de cálculo 100% intocado."""
-    response = client.post("/solve", json={"expression": "limite(sin(x)/x, x, 0)"})
+    """`/solve` continua calculando normalmente um limite trigonométrico
+    fora de escopo, mesmo sem passo a passo — motor de cálculo 100%
+    intocado."""
+    response = client.post("/solve", json={"expression": "limite(tan(x)/x, x, 0)"})
     assert response.status_code == 200
     assert response.json()["result"] == "Limite: 1"
+
+
+# --- Sprint V2.12.1: limites trigonométricos fundamentais -------------------
+
+
+def test_solve_steps_sin_over_x(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "limite(sin(x)/x, x, 0)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Limite: 1"
+    titles = [step["title"] for step in body["steps"]]
+    assert titles == ["Expressão original", "Reconhecendo o limite fundamental", "Calculando"]
+    assert body["steps"][-1]["expression"] == "1"
+
+
+def test_solve_steps_x_over_sin_x(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "limite(x/sin(x), x, 0)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Limite: 1"
+    assert body["steps"][-1]["expression"] == "1"
+
+
+def test_solve_steps_sin_of_ax_over_x(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "limite(sin(3*x)/x, x, 0)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Limite: 3"
+    titles = [step["title"] for step in body["steps"]]
+    assert "Reescrevendo para isolar o limite fundamental" in titles
+    assert body["steps"][-1]["expression"] == "3"
+
+
+def test_solve_steps_sin_over_sin(client: TestClient) -> None:
+    response = client.post(
+        "/solve/steps", json={"expression": "limite(sin(5*x)/sin(2*x), x, 0)"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Limite: 5/2"
+    assert body["steps"][-1]["expression"] == "5/2"
+
+
+def test_solve_steps_one_minus_cos_over_x_squared(client: TestClient) -> None:
+    response = client.post(
+        "/solve/steps", json={"expression": "limite((1-cos(3*x))/x**2, x, 0)"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Limite: 9/2"
+    titles = [step["title"] for step in body["steps"]]
+    assert "Aplicando a identidade 1-cos(θ)=2sen²(θ/2)" in titles
+    assert body["steps"][-1]["expression"] == "9/2"
+
+
+def test_solve_steps_trigonometric_out_of_scope_returns_friendly_400(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "limite(sin(x**2)/x, x, 0)"})
+    assert response.status_code == 400
+    assert "ainda não foi implementado" in response.json()["detail"]
+
+
+def test_solve_steps_rational_limit_still_uses_v2_12_path(client: TestClient) -> None:
+    # Regressão: um limite racional continua pelo caminho da V2.12,
+    # nunca pelo novo módulo trigonométrico.
+    response = client.post(
+        "/solve/steps", json={"expression": "limite((x**2-4)/(x-2), x, 2)"}
+    )
+    assert response.status_code == 200
+    titles = [step["title"] for step in response.json()["steps"]]
+    assert "Reconhecendo o limite fundamental" not in titles
