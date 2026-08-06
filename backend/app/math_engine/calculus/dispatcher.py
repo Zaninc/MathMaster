@@ -73,6 +73,19 @@ def is_derivative_call(expression: str) -> bool:
     return bool(match) and match.group(1) == "derivada"
 
 
+def is_indefinite_integral_call(expression: str) -> bool:
+    """Sprint V2.10.1 (Passo a Passo — Integrais) — mesmo padrão de
+    `is_derivative_call`, restrito a `integral(expr, var)` com EXATAMENTE 2
+    argumentos (indefinida): a forma de 4 argumentos (definida,
+    `integral(expr, var, inferior, superior)`) fica fora do escopo do
+    passo a passo nesta versão e continua caindo na exclusão geral de
+    cálculo, com a mesma mensagem amigável de sempre."""
+    match = _CALL_PATTERN.match(expression)
+    if not match or match.group(1) != "integral":
+        return False
+    return len(_split_top_level_args(match.group(2))) == 2
+
+
 def _split_top_level_args(text: str) -> list[str]:
     """Mesma técnica de bracket-counting de `parser/normalize.py`/
     `formatter/safe_parse.py`, duplicada aqui deliberadamente — cada área do
@@ -132,6 +145,28 @@ def parse_derivative_call(expression: str) -> tuple[Expr, Symbol]:
     if len(partes) != 2:
         raise ExpressionError(
             "derivada(...) espera exatamente 2 argumentos: expressão e variável."
+        )
+    symbol = _parse_variable(partes[1])
+    expr = _parse_fragment(partes[0], symbol)
+    return expr, symbol
+
+
+def parse_integral_call(expression: str) -> tuple[Expr, Symbol]:
+    """Sprint V2.10.1 (Passo a Passo — Integrais) — mesmo espírito de
+    `parse_derivative_call`: reaproveita o parsing que `solve_calculus_text`
+    já faz para `integral(expr, var)`, restrito à forma INDEFINIDA (2
+    argumentos — a única suportada pelo passo a passo nesta versão).
+    `compute_indefinite_integral`/`solve_calculus_text` continuam 100%
+    intocados."""
+    match = _CALL_PATTERN.match(expression)
+    if not match or match.group(1) != "integral":
+        raise ExpressionError(f"Não foi possível interpretar a expressão: {expression}")
+    _, argumentos = match.groups()
+    partes = _split_top_level_args(argumentos)
+    if len(partes) != 2:
+        raise ExpressionError(
+            "Passo a passo disponível apenas para integrais indefinidas "
+            "(2 argumentos: expressão e variável) nesta versão."
         )
     symbol = _parse_variable(partes[1])
     expr = _parse_fragment(partes[0], symbol)

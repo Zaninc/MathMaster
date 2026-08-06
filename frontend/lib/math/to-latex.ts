@@ -472,6 +472,11 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
     // produto). Devolver o nome cru preserva o itálico padrão do KaTeX
     // para uma única letra, sem precisar de nenhum comando extra.
     if (name === "b") return "b";
+    // Hotfix V2.10.1 (passo a passo de integrais, constante de integração
+    // "+ C") — mesmo problema e mesma correção do "b" acima: mathjs trata
+    // "C" solto como a unidade embutida "coulomb", renderizando
+    // "\mathrm{C}" em vez do itálico padrão de símbolo matemático.
+    if (name === "C") return "C";
     return undefined;
   }
 

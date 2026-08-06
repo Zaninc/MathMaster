@@ -438,3 +438,146 @@ describe("MathSteps — compatibilidade com passos de derivadas (Sprint V2.10)",
     expect(screen.getByRole("alert")).toBeInTheDocument();
   });
 });
+
+/**
+ * Sprint V2.10.1 (Passo a Passo — Integrais) — ZERO componente novo
+ * (`MathSteps`/`MathStepItem`/`MixedMathText` intocados): confirma que o
+ * texto matemático puro que o backend agora envia para integrais
+ * (`integral(expr, x)`, frações do tipo "x**3/3 + C") já passa pelo MESMO
+ * pipeline `valueToLatex` usado desde a V2.9, sem precisar de nenhuma
+ * alteração no frontend além da correção pontual do símbolo "C" em
+ * `to-latex.ts` (mesmo padrão do "b" na V2.9.1a/V2.10 — ver
+ * `to-latex.test.ts`).
+ */
+describe("MathSteps — compatibilidade com passos de integrais (Sprint V2.10.1)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.solveSteps).mockReset();
+  });
+
+  it("renderiza a notação ∫dx, a linearidade da soma e a constante +C em KaTeX", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(x**2+3*x, x)",
+      result: "Integral: x³/3 + 3x²/2 + C",
+      steps: [
+        {
+          title: "Integral original",
+          title_segments: null,
+          expression: "integral(x**2 + 3*x, x)",
+          explanation: null,
+        },
+        {
+          title: "Aplicando a linearidade da integral",
+          title_segments: null,
+          expression: "integral(x**2, x)+integral(3*x, x)",
+          explanation: null,
+        },
+        {
+          title: "Integrando x² pela regra da potência",
+          title_segments: [
+            { type: "text", content: "Integrando" },
+            { type: "math", content: "x**2" },
+            { type: "text", content: "pela regra da potência" },
+          ],
+          expression: "x**3/3",
+          explanation: null,
+        },
+        {
+          title: "Integrando 3x pela regra da potência",
+          title_segments: [
+            { type: "text", content: "Integrando" },
+            { type: "math", content: "3*x" },
+            { type: "text", content: "pela regra da potência" },
+          ],
+          expression: "3*x**2/2",
+          explanation: null,
+        },
+        {
+          title: "Somando os resultados",
+          title_segments: null,
+          expression: "x**3/3 + 3*x**2/2",
+          explanation: null,
+        },
+        {
+          title: "Adicionando a constante de integração",
+          title_segments: null,
+          expression: "x**3/3 + 3*x**2/2 + C",
+          explanation: "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.",
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral(x**2+3*x, x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    // 6 expressões de passo + 2 segmentos "math" de título = 8 elementos `.katex`.
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(8));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(
+      annotations.some((latex) => latex?.includes("\\int{x}^{2}+3\\cdotx\\,dx"))
+    ).toBe(true);
+    expect(
+      annotations.some((latex) => latex?.includes("\\int{x}^{2}\\,dx+\\int3\\cdotx\\,dx"))
+    ).toBe(true);
+    // "+ C" com "C" em itálico normal (nunca "\mathrm{C}" — hotfix desta sprint).
+    expect(annotations.some((latex) => latex === "\\frac{{x}^{3}}{3}+\\frac{3\\cdot{x}^{2}}{2}+C")).toBe(
+      true
+    );
+    expect(
+      screen.getByText("Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.")
+    ).toBeInTheDocument();
+  });
+
+  it("renderiza a integral de uma constante (regra específica) em KaTeX", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(5, x)",
+      result: "Integral: 5x + C",
+      steps: [
+        { title: "Integral original", title_segments: null, expression: "integral(5, x)", explanation: null },
+        {
+          title: "A integral de uma constante é a constante multiplicada pela variável",
+          title_segments: null,
+          expression: "5*x",
+          explanation: null,
+        },
+        {
+          title: "Adicionando a constante de integração",
+          title_segments: null,
+          expression: "5*x + C",
+          explanation: "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.",
+        },
+      ],
+    });
+
+    render(<MathSteps expression="integral(5, x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("A integral de uma constante é a constante multiplicada pela variável")
+      ).toBeInTheDocument()
+    );
+    expect(screen.getByText("Adicionando a constante de integração")).toBeInTheDocument();
+  });
+
+  it("mostra erro amigável para integral fora do escopo (ex. seno), sem quebrar a tela", async () => {
+    const { ApiError } = await import("@/lib/api/errors");
+    vi.mocked(apiClient.solveSteps).mockRejectedValue(
+      new ApiError(
+        "invalid_expression",
+        "O passo a passo para este tipo de integral ainda não foi implementado nesta versão."
+      )
+    );
+
+    render(<MathSteps expression="integral(sin(x), x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("O passo a passo para este tipo de integral ainda não foi implementado nesta versão.")
+      ).toBeInTheDocument()
+    );
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});

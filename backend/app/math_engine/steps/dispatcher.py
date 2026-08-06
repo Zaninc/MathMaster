@@ -27,13 +27,23 @@ QUALQUER chamada de cálculo, incl. `integral`/`limite`, ainda fora de
 escopo do passo a passo): `is_derivative_call` decide especificamente
 "isto é uma derivada?" e, se for, delega para `derivatives.py` — o resto
 do domínio de cálculo continua caindo na exclusão geral, com a mesma
-mensagem amigável de sempre."""
+mensagem amigável de sempre.
+
+Sprint V2.10.1 — mesmo tratamento para `integral(expr, var)` INDEFINIDA
+(2 argumentos): `is_indefinite_integral_call` decide "isto é uma integral
+indefinida?" e delega para `integrals.py`. Integral DEFINIDA (4
+argumentos, `integral(expr, var, inferior, superior)`) continua fora de
+escopo do passo a passo e cai na exclusão geral, junto de `limite`."""
 from __future__ import annotations
 
 from sympy import degree, expand
 
 from ..analytic_geometry.dispatcher import is_analytic_geometry_domain_expression
-from ..calculus.dispatcher import is_calculus_domain_expression, is_derivative_call
+from ..calculus.dispatcher import (
+    is_calculus_domain_expression,
+    is_derivative_call,
+    is_indefinite_integral_call,
+)
 from ..combinatorics.dispatcher import is_combinatorics_domain_expression
 from ..complex.dispatcher import is_complex_domain_expression
 from ..dispatcher import normalize_all
@@ -51,6 +61,7 @@ from ..probability.dispatcher import is_probability_domain_expression
 from ..summation.dispatcher import is_summation_domain_expression
 from ..trigonometry.dispatcher import is_trigonometry_domain_expression
 from .derivatives import generate_derivative_steps
+from .integrals import generate_integral_steps
 from .linear_equations import generate_linear_equation_steps, parse_equation_sides
 from .linear_systems import generate_linear_system_steps
 from .models import MathStep
@@ -114,6 +125,9 @@ def generate_steps(expression: str) -> list[MathStep]:
 
     if is_derivative_call(normalized):
         return generate_derivative_steps(normalized)
+
+    if is_indefinite_integral_call(normalized):
+        return generate_integral_steps(normalized)
 
     if any(check(normalized) for check in _NON_EQUATION_DOMAIN_CHECKS):
         raise ExpressionError(UNSUPPORTED_DOMAIN_MESSAGE)

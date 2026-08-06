@@ -24,51 +24,17 @@ from sympy.core.symbol import Symbol
 from ..calculus.derivatives import compute_derivative
 from ..calculus.dispatcher import parse_derivative_call
 from ..errors import ExpressionError
-from .formatting import math_segment, paren_if_negative, text_segment
+from .formatting import (
+    classify_polynomial_term,
+    linear_combination_expression,
+    math_segment,
+    paren_if_negative,
+    term_expression,
+    term_text_plain,
+    text_segment,
+)
 from .models import MathStep
 from .validation import UNSUPPORTED_DERIVATIVE_MESSAGE
-
-_SUPERSCRIPT_DIGITS = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
-
-
-def _classify_term(term: Expr, symbol: Symbol) -> tuple[Expr, int] | None:
-    """`(coeficiente, expoente)` se `term` for um monômio simples
-    `coeficiente * symbol**expoente` com expoente inteiro >= 0 — a única
-    forma que a regra da potência desta versão sabe explicar passo a
-    passo. `None` (nunca "chuta") para qualquer outra forma."""
-    if not term.has(symbol):
-        return term, 0
-    coeff, xpart = term.as_independent(symbol, as_Add=False)
-    if xpart == symbol:
-        return coeff, 1
-    if xpart.is_Pow and xpart.base == symbol and xpart.exp.is_Integer and xpart.exp > 0:
-        return coeff, int(xpart.exp)
-    return None
-
-
-def _term_expression(coeff: Expr, exponent: int, symbol: Symbol) -> Expr:
-    if exponent == 0:
-        return coeff
-    return coeff * symbol**exponent
-
-
-def _superscript(n: int) -> str:
-    return str(n).translate(_SUPERSCRIPT_DIGITS)
-
-
-def _term_text_plain(coeff: Expr, exponent: int, symbol: Symbol) -> str:
-    """Texto legível SÓ para o `title` de fallback (nunca para `expression`/
-    `title_segments`, que precisam continuar 100% parseáveis pelo
-    `to-latex.ts`) — mesmo espírito de `formatting._clean`, com expoente em
-    sobrescrito Unicode em vez de "**n"."""
-    if exponent == 0:
-        return str(coeff)
-    power = str(symbol) if exponent == 1 else f"{symbol}{_superscript(exponent)}"
-    if coeff == 1:
-        return power
-    if coeff == -1:
-        return f"-{power}"
-    return f"{coeff}{power}"
 
 
 def _power_rule_unevaluated_text(coeff: Expr, exponent: int, symbol: Symbol) -> str:
@@ -88,7 +54,7 @@ def _term_steps(coeff: Expr, exponent: int, symbol: Symbol, *, standalone: bool)
     """Passo(s) da derivada de UM termo já classificado. O valor final de
     CADA passo vem de `compute_derivative` (mesmo motor do `/solve`) —
     nunca recalculado à mão aqui, mesmo nos casos triviais."""
-    term_expr = _term_expression(coeff, exponent, symbol)
+    term_expr = term_expression(coeff, exponent, symbol)
     result = compute_derivative(term_expr, symbol)
 
     if exponent == 0:
@@ -98,13 +64,13 @@ def _term_steps(coeff: Expr, exponent: int, symbol: Symbol, *, standalone: bool)
     if exponent == 1:
         return [
             MathStep(
-                title=f"Derivando {_term_text_plain(coeff, exponent, symbol)}",
+                title=f"Derivando {term_text_plain(coeff, exponent, symbol)}",
                 title_segments=[text_segment("Derivando"), math_segment(term_expr)],
                 expression=str(result),
             )
         ]
 
-    title = f"Derivando {_term_text_plain(coeff, exponent, symbol)} pela regra da potência"
+    title = f"Derivando {term_text_plain(coeff, exponent, symbol)} pela regra da potência"
     title_segments = [
         text_segment("Derivando"),
         math_segment(term_expr),
@@ -120,24 +86,6 @@ def _term_steps(coeff: Expr, exponent: int, symbol: Symbol, *, standalone: bool)
     ]
 
 
-def _linearity_expression(terms: list[Expr], symbol: Symbol) -> str:
-    """"derivada(t1, x)+derivada(t2, x)-derivada(t3, x)..." — cada termo
-    isolado dentro de `derivada(...)` (o mesmo pipeline `to-latex.ts` que já
-    renderiza a "Função original" reconhece cada uma dessas chamadas), com
-    o sinal de subtração aparecendo FORA (nunca "derivada(-5*x, x)", que
-    esconderia o sinal dentro dos parênteses)."""
-    parts: list[str] = []
-    for index, term in enumerate(terms):
-        negative = term.could_extract_minus_sign()
-        piece = -term if negative else term
-        if index == 0:
-            sign = "-" if negative else ""
-        else:
-            sign = "-" if negative else "+"
-        parts.append(f"{sign}derivada({piece}, {symbol})")
-    return "".join(parts)
-
-
 def generate_derivative_steps(text: str) -> list[MathStep]:
     expr, symbol = parse_derivative_call(text)
 
@@ -145,7 +93,7 @@ def generate_derivative_steps(text: str) -> list[MathStep]:
     # arbitrária) — grau decrescente, a mesma convenção de leitura "ax²+bx+c"
     # já usada no resto do produto (ex. `quadratic_equations.py`).
     terms = expand(expr).as_ordered_terms()
-    classified = [_classify_term(term, symbol) for term in terms]
+    classified = [classify_polynomial_term(term, symbol) for term in terms]
     if any(item is None for item in classified):
         raise ExpressionError(UNSUPPORTED_DERIVATIVE_MESSAGE)
 
@@ -159,7 +107,7 @@ def generate_derivative_steps(text: str) -> list[MathStep]:
     steps.append(
         MathStep(
             title="Aplicando a linearidade da derivada",
-            expression=_linearity_expression(terms, symbol),
+            expression=linear_combination_expression(terms, symbol, "derivada"),
         )
     )
     for coeff, exponent in classified:

@@ -66,3 +66,74 @@ def paren_if_negative(value: Expr) -> str:
     quando o valor é negativo, evitando ambiguidade ao montar strings
     manuais de substituição (ex. "3*(-4)*x**2", nunca "3*-4*x**2")."""
     return f"({value})" if value.is_negative else str(value)
+
+
+# --- Sprint V2.10.1 — compartilhado entre derivatives.py e integrals.py ----
+# (originalmente privado em derivatives.py; promovido aqui para
+# `integrals.py` reaproveitar a MESMA classificação de termo em vez de
+# duplicá-la — a forma "coeficiente*x^n" que a regra da potência sabe
+# explicar é idêntica nos dois domínios, só a operação final muda.)
+
+_SUPERSCRIPT_DIGITS = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
+
+
+def classify_polynomial_term(term: Expr, symbol) -> tuple[Expr, int] | None:
+    """`(coeficiente, expoente)` se `term` for um monômio simples
+    `coeficiente * symbol**expoente` com expoente inteiro >= 0 — a única
+    forma que a regra da potência (derivada OU integral) desta versão sabe
+    explicar passo a passo. `None` (nunca "chuta") para qualquer outra
+    forma — função transcendental, produto/quociente entre variáveis,
+    expoente negativo ou fracionário (ex. 1/x = x**-1, fora de escopo tanto
+    para derivar quanto para integrar nesta versão)."""
+    if not term.has(symbol):
+        return term, 0
+    coeff, xpart = term.as_independent(symbol, as_Add=False)
+    if xpart == symbol:
+        return coeff, 1
+    if xpart.is_Pow and xpart.base == symbol and xpart.exp.is_Integer and xpart.exp > 0:
+        return coeff, int(xpart.exp)
+    return None
+
+
+def term_expression(coeff: Expr, exponent: int, symbol: Expr) -> Expr:
+    if exponent == 0:
+        return coeff
+    return coeff * symbol**exponent
+
+
+def _superscript(n: int) -> str:
+    return str(n).translate(_SUPERSCRIPT_DIGITS)
+
+
+def term_text_plain(coeff: Expr, exponent: int, symbol: Expr) -> str:
+    """Texto legível SÓ para o `title` de fallback (nunca para `expression`/
+    `title_segments`, que precisam continuar 100% parseáveis pelo
+    `to-latex.ts`) — mesmo espírito de `_clean`, com expoente em sobrescrito
+    Unicode em vez de "**n"."""
+    if exponent == 0:
+        return str(coeff)
+    power = str(symbol) if exponent == 1 else f"{symbol}{_superscript(exponent)}"
+    if coeff == 1:
+        return power
+    if coeff == -1:
+        return f"-{power}"
+    return f"{coeff}{power}"
+
+
+def linear_combination_expression(terms: list[Expr], symbol: Expr, operation: str) -> str:
+    """"{operation}(t1, x)+{operation}(t2, x)-{operation}(t3, x)..." — cada
+    termo isolado dentro da chamada técnica (`derivada(...)`/`integral(...)`,
+    ambas já reconhecidas pelo `productHandler` existente em
+    `to-latex.ts`), com o sinal de subtração aparecendo FORA da chamada
+    (nunca "derivada(-5*x, x)", que esconderia o sinal dentro dos
+    parênteses)."""
+    parts: list[str] = []
+    for index, term in enumerate(terms):
+        negative = term.could_extract_minus_sign()
+        piece = -term if negative else term
+        if index == 0:
+            sign = "-" if negative else ""
+        else:
+            sign = "-" if negative else "+"
+        parts.append(f"{sign}{operation}({piece}, {symbol})")
+    return "".join(parts)

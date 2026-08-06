@@ -168,3 +168,63 @@ def test_solve_endpoint_unaffected_by_unsupported_derivative_steps(client: TestC
     response = client.post("/solve", json={"expression": "d/dx(sin(x))"})
     assert response.status_code == 200
     assert response.json()["result"] == "Derivada: cos(x)"
+
+
+# --- Sprint V2.10.1: integrais --------------------------------------------------
+
+
+def test_solve_steps_integral_polynomial(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(x**2+3*x, x)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Integral: x³/3 + 3x²/2 + C"
+    assert body["steps"][0]["title"] == "Integral original"
+    assert body["steps"][-1]["title"] == "Adicionando a constante de integração"
+    assert body["steps"][-1]["expression"] == "x**3/3 + 3*x**2/2 + C"
+
+
+def test_solve_steps_integral_natural_notation_also_works(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "∫x⁵dx"})
+    assert response.status_code == 200
+    assert response.json()["steps"][-1]["expression"] == "x**6/6 + C"
+
+
+def test_solve_steps_integral_with_title_segments(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(x**5, x)"})
+    assert response.status_code == 200
+    steps = response.json()["steps"]
+    power_step = next(s for s in steps if "regra da potência" in s["title"])
+    assert power_step["title_segments"] == [
+        {"type": "text", "content": "Integrando"},
+        {"type": "math", "content": "x**5"},
+        {"type": "text", "content": "pela regra da potência"},
+    ]
+
+
+def test_solve_steps_integral_constant_step_has_explanation(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(x**2+3*x, x)"})
+    steps = response.json()["steps"]
+    constant_step = steps[-1]
+    assert constant_step["explanation"] == (
+        "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C."
+    )
+
+
+def test_solve_steps_integral_unsupported_returns_friendly_400(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(sin(x), x)"})
+    assert response.status_code == 400
+    assert "ainda não foi implementado" in response.json()["detail"]
+
+
+def test_solve_steps_definite_integral_unsupported_returns_400(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(x**2, x, 0, 1)"})
+    assert response.status_code == 400
+
+
+def test_solve_endpoint_unaffected_by_unsupported_integral_steps(client: TestClient) -> None:
+    """`/solve` continua calculando normalmente qualquer integral, mesmo
+    quando `/solve/steps` ainda não sabe explicá-la passo a passo — o
+    motor de cálculo (`calculus/integrals.py`) nunca foi alterado."""
+    response = client.post("/solve", json={"expression": "integral(sin(x), x)"})
+    assert response.status_code == 200
+    assert response.json()["result"] == "Integral: -cos(x) + C"

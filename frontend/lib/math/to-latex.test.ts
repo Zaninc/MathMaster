@@ -145,6 +145,17 @@ describe("expressionToLatex", () => {
     expect(await expressionToLatex("Gamma=1")).toBeNull();
   });
 
+  it("Sprint V2.9.1a/V2.10.1: 'b' e 'C' renderizam em itálico normal, não como unidade embutida do mathjs (bel/coulomb)", async () => {
+    // Sem a exceção em `productHandler`, o serializer default do mathjs
+    // trata esses dois símbolos soltos como unidade física (\mathrm{b}/
+    // \mathrm{C}) em vez do itálico padrão de variável que "a"/"c"/"x" já
+    // recebem sem exceção nenhuma.
+    expect(normalized(await expressionToLatex("x=(-b+sqrt(Delta))/(2*a)"))).toContain(
+      "x=\\frac{\\left(-b+\\sqrt{\\Delta}\\right)}{\\left(2\\cdota\\right)}"
+    );
+    expect(normalized(await expressionToLatex("x**6/6 + C"))).toBe("\\frac{{x}^{6}}{6}+C");
+  });
+
   it("chamada de função vazia (template em digitação) nunca converte — cai no fallback", async () => {
     expect(await expressionToLatex("sqrt()")).toBeNull();
     expect(await expressionToLatex("√()")).toBeNull();

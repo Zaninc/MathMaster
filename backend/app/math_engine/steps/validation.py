@@ -31,6 +31,9 @@ EMPTY_EXPRESSION_MESSAGE = "A expressão não pode estar vazia."
 UNSUPPORTED_DERIVATIVE_MESSAGE = (
     "O passo a passo para este tipo de derivada ainda não foi implementado nesta versão."
 )
+UNSUPPORTED_INTEGRAL_MESSAGE = (
+    "O passo a passo para este tipo de integral ainda não foi implementado nesta versão."
+)
 
 
 def require_single_symbol(symbols: set) -> None:
