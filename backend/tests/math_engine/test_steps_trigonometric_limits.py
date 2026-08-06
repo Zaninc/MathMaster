@@ -141,12 +141,17 @@ def test_one_minus_cos_of_ax_over_x_squared_matches_ticket_example() -> None:
 @pytest.mark.parametrize(
     "expr",
     [
-        "limite(tan(x)/x, x, 0)",
-        "limite(sin(x**2)/x, x, 0)",
+        # tan(x)/x e sen(x²)/x deixaram de ser exemplos de rejeição desde a
+        # Sprint V2.12.2: são 0/0 genuínos com numerador não-polinomial —
+        # agora resolvidos pela Regra de L'Hôpital (ver test_steps_
+        # lhopital.py). Os casos abaixo nunca formam 0/0 ou ∞/∞ de verdade
+        # (denominador sempre 1, nunca se anula), então continuam fora de
+        # escopo em qualquer versão.
         "limite(cos(x**2), x, 0)",
         "limite(tan(3*x), x, 0)",
         "limite(sin(x)*cos(x), x, 0)",
         "limite(sin(x)+cos(x), x, 0)",
+        "limite(x*ln(x), x, 0)",
     ],
 )
 def test_out_of_scope_trigonometric_expressions_rejected_with_friendly_message(expr: str) -> None:
@@ -161,7 +166,8 @@ def test_out_of_scope_trigonometric_expressions_rejected_with_friendly_message(e
 
 def test_sin_over_x_at_nonzero_point_rejected_with_friendly_message() -> None:
     # As identidades só valem em x->0; em outro ponto não são reivindicadas
-    # aqui e caem no caminho racional existente (sin(x) não é polinômio).
+    # aqui. sin(1) != 0, então nem a Regra de L'Hôpital (V2.12.2) reivindica
+    # este caso — cai no caminho racional existente (sin(x) não é polinômio).
     with pytest.raises(ExpressionError, match="ainda não foi implementado"):
         generate_steps("limite(sin(x)/x, x, 1)")
 
@@ -169,7 +175,7 @@ def test_sin_over_x_at_nonzero_point_rejected_with_friendly_message() -> None:
 def test_out_of_scope_still_works_via_solve_despite_steps_rejection() -> None:
     from app.math_engine.dispatcher import solve_expression
 
-    assert solve_expression("limite(tan(x)/x, x, 0)") == "Limite: 1"
+    assert solve_expression("limite(x*ln(x), x, 0)") == "Limite: 0"
 
 
 # --- Regressão: limites racionais/polinomiais continuam pelo caminho da V2.12 ----

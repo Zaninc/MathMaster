@@ -1168,10 +1168,12 @@ describe("MathSteps — compatibilidade com passos de limites (Sprint V2.12)", (
     expect(annotations.some((latex) => latex === "3")).toBe(true);
   });
 
-  it("mostra erro amigável para limite trigonométrico fora de escopo (ex. tan(x)/x), sem quebrar a tela", async () => {
-    // sen(x)/x deixou de ser um exemplo de rejeição desde a Sprint
-    // V2.12.1 (agora suportado — ver describe block dedicado abaixo);
-    // tan(x)/x continua fora de escopo.
+  it("mostra erro amigável para limite fora de escopo (ex. x*ln(x), indeterminação 0·∞), sem quebrar a tela", async () => {
+    // sen(x)/x deixou de ser um exemplo de rejeição desde a Sprint V2.12.1
+    // (agora suportado — ver describe block dedicado abaixo); tan(x)/x
+    // deixou de ser um exemplo válido desde a V2.12.2 (0/0 genuíno, agora
+    // resolvido pela Regra de L'Hôpital). x*ln(x) é uma indeterminação
+    // 0·∞ — nunca um quociente 0/0 ou ∞/∞ — continua fora de escopo.
     const { ApiError } = await import("@/lib/api/errors");
     vi.mocked(apiClient.solveSteps).mockRejectedValue(
       new ApiError(
@@ -1180,7 +1182,7 @@ describe("MathSteps — compatibilidade com passos de limites (Sprint V2.12)", (
       )
     );
 
-    render(<MathSteps expression="limite(tan(x)/x, x, 0)" />);
+    render(<MathSteps expression="limite(x*ln(x), x, 0)" />);
     fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
 
     await waitFor(() =>
@@ -1391,7 +1393,11 @@ describe("MathSteps — compatibilidade com passos de limites trigonométricos f
     expect(screen.queryByText("Reconhecendo o limite fundamental")).not.toBeInTheDocument();
   });
 
-  it("mostra erro amigável para limite trigonométrico com expoente na variável (ex. sen(x²)/x), sem quebrar a tela", async () => {
+  it("mostra erro amigável para limite trigonométrico que nunca forma 0/0 ou ∞/∞ de verdade (ex. cos(x²)), sem quebrar a tela", async () => {
+    // sen(x²)/x deixou de ser um exemplo de rejeição desde a Sprint
+    // V2.12.2 (0/0 genuíno, agora resolvido pela Regra de L'Hôpital — ver
+    // describe block dedicado abaixo). cos(x²) tem denominador sempre 1
+    // (nunca se anula) — nunca indeterminado, continua fora de escopo.
     const { ApiError } = await import("@/lib/api/errors");
     vi.mocked(apiClient.solveSteps).mockRejectedValue(
       new ApiError(
@@ -1400,12 +1406,168 @@ describe("MathSteps — compatibilidade com passos de limites trigonométricos f
       )
     );
 
-    render(<MathSteps expression="limite(sin(x**2)/x, x, 0)" />);
+    render(<MathSteps expression="limite(cos(x**2), x, 0)" />);
     fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
 
     await waitFor(() =>
       expect(
         screen.getByText("O passo a passo para este tipo de limite ainda não foi implementado nesta versão.")
+      ).toBeInTheDocument()
+    );
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Sprint V2.12.2 (Passo a Passo — Regra de L'Hôpital) — ZERO componente
+ * novo (`MathSteps`/`MathStepItem`/`MixedMathText` intocados) e ZERO
+ * mudança em `to-latex.ts`: o texto matemático puro dos novos passos
+ * ("0/0", "oo/oo", "exp(x)", "limite(exp(x)/1, x, 0)") já passa pelo MESMO
+ * pipeline `valueToLatex` usado desde a V2.9 — confirmado por debug-render
+ * antes de escrever este arquivo, incluindo que "oo" já renderiza como
+ * `\infty` sem nenhuma correção pontual de símbolo.
+ */
+describe("MathSteps — compatibilidade com passos da Regra de L'Hôpital (Sprint V2.12.2)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.solveSteps).mockReset();
+  });
+
+  it("renderiza a indeterminação 0/0 resolvida por L'Hôpital em KaTeX", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "limite((exp(x)-1)/x, x, 0)",
+      result: "Limite: 1",
+      steps: [
+        {
+          title: "Expressão original",
+          title_segments: null,
+          expression: "limite(exp(x) - 1, x, 0)",
+          explanation: null,
+        },
+        { title: "Substituindo o limite", title_segments: null, expression: "0/0", explanation: null },
+        {
+          title: "Reconhecemos uma forma indeterminada.",
+          title_segments: null,
+          expression: "0/0",
+          explanation:
+            "A Regra de L'Hôpital diz que, se lim f(x)/g(x) resulta em 0/0 ou ∞/∞ e f e g são deriváveis, então lim f(x)/g(x) = lim f'(x)/g'(x), desde que esse novo limite exista.",
+        },
+        { title: "Derivando o numerador", title_segments: null, expression: "exp(x)", explanation: null },
+        { title: "Derivando o denominador", title_segments: null, expression: "1", explanation: null },
+        {
+          title: "Aplicando a Regra de L'Hôpital (novo limite)",
+          title_segments: null,
+          expression: "limite(exp(x)/1, x, 0)",
+          explanation: null,
+        },
+        { title: "Substituindo", title_segments: null, expression: "exp((0))", explanation: null },
+        { title: "Calculando", title_segments: null, expression: "1", explanation: null },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="limite((exp(x)-1)/x, x, 0)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(8));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.filter((latex) => latex === "\\frac{0}{0}").length).toBe(2);
+    expect(
+      screen.getByText(
+        "A Regra de L'Hôpital diz que, se lim f(x)/g(x) resulta em 0/0 ou ∞/∞ e f e g são deriváveis, então lim f(x)/g(x) = lim f'(x)/g'(x), desde que esse novo limite exista."
+      )
+    ).toBeInTheDocument();
+    expect(annotations.some((latex) => latex === "e^{x}")).toBe(true);
+    expect(annotations.some((latex) => latex === "e^{\\left(0\\right)}")).toBe(true);
+    expect(annotations.some((latex) => latex === "1")).toBe(true);
+  });
+
+  it("renderiza a indeterminação ∞/∞ resolvida por L'Hôpital, com o símbolo de infinito correto", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "limite(ln(x)/x, x, oo)",
+      result: "Limite: 0",
+      steps: [
+        {
+          title: "Expressão original",
+          title_segments: null,
+          expression: "limite(log(x)/x, x, oo)",
+          explanation: null,
+        },
+        { title: "Substituindo o limite", title_segments: null, expression: "oo/oo", explanation: null },
+        {
+          title: "Reconhecemos uma forma indeterminada.",
+          title_segments: null,
+          expression: "oo/oo",
+          explanation: null,
+        },
+        { title: "Derivando o numerador", title_segments: null, expression: "1/x", explanation: null },
+        { title: "Derivando o denominador", title_segments: null, expression: "1", explanation: null },
+        {
+          title: "Aplicando a Regra de L'Hôpital (novo limite)",
+          title_segments: null,
+          expression: "limite(1/x/1, x, oo)",
+          explanation: null,
+        },
+        { title: "Calculando", title_segments: null, expression: "0", explanation: null },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="limite(ln(x)/x, x, oo)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(7));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.filter((latex) => latex === "\\frac{\\infty}{\\infty}").length).toBe(2);
+    expect(annotations.some((latex) => latex === "0")).toBe(true);
+  });
+
+  it("nunca esconde os limites racionais/trigonométricos atrás de L'Hôpital (regressão)", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "limite(sin(x)/x, x, 0)",
+      result: "Limite: 1",
+      steps: [
+        {
+          title: "Expressão original",
+          title_segments: null,
+          expression: "limite(sin(x)/x, x, 0)",
+          explanation: null,
+        },
+        {
+          title: "Reconhecendo o limite fundamental",
+          title_segments: null,
+          expression: "limite(sin(x)/x, x, 0)=1",
+          explanation: null,
+        },
+        { title: "Calculando", title_segments: null, expression: "1", explanation: null },
+      ],
+    });
+
+    render(<MathSteps expression="limite(sin(x)/x, x, 0)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(screen.getByText("Reconhecendo o limite fundamental")).toBeInTheDocument());
+    expect(screen.queryByText("Reconhecemos uma forma indeterminada.")).not.toBeInTheDocument();
+  });
+
+  it("mostra erro amigável quando o limite exige aplicações sucessivas de L'Hôpital, sem quebrar a tela", async () => {
+    const { ApiError } = await import("@/lib/api/errors");
+    vi.mocked(apiClient.solveSteps).mockRejectedValue(
+      new ApiError(
+        "invalid_expression",
+        "Este limite requer aplicações sucessivas da Regra de L'Hôpital, que ainda não fazem parte desta versão."
+      )
+    );
+
+    render(<MathSteps expression="limite(x**2/exp(x), x, oo)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "Este limite requer aplicações sucessivas da Regra de L'Hôpital, que ainda não fazem parte desta versão."
+        )
       ).toBeInTheDocument()
     );
     expect(screen.getByRole("alert")).toBeInTheDocument();

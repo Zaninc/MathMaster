@@ -37,6 +37,10 @@ UNSUPPORTED_INTEGRAL_MESSAGE = (
 UNSUPPORTED_LIMIT_MESSAGE = (
     "O passo a passo para este tipo de limite ainda não foi implementado nesta versão."
 )
+UNSUPPORTED_LHOPITAL_MULTIPLE_APPLICATIONS_MESSAGE = (
+    "Este limite requer aplicações sucessivas da Regra de L'Hôpital, que ainda não "
+    "fazem parte desta versão."
+)
 
 
 def require_single_symbol(symbols: set) -> None:

@@ -63,7 +63,18 @@ racionais) e `trigonometric_limits.py` (`sen(ax)/x`, `x/sen(x)`,
 `sen(ax)/sen(bx)`, `(1-cos(ax))/x²`) — ANTES do caminho racional, porque
 esses casos usam `sin`/`cos` (nunca polinomiais) e precisam da
 manipulação algébrica específica do limite fundamental, não da
-comparação de graus."""
+comparação de graus.
+
+Sprint V2.12.2 — a Regra de L'Hôpital (`lhopital.py`) é SEMPRE o último
+recurso da cascata de limites: `lhopital.is_lhopital_shape` só é checada
+DEPOIS de `is_trigonometric_fundamental_shape` e exige que numerador OU
+denominador NÃO seja polinomial — nunca se sobrepõe ao caminho racional
+da V2.12 (substituição direta/fatoração-cancelamento/comparação de
+graus), que continua sendo tentado para qualquer razão inteiramente
+polinomial. Só indeterminações 0/0 (ponto finito) e ∞/∞ (`x→∞`) com UMA
+única aplicação são suportadas; se o novo limite ainda for indeterminado,
+`lhopital.py` rejeita com mensagem amigável dedicada (aplicações
+sucessivas ficam para versões futuras)."""
 from __future__ import annotations
 
 from sympy import degree, expand
@@ -98,6 +109,7 @@ from .advanced_derivatives import generate_advanced_derivative_steps, is_product
 from .definite_integrals import generate_definite_integral_steps
 from .derivatives import generate_derivative_steps
 from .integrals import generate_integral_steps
+from .lhopital import generate_lhopital_steps, is_lhopital_shape
 from .limits import generate_limit_steps
 from .linear_equations import generate_linear_equation_steps, parse_equation_sides
 from .linear_systems import generate_linear_system_steps
@@ -180,6 +192,8 @@ def generate_steps(expression: str) -> list[MathStep]:
         expr, symbol, point = parse_limit_call(normalized)
         if is_trigonometric_fundamental_shape(expr, symbol, point):
             return generate_trigonometric_limit_steps(normalized)
+        if is_lhopital_shape(expr, symbol, point):
+            return generate_lhopital_steps(normalized)
         return generate_limit_steps(normalized)
 
     if any(check(normalized) for check in _NON_EQUATION_DOMAIN_CHECKS):

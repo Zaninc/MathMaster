@@ -444,21 +444,22 @@ def test_solve_steps_limit_infinite_numerator_smaller_degree(client: TestClient)
 
 def test_solve_steps_limit_unsupported_returns_friendly_400(client: TestClient) -> None:
     # sen(x)/x deixou de ser um exemplo válido de rejeição desde a Sprint
-    # V2.12.1 (agora suportado — ver seção "Sprint V2.12.1" abaixo);
-    # tan(x)/x continua fora de escopo (nem racional nem limite
-    # trigonométrico fundamental reconhecido).
-    response = client.post("/solve/steps", json={"expression": "limite(tan(x)/x, x, 0)"})
+    # V2.12.1 (agora suportado); tan(x)/x deixou de ser válido desde a
+    # V2.12.2 (0/0 genuíno, agora resolvido pela Regra de L'Hôpital — ver
+    # seção "Sprint V2.12.2" abaixo). x*ln(x) é uma indeterminação 0*∞,
+    # nunca um quociente 0/0 ou ∞/∞ — continua fora de escopo.
+    response = client.post("/solve/steps", json={"expression": "limite(x*ln(x), x, 0)"})
     assert response.status_code == 400
     assert "ainda não foi implementado" in response.json()["detail"]
 
 
 def test_solve_endpoint_unaffected_by_unsupported_limit_steps(client: TestClient) -> None:
-    """`/solve` continua calculando normalmente um limite trigonométrico
-    fora de escopo, mesmo sem passo a passo — motor de cálculo 100%
+    """`/solve` continua calculando normalmente um limite fora de escopo
+    (indeterminação 0*∞), mesmo sem passo a passo — motor de cálculo 100%
     intocado."""
-    response = client.post("/solve", json={"expression": "limite(tan(x)/x, x, 0)"})
+    response = client.post("/solve", json={"expression": "limite(x*ln(x), x, 0)"})
     assert response.status_code == 200
-    assert response.json()["result"] == "Limite: 1"
+    assert response.json()["result"] == "Limite: 0"
 
 
 # --- Sprint V2.12.1: limites trigonométricos fundamentais -------------------
@@ -515,7 +516,10 @@ def test_solve_steps_one_minus_cos_over_x_squared(client: TestClient) -> None:
 
 
 def test_solve_steps_trigonometric_out_of_scope_returns_friendly_400(client: TestClient) -> None:
-    response = client.post("/solve/steps", json={"expression": "limite(sin(x**2)/x, x, 0)"})
+    # sen(x²)/x deixou de ser um exemplo válido desde a Sprint V2.12.2 (0/0
+    # genuíno, resolvido pela Regra de L'Hôpital); cos(x²) nunca forma 0/0
+    # ou ∞/∞ de verdade (denominador sempre 1) e continua fora de escopo.
+    response = client.post("/solve/steps", json={"expression": "limite(cos(x**2), x, 0)"})
     assert response.status_code == 400
     assert "ainda não foi implementado" in response.json()["detail"]
 
