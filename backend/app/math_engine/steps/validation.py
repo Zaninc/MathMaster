@@ -34,6 +34,9 @@ UNSUPPORTED_DERIVATIVE_MESSAGE = (
 UNSUPPORTED_INTEGRAL_MESSAGE = (
     "O passo a passo para este tipo de integral ainda não foi implementado nesta versão."
 )
+UNSUPPORTED_LIMIT_MESSAGE = (
+    "O passo a passo para este tipo de limite ainda não foi implementado nesta versão."
+)
 
 
 def require_single_symbol(symbols: set) -> None:

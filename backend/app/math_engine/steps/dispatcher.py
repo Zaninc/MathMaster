@@ -46,7 +46,14 @@ sobre a ÁRVORE do SymPy já parseada, nunca regex) escolhe entre
 qualquer expansão polinomial, porque expressões como `(x+1)*(x²+3)` ou
 `(x²+1)³` TAMBÉM se expandem para polinômios simples, mas o objetivo desta
 sprint é ensinar a regra do produto/cadeia nesses casos, não escondê-la
-atrás da expansão."""
+atrás da expansão.
+
+Sprint V2.12 — mesmo tratamento para `limite(expr, var, ponto)`:
+`is_limit_call` decide especificamente "isto é um limite?" e delega para
+`limits.py`, que classifica o caso (substituição direta, indeterminação
+0/0, infinito por comparação de graus) sobre a árvore já parseada e
+levanta sua própria mensagem amigável para o que ainda não é suportado —
+nunca mais cai na exclusão geral de cálculo."""
 from __future__ import annotations
 
 from sympy import degree, expand
@@ -57,6 +64,7 @@ from ..calculus.dispatcher import (
     is_definite_integral_call,
     is_derivative_call,
     is_indefinite_integral_call,
+    is_limit_call,
     parse_derivative_call,
 )
 from ..combinatorics.dispatcher import is_combinatorics_domain_expression
@@ -79,6 +87,7 @@ from .advanced_derivatives import generate_advanced_derivative_steps, is_product
 from .definite_integrals import generate_definite_integral_steps
 from .derivatives import generate_derivative_steps
 from .integrals import generate_integral_steps
+from .limits import generate_limit_steps
 from .linear_equations import generate_linear_equation_steps, parse_equation_sides
 from .linear_systems import generate_linear_system_steps
 from .models import MathStep
@@ -151,6 +160,9 @@ def generate_steps(expression: str) -> list[MathStep]:
 
     if is_definite_integral_call(normalized):
         return generate_definite_integral_steps(normalized)
+
+    if is_limit_call(normalized):
+        return generate_limit_steps(normalized)
 
     if any(check(normalized) for check in _NON_EQUATION_DOMAIN_CHECKS):
         raise ExpressionError(UNSUPPORTED_DOMAIN_MESSAGE)

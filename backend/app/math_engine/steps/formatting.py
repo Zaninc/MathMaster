@@ -6,6 +6,8 @@ motor (`linear_equations.py`/`linear_systems.py`), nunca calculam nada
 matematicamente novo."""
 from __future__ import annotations
 
+import re
+
 from sympy.core.expr import Expr
 
 from .models import TitleSegment
@@ -118,6 +120,24 @@ def term_text_plain(coeff: Expr, exponent: int, symbol: Expr) -> str:
     if coeff == -1:
         return f"-{power}"
     return f"{coeff}{power}"
+
+
+# --- Sprint V2.10.2 — compartilhado entre definite_integrals.py e limits.py --
+# (originalmente privado em definite_integrals.py como `_substitute_bound_
+# text`; promovido aqui na V2.12 para `limits.py` reaproveitar a MESMA
+# técnica de substituição textual em vez de duplicá-la.)
+
+
+def substitute_symbol_text(expression: Expr, symbol: Expr, value: Expr) -> str:
+    """"x**3/3" com x substituído pelo VALOR (entre parênteses, nunca
+    simplificado) -> "(2)**3/3". Substituição por texto (não `.subs()`, que
+    avaliaria a aritmética na hora — o mesmo problema já documentado em
+    `quadratic_equations._bhaskara_steps`/`derivatives._power_rule_
+    unevaluated_text`): `symbol` é sempre um identificador de uma letra
+    (garantia de `safe_parsing.py`), então a fronteira de palavra `\\b` troca
+    exatamente as ocorrências da variável, nunca um dígito ou outro
+    identificador."""
+    return re.sub(rf"\b{re.escape(str(symbol))}\b", f"({value})", str(expression))
 
 
 def linear_combination_expression(terms: list[Expr], symbol: Expr, operation: str) -> str:

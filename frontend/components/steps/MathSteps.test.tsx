@@ -1010,3 +1010,181 @@ describe("MathSteps — compatibilidade com passos de regra do produto e regra d
     expect(screen.getByRole("alert")).toBeInTheDocument();
   });
 });
+
+/**
+ * Sprint V2.12 (Passo a Passo — Limites) — ZERO componente novo
+ * (`MathSteps`/`MathStepItem`/`MixedMathText` intocados) e ZERO mudança em
+ * `to-latex.ts`: `\lim_{x \to p}` já era suportado desde a Sprint 12
+ * (wrapper `limite(...)` no `productHandler`), e o texto matemático puro
+ * dos novos passos ("0/0", "(x - 2)*(x + 2)", frações de frações com
+ * expoente negativo) já passa pelo MESMO pipeline `valueToLatex` usado
+ * desde a V2.9 — confirmado por debug-render antes de escrever este
+ * arquivo, sem precisar de nenhuma correção pontual de símbolo desta vez.
+ */
+describe("MathSteps — compatibilidade com passos de limites (Sprint V2.12)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.solveSteps).mockReset();
+  });
+
+  it("renderiza a substituição direta (função contínua) em KaTeX", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "limite(x**2+1, x, 2)",
+      result: "Limite: 5",
+      steps: [
+        {
+          title: "Expressão original",
+          title_segments: null,
+          expression: "limite(x**2 + 1, x, 2)",
+          explanation: null,
+        },
+        {
+          title: "Como a função é contínua em x=2, podemos substituir diretamente.",
+          title_segments: null,
+          expression: "(2)**2 + 1",
+          explanation: null,
+        },
+        { title: "Calculando", title_segments: null, expression: "5", explanation: null },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="limite(x**2+1, x, 2)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(3));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex?.includes("\\lim_{x\\to2}"))).toBe(true);
+    expect(
+      screen.getByText("Como a função é contínua em x=2, podemos substituir diretamente.")
+    ).toBeInTheDocument();
+    expect(annotations.some((latex) => latex === "{\\left(2\\right)}^{2}+1")).toBe(true);
+    expect(annotations.some((latex) => latex === "5")).toBe(true);
+  });
+
+  it("renderiza a indeterminação 0/0, fatoração e cancelamento em KaTeX", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "limite((x**2-4)/(x-2), x, 2)",
+      result: "Limite: 4",
+      steps: [
+        {
+          title: "Expressão original",
+          title_segments: null,
+          expression: "limite((x**2 - 4)/(x - 2), x, 2)",
+          explanation: null,
+        },
+        { title: "Substituindo", title_segments: null, expression: "0/0", explanation: null },
+        {
+          title: "Reconhecemos uma indeterminação.",
+          title_segments: null,
+          expression: "0/0",
+          explanation:
+            "A substituição direta resulta em 0/0, uma forma indeterminada — precisamos simplificar a expressão antes de calcular o limite.",
+        },
+        {
+          title: "Fatorando",
+          title_segments: null,
+          expression: "(x - 2)*(x + 2)",
+          explanation: null,
+        },
+        {
+          title: "Cancelando o fator comum",
+          title_segments: null,
+          expression: "x + 2",
+          explanation: null,
+        },
+        { title: "Substituindo", title_segments: null, expression: "4", explanation: null },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="limite((x**2-4)/(x-2), x, 2)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(6));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.filter((latex) => latex === "\\frac{0}{0}").length).toBe(2);
+    expect(
+      screen.getByText(
+        "A substituição direta resulta em 0/0, uma forma indeterminada — precisamos simplificar a expressão antes de calcular o limite."
+      )
+    ).toBeInTheDocument();
+    expect(annotations.some((latex) => latex === "\\left(x-2\\right)\\cdot\\left(x+2\\right)")).toBe(true);
+    expect(annotations.some((latex) => latex === "x+2")).toBe(true);
+    expect(annotations.some((latex) => latex === "4")).toBe(true);
+  });
+
+  it("renderiza o limite no infinito por comparação de graus em KaTeX", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "limite((3*x**2+2)/(x**2-1), x, oo)",
+      result: "Limite: 3",
+      steps: [
+        {
+          title: "Expressão original",
+          title_segments: null,
+          expression: "limite((3*x**2 + 2)/(x**2 - 1), x, oo)",
+          explanation: null,
+        },
+        {
+          title: "O maior grau do numerador é 2 e o maior grau do denominador é 2.",
+          title_segments: null,
+          expression: "(3*x**2 + 2)/(x**2 - 1)",
+          explanation: null,
+        },
+        {
+          title: "Dividindo o numerador e o denominador por x**2",
+          title_segments: null,
+          expression: "(3 + 2/x**2)/(1 - 1/x**2)",
+          explanation: null,
+        },
+        {
+          title: "Quando x→∞, os termos com x no denominador tendem a zero.",
+          title_segments: null,
+          expression: "3/1",
+          explanation: null,
+        },
+        { title: "Simplificando", title_segments: null, expression: "3", explanation: null },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="limite((3*x**2+2)/(x**2-1), x, oo)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(5));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex?.includes("\\lim_{x\\to\\infty}"))).toBe(true);
+    expect(
+      screen.getByText("O maior grau do numerador é 2 e o maior grau do denominador é 2.")
+    ).toBeInTheDocument();
+    expect(
+      annotations.some(
+        (latex) => latex === "\\frac{\\left(3+\\frac{2}{{x}^{2}}\\right)}{\\left(1-\\frac{1}{{x}^{2}}\\right)}"
+      )
+    ).toBe(true);
+    expect(annotations.some((latex) => latex === "\\frac{3}{1}")).toBe(true);
+    expect(annotations.some((latex) => latex === "3")).toBe(true);
+  });
+
+  it("mostra erro amigável para limite trigonométrico (ex. sen(x)/x), sem quebrar a tela", async () => {
+    const { ApiError } = await import("@/lib/api/errors");
+    vi.mocked(apiClient.solveSteps).mockRejectedValue(
+      new ApiError(
+        "invalid_expression",
+        "O passo a passo para este tipo de limite ainda não foi implementado nesta versão."
+      )
+    );
+
+    render(<MathSteps expression="limite(sin(x)/x, x, 0)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("O passo a passo para este tipo de limite ainda não foi implementado nesta versão.")
+      ).toBeInTheDocument()
+    );
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});

@@ -382,3 +382,76 @@ def test_solve_steps_basic_derivative_still_uses_v2_10_path(client: TestClient) 
     titles = [step["title"] for step in response.json()["steps"]]
     assert "Identificando um produto" not in titles
     assert "Identificando função composta" not in titles
+
+
+# --- Sprint V2.12: limites ---------------------------------------------------
+
+
+def test_solve_steps_limit_direct_substitution(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "limite(x**2+1, x, 2)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Limite: 5"
+    titles = [step["title"] for step in body["steps"]]
+    assert titles == [
+        "Expressão original",
+        "Como a função é contínua em x=2, podemos substituir diretamente.",
+        "Calculando",
+    ]
+    assert body["steps"][-1]["expression"] == "5"
+
+
+def test_solve_steps_limit_rational_no_indetermination(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "limite((x+1)/(x+3), x, 2)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Limite: 3/5"
+    assert body["steps"][-1]["expression"] == "3/5"
+
+
+def test_solve_steps_limit_zero_over_zero(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "limite((x**2-4)/(x-2), x, 2)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Limite: 4"
+    titles = [step["title"] for step in body["steps"]]
+    assert "Reconhecemos uma indeterminação." in titles
+    assert "Fatorando" in titles
+    assert "Cancelando o fator comum" in titles
+    assert body["steps"][-1]["expression"] == "4"
+
+
+def test_solve_steps_limit_infinite_equal_degrees(client: TestClient) -> None:
+    response = client.post(
+        "/solve/steps", json={"expression": "limite((3*x**2+2)/(x**2-1), x, oo)"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Limite: 3"
+    assert body["steps"][-1]["title"] == "Simplificando"
+    assert body["steps"][-1]["expression"] == "3"
+
+
+def test_solve_steps_limit_infinite_numerator_smaller_degree(client: TestClient) -> None:
+    response = client.post(
+        "/solve/steps", json={"expression": "limite((x**2+1)/(x**3+5), x, oo)"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Limite: 0"
+    assert body["steps"][-1]["expression"] == "0"
+
+
+def test_solve_steps_limit_unsupported_returns_friendly_400(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "limite(sin(x)/x, x, 0)"})
+    assert response.status_code == 400
+    assert "ainda não foi implementado" in response.json()["detail"]
+
+
+def test_solve_endpoint_unaffected_by_unsupported_limit_steps(client: TestClient) -> None:
+    """`/solve` continua calculando normalmente um limite trigonométrico,
+    mesmo sem passo a passo (regra de L'Hôpital/limites trigonométricos
+    ficam para versões futuras) — motor de cálculo 100% intocado."""
+    response = client.post("/solve", json={"expression": "limite(sin(x)/x, x, 0)"})
+    assert response.status_code == 200
+    assert response.json()["result"] == "Limite: 1"

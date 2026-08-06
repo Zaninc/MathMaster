@@ -97,6 +97,15 @@ def is_definite_integral_call(expression: str) -> bool:
     return len(_split_top_level_args(match.group(2))) == 4
 
 
+def is_limit_call(expression: str) -> bool:
+    """Sprint V2.12 (Passo a Passo — Limites) — mesmo padrão de
+    `is_derivative_call`, restrito à operação `limite` (sempre 3
+    argumentos: expressão, variável e ponto — nunca colide com `derivada`/
+    `integral`, que são operações distintas do mesmo `_CALL_PATTERN`)."""
+    match = _CALL_PATTERN.match(expression)
+    return bool(match) and match.group(1) == "limite"
+
+
 def _split_top_level_args(text: str) -> list[str]:
     """Mesma técnica de bracket-counting de `parser/normalize.py`/
     `formatter/safe_parse.py`, duplicada aqui deliberadamente — cada área do
@@ -205,6 +214,29 @@ def parse_definite_integral_call(expression: str) -> tuple[Expr, Symbol, Expr, E
     lower = _parse_fragment(partes[2], symbol)
     upper = _parse_fragment(partes[3], symbol)
     return expr, symbol, lower, upper
+
+
+def parse_limit_call(expression: str) -> tuple[Expr, Symbol, Expr]:
+    """Sprint V2.12 (Passo a Passo — Limites) — reaproveitável por
+    `math_engine.steps.limits`: mesmo parsing que `solve_calculus_text` já
+    faz para `limite(expr, var, ponto)` (`_CALL_PATTERN`, `_split_top_
+    level_args`, `_parse_variable`, `_parse_fragment` — nunca regex frágil
+    novo), devolvendo `(expr, symbol, point)` já prontos em vez de já
+    calcular o limite. `compute_limit`/`solve_calculus_text` continuam
+    100% intocados."""
+    match = _CALL_PATTERN.match(expression)
+    if not match or match.group(1) != "limite":
+        raise ExpressionError(f"Não foi possível interpretar a expressão: {expression}")
+    _, argumentos = match.groups()
+    partes = _split_top_level_args(argumentos)
+    if len(partes) != 3:
+        raise ExpressionError(
+            "limite(...) espera exatamente 3 argumentos: expressão, variável e ponto."
+        )
+    symbol = _parse_variable(partes[1])
+    expr = _parse_fragment(partes[0], symbol)
+    point = _parse_fragment(partes[2], symbol)
+    return expr, symbol, point
 
 
 def solve_calculus_text(expression: str) -> str:

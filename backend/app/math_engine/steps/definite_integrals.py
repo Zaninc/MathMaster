@@ -25,13 +25,9 @@ módulo usam os limites exatamente como o usuário digitou, produzindo o
 sinal correto automaticamente."""
 from __future__ import annotations
 
-import re
-
-from sympy.core.expr import Expr
-from sympy.core.symbol import Symbol
-
 from ..calculus.dispatcher import parse_definite_integral_call
 from ..calculus.integrals import compute_definite_integral
+from .formatting import substitute_symbol_text
 from .integrals import find_primitive_steps
 from .models import MathStep
 
@@ -39,18 +35,6 @@ _FTC_EXPLANATION = (
     "Encontramos uma primitiva F(x) e calculamos F(b) - F(a), o Teorema "
     "Fundamental do Cálculo."
 )
-
-
-def _substitute_bound_text(primitive: Expr, symbol: Symbol, value: Expr) -> str:
-    """"x**3/3" com x substituído pelo LIMITE (entre parênteses, nunca
-    simplificado) -> "(2)**3/3". Substituição por texto (não `.subs()`,
-    que avaliaria a aritmética na hora — o mesmo problema já documentado
-    em `quadratic_equations._bhaskara_steps`/`derivatives._power_rule_
-    unevaluated_text`): `symbol` é sempre um identificador de uma letra
-    (garantia de `safe_parsing.py`), então a fronteira de palavra `\\b`
-    troca exatamente as ocorrências da variável, nunca um dígito ou outro
-    identificador."""
-    return re.sub(rf"\b{re.escape(str(symbol))}\b", f"({value})", str(primitive))
 
 
 def generate_definite_integral_steps(text: str) -> list[MathStep]:
@@ -84,8 +68,8 @@ def generate_definite_integral_steps(text: str) -> list[MathStep]:
         )
     )
 
-    upper_text = _substitute_bound_text(primitive, symbol, upper)
-    lower_text = _substitute_bound_text(primitive, symbol, lower)
+    upper_text = substitute_symbol_text(primitive, symbol, upper)
+    lower_text = substitute_symbol_text(primitive, symbol, lower)
     # Parênteses em volta de `lower_text` sempre — nunca só quando a
     # primitiva tem mais de um termo: sem eles, "A+B-C+D" (concatenação
     # ingênua de "A+B" menos "C+D") distribui o sinal de menos só no
