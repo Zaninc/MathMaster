@@ -477,6 +477,11 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
     // "C" solto como a unidade embutida "coulomb", renderizando
     // "\mathrm{C}" em vez do itálico padrão de símbolo matemático.
     if (name === "C") return "C";
+    // Sprint V2.11 (passo a passo de derivadas, regra do produto —
+    // "f=..., g=...") — mesmo problema e mesma correção do "b"/"C" acima:
+    // mathjs trata "g" solto como a unidade embutida "grama", renderizando
+    // "\mathrm{g}" em vez do itálico padrão de símbolo matemático.
+    if (name === "g") return "g";
     return undefined;
   }
 

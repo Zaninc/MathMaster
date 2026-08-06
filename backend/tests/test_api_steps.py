@@ -284,3 +284,101 @@ def test_solve_endpoint_unaffected_by_unsupported_definite_integral_steps(client
     response = client.post("/solve", json={"expression": "integral(sin(x), x, 0, 1)"})
     assert response.status_code == 200
     assert response.json()["result"] == "Integral definida: 1 - cos(1)"
+
+
+# --- Sprint V2.11: regra do produto e regra da cadeia -----------------------
+
+
+def test_solve_steps_product_rule(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "d/dx(x**2*sin(x))"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Derivada: x²*cos(x) + 2x*sin(x)"
+    assert body["steps"][0]["title"] == "Função original"
+    assert body["steps"][1]["title"] == "Identificando um produto"
+    assert body["steps"][-1]["title"] == "Simplificando"
+    assert body["steps"][-1]["expression"] == "x**2*cos(x) + 2*x*sin(x)"
+
+
+def test_solve_steps_product_rule_never_hidden_by_polynomial_expansion(client: TestClient) -> None:
+    # (x+1)(x²+3) TAMBÉM se expande pra polinômio simples — o passo a passo
+    # precisa continuar ensinando a regra do produto, não a linearidade.
+    response = client.post("/solve/steps", json={"expression": "d/dx((x+1)*(x**2+3))"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Derivada: x² + 2x*(x + 1) + 3"
+    titles = [step["title"] for step in body["steps"]]
+    assert "Identificando um produto" in titles
+    assert "Identificando função composta" not in titles
+
+
+def test_solve_steps_chain_rule_power(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "d/dx((x**2+1)**3)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Derivada: 6x*(x² + 1)²"
+    titles = [step["title"] for step in body["steps"]]
+    assert titles == [
+        "Função original",
+        "Identificando função composta",
+        "Derivando a externa",
+        "Derivando a interna",
+        "Aplicando a regra da cadeia",
+        "Simplificando",
+    ]
+    assert body["steps"][-1]["expression"] == "6*x*(x**2 + 1)**2"
+
+
+def test_solve_steps_chain_rule_trig(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "d/dx(sin(x**2))"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Derivada: 2x*cos(x²)"
+    assert body["steps"][-1]["title"] == "Aplicando a regra da cadeia"
+    assert body["steps"][-1]["expression"] == "2*x*cos(x**2)"
+
+
+def test_solve_steps_chain_rule_exp(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "d/dx(exp(x**2))"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Derivada: 2x*exp(x²)"
+    assert body["steps"][-1]["expression"] == "2*x*exp(x**2)"
+
+
+def test_solve_steps_product_and_chain_combined(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "d/dx((x**2+1)**3*sin(x))"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Derivada: 6x*(x² + 1)²*sin(x) + (x² + 1)³*cos(x)"
+    titles = [step["title"] for step in body["steps"]]
+    assert titles.count("Identificando um produto") == 1
+    assert titles.count("Identificando função composta") == 1
+    assert body["steps"][-1]["expression"] == "6*x*(x**2 + 1)**2*sin(x) + (x**2 + 1)**3*cos(x)"
+
+
+def test_solve_steps_quotient_unsupported_returns_friendly_400(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "d/dx(x/sin(x))"})
+    assert response.status_code == 400
+    assert "ainda não foi implementado" in response.json()["detail"]
+
+
+def test_solve_endpoint_unaffected_by_unsupported_quotient_derivative_steps(
+    client: TestClient,
+) -> None:
+    """`/solve` continua calculando normalmente uma derivada de quociente,
+    mesmo sem passo a passo (regra do quociente fica para versões
+    futuras) — motor de cálculo 100% intocado."""
+    response = client.post("/solve", json={"expression": "d/dx(x/sin(x))"})
+    assert response.status_code == 200
+    assert response.json()["result"] == "Derivada: -x*cos(x)/sin(x)² + 1/sin(x)"
+
+
+def test_solve_steps_basic_derivative_still_uses_v2_10_path(client: TestClient) -> None:
+    # Regressão: uma derivada polinomial simples continua pelo caminho da
+    # V2.10 (regra da potência/linearidade), nunca pelo novo módulo.
+    response = client.post("/solve/steps", json={"expression": "d/dx(x**2+3*x)"})
+    assert response.status_code == 200
+    titles = [step["title"] for step in response.json()["steps"]]
+    assert "Identificando um produto" not in titles
+    assert "Identificando função composta" not in titles

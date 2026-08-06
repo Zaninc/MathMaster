@@ -156,6 +156,17 @@ describe("expressionToLatex", () => {
     expect(normalized(await expressionToLatex("x**6/6 + C"))).toBe("\\frac{{x}^{6}}{6}+C");
   });
 
+  it("Sprint V2.11: 'g' renderiza em itálico normal, não como unidade embutida do mathjs (grama)", async () => {
+    // Mesmo problema e mesma correção do "b"/"C" acima — passo a passo de
+    // derivadas, regra do produto ("f=..., g=..."). `valueToLatex` (não
+    // `expressionToLatex` isolado) é o pipeline real usado por
+    // `MathStepItem` — reconhece a lista de igualdades separada por
+    // vírgula antes de converter cada lado.
+    expect(normalized(await valueToLatex("f=x**2, g=sin(x)"))).toBe(
+      "f={x}^{2},g=\\sin\\left(x\\right)"
+    );
+  });
+
   it("chamada de função vazia (template em digitação) nunca converte — cai no fallback", async () => {
     expect(await expressionToLatex("sqrt()")).toBeNull();
     expect(await expressionToLatex("√()")).toBeNull();

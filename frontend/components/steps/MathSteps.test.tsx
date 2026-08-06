@@ -754,3 +754,259 @@ describe("MathSteps — compatibilidade com passos de integrais definidas (Sprin
     expect(screen.getByRole("alert")).toBeInTheDocument();
   });
 });
+
+/**
+ * Sprint V2.11 (Passo a Passo — Regra do Produto e Regra da Cadeia) — ZERO
+ * componente novo (`MathSteps`/`MathStepItem`/`MixedMathText` intocados): o
+ * texto matemático puro que o backend agora envia ("f=x**2, g=sin(x)",
+ * "u=x**2 + 1, y=u**3") já passa pelo MESMO pipeline `valueToLatex` usado
+ * desde a V2.9, sem precisar de nenhuma alteração no frontend além da
+ * correção pontual do símbolo "g" em `to-latex.ts` (mesmo padrão do "b"/"C"
+ * — ver `to-latex.test.ts`).
+ */
+describe("MathSteps — compatibilidade com passos de regra do produto e regra da cadeia (Sprint V2.11)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.solveSteps).mockReset();
+  });
+
+  it("renderiza a regra do produto (f=x², g=sen(x)) em KaTeX", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "d/dx(x**2*sin(x))",
+      result: "Derivada: x²*cos(x) + 2x*sin(x)",
+      steps: [
+        {
+          title: "Função original",
+          title_segments: null,
+          expression: "derivada(x**2*sin(x), x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando um produto",
+          title_segments: null,
+          expression: "f=x**2, g=sin(x)",
+          explanation: null,
+        },
+        {
+          title: "Aplicando a regra do produto",
+          title_segments: null,
+          expression: "derivada(f*g, x)=derivada(f, x)*g+f*derivada(g, x)",
+          explanation: null,
+        },
+        { title: "Derivando f", title_segments: null, expression: "2*x", explanation: null },
+        { title: "Derivando g", title_segments: null, expression: "cos(x)", explanation: null },
+        {
+          title: "Substituindo",
+          title_segments: null,
+          expression: "2*x*sin(x)+x**2*cos(x)",
+          explanation: null,
+        },
+        {
+          title: "Simplificando",
+          title_segments: null,
+          expression: "x**2*cos(x) + 2*x*sin(x)",
+          explanation: null,
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="d/dx(x**2*sin(x))" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(7));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex === "f={x}^{2},\\;g=\\sin\\left(x\\right)")).toBe(true);
+    expect(screen.getByText("Derivando f")).toBeInTheDocument();
+    expect(screen.getByText("Derivando g")).toBeInTheDocument();
+    expect(
+      annotations.some((latex) => latex === "2\\cdotx\\cdot\\sin\\left(x\\right)+{x}^{2}\\cdot\\cos\\left(x\\right)")
+    ).toBe(true);
+    // Resultado final vindo do motor real, nunca inventado.
+    expect(
+      annotations.some((latex) => latex === "{x}^{2}\\cdot\\cos\\left(x\\right)+2\\cdotx\\cdot\\sin\\left(x\\right)")
+    ).toBe(true);
+  });
+
+  it("nunca esconde a regra do produto atrás da expansão polinomial ((x+1)(x²+3))", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "d/dx((x+1)*(x**2+3))",
+      result: "Derivada: x² + 2x*(x + 1) + 3",
+      steps: [
+        {
+          title: "Função original",
+          title_segments: null,
+          expression: "derivada((x + 1)*(x**2 + 3), x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando um produto",
+          title_segments: null,
+          expression: "f=x + 1, g=x**2 + 3",
+          explanation: null,
+        },
+        {
+          title: "Aplicando a regra do produto",
+          title_segments: null,
+          expression: "derivada(f*g, x)=derivada(f, x)*g+f*derivada(g, x)",
+          explanation: null,
+        },
+        { title: "Derivando f", title_segments: null, expression: "1", explanation: null },
+        { title: "Derivando g", title_segments: null, expression: "2*x", explanation: null },
+        {
+          title: "Substituindo",
+          title_segments: null,
+          expression: "1*(x**2 + 3)+(x + 1)*2*x",
+          explanation: null,
+        },
+        {
+          title: "Simplificando",
+          title_segments: null,
+          expression: "x**2 + 2*x*(x + 1) + 3",
+          explanation: null,
+        },
+      ],
+    });
+
+    render(<MathSteps expression="d/dx((x+1)*(x**2+3))" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(screen.getByText("Identificando um produto")).toBeInTheDocument());
+    expect(screen.queryByText("Identificando função composta")).not.toBeInTheDocument();
+  });
+
+  it("renderiza a regra da cadeia ((x²+1)³) em KaTeX, com u/y como variáveis auxiliares", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "d/dx((x**2+1)**3)",
+      result: "Derivada: 6x*(x² + 1)²",
+      steps: [
+        {
+          title: "Função original",
+          title_segments: null,
+          expression: "derivada((x**2 + 1)**3, x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando função composta",
+          title_segments: null,
+          expression: "u=x**2 + 1, y=u**3",
+          explanation: null,
+        },
+        { title: "Derivando a externa", title_segments: null, expression: "3*u**2", explanation: null },
+        { title: "Derivando a interna", title_segments: null, expression: "2*x", explanation: null },
+        {
+          title: "Aplicando a regra da cadeia",
+          title_segments: null,
+          expression: "3*(x**2 + 1)**2*2*x",
+          explanation: null,
+        },
+        {
+          title: "Simplificando",
+          title_segments: null,
+          expression: "6*x*(x**2 + 1)**2",
+          explanation: null,
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="d/dx((x**2+1)**3)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(6));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex === "u={x}^{2}+1,\\;y={u}^{3}")).toBe(true);
+    expect(annotations.some((latex) => latex === "3\\cdot{u}^{2}")).toBe(true);
+    expect(annotations.some((latex) => latex === "6\\cdotx\\cdot{\\left({x}^{2}+1\\right)}^{2}")).toBe(true);
+  });
+
+  it("combina produto e cadeia ((x²+1)³·sen(x)) sem colidir os passos", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "d/dx((x**2+1)**3*sin(x))",
+      result: "Derivada: 6x*(x² + 1)²*sin(x) + (x² + 1)³*cos(x)",
+      steps: [
+        {
+          title: "Função original",
+          title_segments: null,
+          expression: "derivada((x**2 + 1)**3*sin(x), x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando um produto",
+          title_segments: null,
+          expression: "f=(x**2 + 1)**3, g=sin(x)",
+          explanation: null,
+        },
+        {
+          title: "Aplicando a regra do produto",
+          title_segments: null,
+          expression: "derivada(f*g, x)=derivada(f, x)*g+f*derivada(g, x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando função composta",
+          title_segments: null,
+          expression: "u=x**2 + 1, y=u**3",
+          explanation: null,
+        },
+        { title: "Derivando a externa", title_segments: null, expression: "3*u**2", explanation: null },
+        { title: "Derivando a interna", title_segments: null, expression: "2*x", explanation: null },
+        {
+          title: "Aplicando a regra da cadeia",
+          title_segments: null,
+          expression: "3*(x**2 + 1)**2*2*x",
+          explanation: null,
+        },
+        {
+          title: "Simplificando",
+          title_segments: null,
+          expression: "6*x*(x**2 + 1)**2",
+          explanation: null,
+        },
+        { title: "Derivando g", title_segments: null, expression: "cos(x)", explanation: null },
+        {
+          title: "Substituindo",
+          title_segments: null,
+          expression: "6*x*(x**2 + 1)**2*sin(x)+(x**2 + 1)**3*cos(x)",
+          explanation: null,
+        },
+        {
+          title: "Simplificando",
+          title_segments: null,
+          expression: "6*x*(x**2 + 1)**2*sin(x) + (x**2 + 1)**3*cos(x)",
+          explanation: null,
+        },
+      ],
+    });
+
+    render(<MathSteps expression="d/dx((x**2+1)**3*sin(x))" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(screen.getAllByText("Identificando um produto").length).toBe(1));
+    expect(screen.getAllByText("Identificando função composta").length).toBe(1);
+    // "Simplificando" aparece 2× (cadeia do primeiro fator + resultado
+    // final do produto) — cada ocorrência é um passo real e distinto.
+    expect(screen.getAllByText("Simplificando").length).toBe(2);
+  });
+
+  it("mostra erro amigável para derivada de quociente (regra do quociente fora de escopo), sem quebrar a tela", async () => {
+    const { ApiError } = await import("@/lib/api/errors");
+    vi.mocked(apiClient.solveSteps).mockRejectedValue(
+      new ApiError(
+        "invalid_expression",
+        "O passo a passo para este tipo de derivada ainda não foi implementado nesta versão."
+      )
+    );
+
+    render(<MathSteps expression="d/dx(x/sin(x))" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("O passo a passo para este tipo de derivada ainda não foi implementado nesta versão.")
+      ).toBeInTheDocument()
+    );
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});

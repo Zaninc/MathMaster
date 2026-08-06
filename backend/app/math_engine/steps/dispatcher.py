@@ -36,7 +36,17 @@ indefinida?" e delega para `integrals.py`.
 Sprint V2.10.2 — mesmo tratamento para `integral(expr, var, inferior,
 superior)` DEFINIDA (4 argumentos): `is_definite_integral_call` delega
 para `definite_integrals.py`. `limite` continua sendo o único caso do
-domínio de cálculo ainda fora de escopo, caindo na exclusão geral."""
+domínio de cálculo ainda fora de escopo, caindo na exclusão geral.
+
+Sprint V2.11 — dentro de uma chamada `derivada(expr, var)` já confirmada,
+uma segunda decisão (`advanced_derivatives.is_product_or_chain_shape`,
+sobre a ÁRVORE do SymPy já parseada, nunca regex) escolhe entre
+`derivatives.py` (V2.10, regra da potência/linearidade da soma) e
+`advanced_derivatives.py` (regra do produto/regra da cadeia) — ANTES de
+qualquer expansão polinomial, porque expressões como `(x+1)*(x²+3)` ou
+`(x²+1)³` TAMBÉM se expandem para polinômios simples, mas o objetivo desta
+sprint é ensinar a regra do produto/cadeia nesses casos, não escondê-la
+atrás da expansão."""
 from __future__ import annotations
 
 from sympy import degree, expand
@@ -47,6 +57,7 @@ from ..calculus.dispatcher import (
     is_definite_integral_call,
     is_derivative_call,
     is_indefinite_integral_call,
+    parse_derivative_call,
 )
 from ..combinatorics.dispatcher import is_combinatorics_domain_expression
 from ..complex.dispatcher import is_complex_domain_expression
@@ -64,6 +75,7 @@ from ..polynomials.dispatcher import is_polynomial_domain_expression
 from ..probability.dispatcher import is_probability_domain_expression
 from ..summation.dispatcher import is_summation_domain_expression
 from ..trigonometry.dispatcher import is_trigonometry_domain_expression
+from .advanced_derivatives import generate_advanced_derivative_steps, is_product_or_chain_shape
 from .definite_integrals import generate_definite_integral_steps
 from .derivatives import generate_derivative_steps
 from .integrals import generate_integral_steps
@@ -129,6 +141,9 @@ def generate_steps(expression: str) -> list[MathStep]:
     normalized = normalize_all(expression)
 
     if is_derivative_call(normalized):
+        expr, symbol = parse_derivative_call(normalized)
+        if is_product_or_chain_shape(expr, symbol):
+            return generate_advanced_derivative_steps(normalized)
         return generate_derivative_steps(normalized)
 
     if is_indefinite_integral_call(normalized):
