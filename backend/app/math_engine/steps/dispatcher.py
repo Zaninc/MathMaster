@@ -96,7 +96,20 @@ saberia integrar termo a termo, mas o objetivo desta sprint é ensinar a
 substituição nesses casos, não escondê-la atrás da expansão. Integral
 DEFINIDA continua inteiramente fora deste roteamento (fora de escopo da
 V2.14) — `is_definite_integral_call` é checado separadamente, sem
-nenhuma consulta a `u_substitution.py`."""
+nenhuma consulta a `u_substitution.py`.
+
+Sprint V2.15 — dentro de uma chamada `integral(expr, var)` INDEFINIDA já
+confirmada, uma TERCEIRA decisão (`integration_by_parts.
+find_integration_by_parts`, sobre a ÁRVORE já parseada, nunca regex) é
+tentada DEPOIS de `u_substitution.find_substitution` e ANTES do fallback
+para `integrals.py`: escolhe `integration_by_parts.py` (`∫u dv = uv -
+∫v du`, um fator algébrico emparelhado com log/sen/cos/exp de argumento
+NÃO-composto — argumento composto já pertence à V2.14, nunca chega aqui
+porque `find_substitution` já o reivindicou antes) quando aplicável.
+Estrutural, sem sobreposição: `find_substitution` só reivindica
+composições `f(g(x))·g'(x)` genuínas (`_outer_shape` exige que a base/
+argumento seja DIFERENTE da própria variável), então `x·eˣ`/`x·sen(x)`/
+`ln(x)` nunca casam lá — chegam intactos à checagem de partes."""
 from __future__ import annotations
 
 from sympy import degree, expand
@@ -132,6 +145,7 @@ from .advanced_derivatives import generate_advanced_derivative_steps, is_product
 from .definite_integrals import generate_definite_integral_steps
 from .derivatives import generate_derivative_steps
 from .integrals import generate_integral_steps
+from .integration_by_parts import find_integration_by_parts, generate_integration_by_parts_steps
 from .lhopital import generate_lhopital_steps, is_lhopital_shape
 from .limits import generate_limit_steps
 from .linear_equations import generate_linear_equation_steps, parse_equation_sides
@@ -213,6 +227,8 @@ def generate_steps(expression: str) -> list[MathStep]:
         expr, symbol = parse_integral_call(normalized)
         if find_substitution(expr, symbol) is not None:
             return generate_u_substitution_steps(normalized)
+        if find_integration_by_parts(expr, symbol) is not None:
+            return generate_integration_by_parts_steps(normalized)
         return generate_integral_steps(normalized)
 
     if is_definite_integral_call(normalized):

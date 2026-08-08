@@ -1970,3 +1970,226 @@ describe("MathSteps — compatibilidade com passos de substituição / u-substit
     expect(annotations.some((latex) => latex?.includes("\\log"))).toBe(false);
   });
 });
+
+/**
+ * Sprint V2.15 (Passo a Passo — Integração por Partes) — ZERO componente
+ * novo (`MathSteps`/`MathStepItem`/`MixedMathText` intocados) e ZERO
+ * mudança em `to-latex.ts`: "u=..., dv=...*dx", a fórmula abstrata
+ * "integral(u, v)=u*v-integral(v, u)" e "(x - 1)*exp(x) + C" já passam
+ * pelo MESMO pipeline `valueToLatex` usado desde a V2.9 — confirmado por
+ * debug-render antes de escrever este arquivo, incluindo que o símbolo
+ * "v" (novo nesta sprint) NÃO colide com nenhuma unidade embutida do
+ * mathjs (diferente de "b"/"C"/"g" em sprints anteriores).
+ */
+describe("MathSteps — compatibilidade com passos de integração por partes (Sprint V2.15)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.solveSteps).mockReset();
+  });
+
+  it("renderiza ∫x·eˣdx com integração por partes em KaTeX", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(x*exp(x), x)",
+      result: "Integral: (x - 1)*exp(x) + C",
+      steps: [
+        {
+          title: "Integral original",
+          title_segments: null,
+          expression: "integral(x*exp(x), x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando integração por partes",
+          title_segments: null,
+          expression: "u=x, dv=exp(x)*dx",
+          explanation: null,
+        },
+        { title: "Derivando u", title_segments: null, expression: "du=dx", explanation: null },
+        { title: "Integrando dv", title_segments: null, expression: "v=exp(x)", explanation: null },
+        {
+          title: "Aplicando a fórmula",
+          title_segments: null,
+          expression: "integral(u, v)=u*v-integral(v, u)",
+          explanation: null,
+        },
+        {
+          title: "Substituindo",
+          title_segments: null,
+          expression: "integral(x*exp(x), x)=x*exp(x)-integral(exp(x), x)",
+          explanation: null,
+        },
+        {
+          title: "Calculando a integral restante",
+          title_segments: null,
+          expression: "x*exp(x) - exp(x)",
+          explanation: null,
+        },
+        {
+          title: "Adicionando a constante de integração",
+          title_segments: null,
+          expression: "(x - 1)*exp(x) + C",
+          explanation:
+            "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.",
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral(x*exp(x), x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(8));
+    expect(screen.getByText("Identificando integração por partes")).toBeInTheDocument();
+    expect(screen.getByText("Aplicando a fórmula")).toBeInTheDocument();
+    expect(screen.getByText("Calculando a integral restante")).toBeInTheDocument();
+
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex === "u=x,\\;dv=e^{x}\\cdotdx")).toBe(true);
+    expect(annotations.some((latex) => latex === "\\intu\\,dv=u\\cdotv-\\intv\\,du")).toBe(true);
+    expect(annotations.some((latex) => latex === "\\left(x-1\\right)e^{x}+C")).toBe(true);
+  });
+
+  it("renderiza ∫ln(x)dx (implicitamente 1·ln(x)) mostrando \\ln, nunca \\log", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(ln(x), x)",
+      result: "Integral: x*ln(x) - x + C",
+      steps: [
+        {
+          title: "Integral original",
+          title_segments: null,
+          expression: "integral(ln(x), x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando integração por partes",
+          title_segments: null,
+          expression: "u=ln(x), dv=dx",
+          explanation: null,
+        },
+        { title: "Derivando u", title_segments: null, expression: "du=1/x*dx", explanation: null },
+        { title: "Integrando dv", title_segments: null, expression: "v=x", explanation: null },
+        {
+          title: "Aplicando a fórmula",
+          title_segments: null,
+          expression: "integral(u, v)=u*v-integral(v, u)",
+          explanation: null,
+        },
+        {
+          title: "Substituindo",
+          title_segments: null,
+          expression: "integral(ln(x), x)=ln(x)*x-integral(1, x)",
+          explanation: null,
+        },
+        {
+          title: "Calculando a integral restante",
+          title_segments: null,
+          expression: "x*ln(x) - x",
+          explanation: null,
+        },
+        {
+          title: "Adicionando a constante de integração",
+          title_segments: null,
+          expression: "x*ln(x) - x + C",
+          explanation:
+            "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.",
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral(ln(x), x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(8));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex?.includes("\\ln"))).toBe(true);
+    expect(annotations.some((latex) => latex?.includes("\\log"))).toBe(false);
+  });
+
+  it("renderiza ∫x·ln(x)dx (polinômio × logaritmo) em KaTeX", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(x*ln(x), x)",
+      result: "Integral: x**2*ln(x)/2 - x**2/4 + C",
+      steps: [
+        {
+          title: "Integral original",
+          title_segments: null,
+          expression: "integral(x*ln(x), x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando integração por partes",
+          title_segments: null,
+          expression: "u=ln(x), dv=x*dx",
+          explanation: null,
+        },
+        { title: "Derivando u", title_segments: null, expression: "du=1/x*dx", explanation: null },
+        {
+          title: "Integrando dv",
+          title_segments: null,
+          expression: "v=x**2/2",
+          explanation: null,
+        },
+        {
+          title: "Aplicando a fórmula",
+          title_segments: null,
+          expression: "integral(u, v)=u*v-integral(v, u)",
+          explanation: null,
+        },
+        {
+          title: "Substituindo",
+          title_segments: null,
+          expression: "integral(x*ln(x), x)=ln(x)*x**2/2-integral(x/2, x)",
+          explanation: null,
+        },
+        {
+          title: "Calculando a integral restante",
+          title_segments: null,
+          expression: "x**2*ln(x)/2 - x**2/4",
+          explanation: null,
+        },
+        {
+          title: "Adicionando a constante de integração",
+          title_segments: null,
+          expression: "x**2*ln(x)/2 - x**2/4 + C",
+          explanation:
+            "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.",
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral(x*ln(x), x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(8));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(
+      annotations.some((latex) => latex === "\\frac{{x}^{2}\\ln\\left(x\\right)}{2}-\\frac{{x}^{2}}{4}+C")
+    ).toBe(true);
+  });
+
+  it("mostra erro amigável dedicado quando a integral exige aplicações sucessivas, sem quebrar a tela", async () => {
+    const { ApiError } = await import("@/lib/api/errors");
+    vi.mocked(apiClient.solveSteps).mockRejectedValue(
+      new ApiError(
+        "invalid_expression",
+        "Esta integral requer aplicações sucessivas de integração por partes, que ainda não fazem parte desta versão."
+      )
+    );
+
+    render(<MathSteps expression="integral(x**2*exp(x), x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "Esta integral requer aplicações sucessivas de integração por partes, que ainda não fazem parte desta versão."
+        )
+      ).toBeInTheDocument()
+    );
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});

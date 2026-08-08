@@ -156,9 +156,19 @@ def test_definite_integral_still_works_and_never_uses_substitution_module() -> N
 # --- Fora de escopo: rejeição amigável, nunca erro interno ---------------------
 
 
-def test_integration_by_parts_shape_rejected_with_friendly_message() -> None:
+def test_integration_by_parts_shape_never_claimed_by_substitution() -> None:
+    # x*sin(x) passou a ser suportado pela integração por partes (Sprint
+    # V2.15) — aqui só confirmamos que a SUBSTITUIÇÃO (V2.14) nunca
+    # reivindica essa forma (nenhum fator é uma composição f(g(x))·g'(x)).
+    titles = [s.title for s in generate_steps("integral(x*sin(x), x)")]
+    assert "Identificando uma substituição" not in titles
+
+
+def test_trig_times_trig_still_rejected_with_friendly_message() -> None:
+    # sin(x)*cos(x) continua fora do escopo de ambos os módulos (substituição
+    # e integração por partes) nesta versão.
     with pytest.raises(ExpressionError, match="ainda não foi implementado"):
-        generate_steps("integral(x*sin(x), x)")
+        generate_steps("integral(sin(x)*cos(x), x)")
 
 
 def test_bare_transcendental_still_rejected_with_friendly_message() -> None:

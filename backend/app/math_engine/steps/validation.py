@@ -41,6 +41,10 @@ UNSUPPORTED_LHOPITAL_MULTIPLE_APPLICATIONS_MESSAGE = (
     "Este limite requer aplicações sucessivas da Regra de L'Hôpital, que ainda não "
     "fazem parte desta versão."
 )
+UNSUPPORTED_INTEGRATION_BY_PARTS_MULTIPLE_APPLICATIONS_MESSAGE = (
+    "Esta integral requer aplicações sucessivas de integração por partes, que "
+    "ainda não fazem parte desta versão."
+)
 
 
 def require_single_symbol(symbols: set) -> None:

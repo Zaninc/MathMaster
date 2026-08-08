@@ -284,9 +284,86 @@ def test_solve_steps_bare_polynomial_still_uses_old_module_not_substitution(clie
 
 
 def test_solve_steps_u_substitution_out_of_scope_returns_friendly_400(client: TestClient) -> None:
-    response = client.post("/solve/steps", json={"expression": "integral(x*sin(x), x)"})
+    # x*sin(x) passou a ser suportado pela integração por partes (Sprint
+    # V2.15, ver seção dedicada abaixo) — trig*trig continua fora de
+    # escopo dos dois módulos.
+    response = client.post("/solve/steps", json={"expression": "integral(sin(x)*cos(x), x)"})
     assert response.status_code == 400
     assert "ainda não foi implementado" in response.json()["detail"]
+
+
+# --- Sprint V2.15: integração por partes ------------------------------------------
+
+
+def test_solve_steps_integration_by_parts_polynomial_times_exponential(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(x*exp(x), x)"})
+    assert response.status_code == 200
+    body = response.json()
+    titles = [s["title"] for s in body["steps"]]
+    assert titles == [
+        "Integral original",
+        "Identificando integração por partes",
+        "Derivando u",
+        "Integrando dv",
+        "Aplicando a fórmula",
+        "Substituindo",
+        "Calculando a integral restante",
+        "Adicionando a constante de integração",
+    ]
+    assert body["steps"][1]["expression"] == "u=x, dv=exp(x)*dx"
+    assert body["steps"][-1]["expression"] == "(x - 1)*exp(x) + C"
+
+
+def test_solve_steps_integration_by_parts_bare_logarithm_uses_natural_log(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(ln(x), x)"})
+    assert response.status_code == 200
+    steps = response.json()["steps"]
+    assert steps[1]["expression"] == "u=ln(x), dv=dx"
+    assert steps[-1]["expression"] == "x*ln(x) - x + C"
+    assert all("log(" not in s["expression"] for s in steps)
+
+
+def test_solve_steps_integration_by_parts_polynomial_times_logarithm(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(x*ln(x), x)"})
+    assert response.status_code == 200
+    steps = response.json()["steps"]
+    assert steps[1]["expression"] == "u=ln(x), dv=x*dx"
+    assert steps[-1]["expression"] == "x**2*ln(x)/2 - x**2/4 + C"
+
+
+def test_solve_steps_integration_by_parts_constant_step_has_explanation(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(x*sin(x), x)"})
+    steps = response.json()["steps"]
+    assert steps[-1]["explanation"] == (
+        "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C."
+    )
+
+
+def test_solve_steps_integration_by_parts_never_steals_substitution_case(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(2*x*(x**2+1)**3, x)"})
+    assert response.status_code == 200
+    titles = [s["title"] for s in response.json()["steps"]]
+    assert "Identificando uma substituição" in titles
+    assert "Identificando integração por partes" not in titles
+
+
+def test_solve_steps_integration_by_parts_needs_repetition_returns_dedicated_friendly_400(
+    client: TestClient,
+) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(x**2*exp(x), x)"})
+    assert response.status_code == 400
+    assert "aplicações sucessivas de integração por partes" in response.json()["detail"]
+
+
+def test_solve_endpoint_unaffected_by_integration_by_parts_repetition_rejection(
+    client: TestClient,
+) -> None:
+    """`/solve` continua calculando normalmente mesmo quando `/solve/steps`
+    ainda não sabe explicar aplicações sucessivas de integração por
+    partes — o motor de cálculo nunca foi alterado."""
+    response = client.post("/solve", json={"expression": "integral(x**2*exp(x), x)"})
+    assert response.status_code == 200
+    assert response.json()["result"] == "Integral: (x² - 2x + 2)*exp(x) + C"
 
 
 # --- Sprint V2.10.2: integrais definidas -----------------------------------------

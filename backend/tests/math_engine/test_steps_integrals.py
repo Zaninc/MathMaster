@@ -147,9 +147,14 @@ def test_exp_rejected_with_friendly_message() -> None:
         generate_steps("integral(exp(x), x)")
 
 
-def test_ln_rejected_with_friendly_message() -> None:
-    with pytest.raises(ExpressionError, match="ainda não foi implementado"):
-        generate_steps("integral(ln(x), x)")
+def test_ln_now_supported_via_integration_by_parts_since_v2_15() -> None:
+    # ln(x) sozinho passou a ser suportado pela integração por partes
+    # (Sprint V2.15, tratado implicitamente como 1*ln(x); ver
+    # test_steps_integration_by_parts.py) — o módulo básico de potência
+    # continua sem regra própria para ele, mas a integral não é mais
+    # rejeitada de ponta a ponta.
+    steps = generate_steps("integral(ln(x), x)")
+    assert steps[-1].expression == "x*ln(x) - x + C"
 
 
 def test_one_over_x_rejected_with_friendly_message() -> None:
@@ -159,8 +164,12 @@ def test_one_over_x_rejected_with_friendly_message() -> None:
 
 
 def test_product_of_variables_rejected_with_friendly_message() -> None:
+    # x*sin(x) passou a ser suportado pela integração por partes (Sprint
+    # V2.15, ver test_steps_integration_by_parts.py) — trig*trig continua
+    # fora de escopo dos dois módulos, produto genuíno de variáveis sem
+    # suporte nesta versão.
     with pytest.raises(ExpressionError, match="ainda não foi implementado"):
-        generate_steps("integral(x*sin(x), x)")
+        generate_steps("integral(sin(x)*cos(x), x)")
 
 
 def test_sin_still_works_via_solve_despite_steps_rejection() -> None:
