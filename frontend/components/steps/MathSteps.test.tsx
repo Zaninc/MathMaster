@@ -820,11 +820,11 @@ describe("MathSteps — compatibilidade com passos de regra do produto e regra d
     expect(screen.getByText("Derivando f")).toBeInTheDocument();
     expect(screen.getByText("Derivando g")).toBeInTheDocument();
     expect(
-      annotations.some((latex) => latex === "2\\cdotx\\cdot\\sin\\left(x\\right)+{x}^{2}\\cdot\\cos\\left(x\\right)")
+      annotations.some((latex) => latex === "2\\cdotx\\sin\\left(x\\right)+{x}^{2}\\cos\\left(x\\right)")
     ).toBe(true);
     // Resultado final vindo do motor real, nunca inventado.
     expect(
-      annotations.some((latex) => latex === "{x}^{2}\\cdot\\cos\\left(x\\right)+2\\cdotx\\cdot\\sin\\left(x\\right)")
+      annotations.some((latex) => latex === "{x}^{2}\\cos\\left(x\\right)+2\\cdotx\\sin\\left(x\\right)")
     ).toBe(true);
   });
 
@@ -1293,7 +1293,7 @@ describe("MathSteps — compatibilidade com passos de limites trigonométricos f
       true
     );
     expect(
-      annotations.some((latex) => latex === "\\frac{3\\cdot\\sin\\left(3\\cdotx\\right)}{\\left(3\\cdotx\\right)}")
+      annotations.some((latex) => latex === "\\frac{3\\sin\\left(3\\cdotx\\right)}{\\left(3\\cdotx\\right)}")
     ).toBe(true);
     expect(annotations.some((latex) => latex === "3\\cdot1")).toBe(true);
     expect(annotations.some((latex) => latex === "3")).toBe(true);
@@ -1650,7 +1650,7 @@ describe("MathSteps — compatibilidade com passos de regra do quociente (Sprint
     ).toBe(true);
     expect(
       annotations.some(
-        (latex) => latex === "\\frac{\\left(\\sin\\left(x\\right)-x\\cdot\\cos\\left(x\\right)\\right)}{\\left({\\sin\\left(x\\right)}^{2}\\right)}"
+        (latex) => latex === "\\frac{\\left(\\sin\\left(x\\right)-x\\cos\\left(x\\right)\\right)}{\\left({\\sin\\left(x\\right)}^{2}\\right)}"
       )
     ).toBe(true);
   });

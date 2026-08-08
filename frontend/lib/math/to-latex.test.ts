@@ -483,6 +483,63 @@ describe("expressionToLatex", () => {
   });
 });
 
+/**
+ * Hotfix V2.15.1 (remoção de "\cdot" desnecessário) — puramente de
+ * apresentação, restrito ao printer LaTeX (`omitsMultiplicationDot` em
+ * `to-latex.ts`). Nenhuma mudança de motor/parser/backend: os mesmos
+ * textos de entrada continuam produzindo a MESMA árvore SymPy, só a
+ * decoração visual do fator de multiplicação muda.
+ */
+describe("productHandler — remoção de \\cdot desnecessário (Hotfix V2.15.1)", () => {
+  it("remove o \\cdot antes de uma exponencial (paren·e^x e paren·e^{x²})", async () => {
+    expect(normalized(await expressionToLatex("(x-1)*exp(x)"))).toBe(
+      "\\left(x-1\\right)e^{x}"
+    );
+    expect(normalized(await expressionToLatex("(x**2+1)*exp(x**2)"))).toBe(
+      "\\left({x}^{2}+1\\right)e^{{x}^{2}}"
+    );
+  });
+
+  it("remove o \\cdot antes de uma função trigonométrica (número·sen e variável·cos)", async () => {
+    expect(normalized(await expressionToLatex("2*sin(x)"))).toBe("2\\sin\\left(x\\right)");
+    expect(normalized(await expressionToLatex("x*cos(x)"))).toBe("x\\cos\\left(x\\right)");
+  });
+
+  it("remove o \\cdot antes de ln (número·ln)", async () => {
+    expect(normalized(await expressionToLatex("3*ln(x)"))).toBe("3\\ln\\left(x\\right)");
+  });
+
+  it("remove o \\cdot entre um fator entre parênteses e uma variável isolada", async () => {
+    expect(normalized(await expressionToLatex("(x+1)*x"))).toBe("\\left(x+1\\right)x");
+  });
+
+  it("mantém o \\cdot entre números, número·constante nomeada e número·raiz", async () => {
+    expect(normalized(await expressionToLatex("2*3"))).toBe("2\\cdot3");
+    expect(normalized(await expressionToLatex("4*5"))).toBe("4\\cdot5");
+    expect(normalized(await expressionToLatex("2*pi"))).toBe("2\\cdot\\pi");
+    expect(normalized(await expressionToLatex("3*sqrt(2)"))).toBe("3\\cdot\\sqrt{2}");
+  });
+
+  it("mantém o \\cdot entre número e uma soma entre parênteses, e entre duas somas entre parênteses", async () => {
+    expect(normalized(await expressionToLatex("2*(a+b)"))).toBe(
+      "2\\cdot\\left(a+b\\right)"
+    );
+    expect(normalized(await expressionToLatex("(x+1)*(y+2)"))).toBe(
+      "\\left(x+1\\right)\\cdot\\left(y+2\\right)"
+    );
+  });
+
+  it("mantém o \\cdot entre dois símbolos soltos (A*B)", async () => {
+    expect(normalized(await expressionToLatex("A*B"))).toContain("\\cdot");
+  });
+
+  it("regressão — o caso combinado da V2.14 (substituição, número·variável·potência) continua com \\cdot", async () => {
+    expect(normalized(await expressionToLatex("2*x*(x**2+1)**3"))).toBe(
+      "2\\cdotx\\cdot{\\left({x}^{2}+1\\right)}^{3}"
+    );
+  });
+});
+
 describe("valueToLatex", () => {
   it("converte intervalos com infinito e colchete misto", async () => {
     const latex = normalized(await valueToLatex("(-∞, 2]"));

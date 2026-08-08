@@ -454,12 +454,80 @@ const PROBABILITY_LATEX: Record<string, CombinatoricsRenderer> = {
 };
 
 /**
+ * Hotfix V2.15.1 (remoção de "\cdot" desnecessário) — puramente de
+ * apresentação: nomes de função cuja notação convencional (Symbolab/
+ * Wolfram Alpha/livro didático) nunca usa "\cdot" antes do próprio
+ * símbolo/parêntese, seja qual for o fator à esquerda ("2\sin(x)",
+ * "x\cos(x)", "3\ln(x)"). `log`/`ln` são as duas grafias que
+ * `FUNCTION_LATEX` já reconhece; `sen`/`tg` são a grafia PT-BR digitada
+ * pelo usuário (ecoada no preview); `sin`/`cos`/`tan`/`asin`/`acos`/`atan`
+ * são os nomes canônicos que o BACKEND devolve em todo resultado real
+ * (confirmado empiricamente: `str(sympy.diff(...))` nunca produz "sen"/
+ * "tg", só os nomes em inglês) — as duas famílias precisam estar aqui
+ * porque a mesma expressão pode chegar de qualquer uma das duas fontes
+ * (eco do texto digitado vs. resultado calculado).
+ */
+const CDOT_DROPPING_FUNCTION_NAMES = new Set([
+  "sin", "cos", "tan", "asin", "acos", "atan", "sen", "tg", "log", "ln",
+]);
+
+/**
+ * Hotfix V2.15.1 — decide se o "\cdot" explícito entre dois fatores de uma
+ * multiplicação pode ser omitido, replicando a notação convencional sem
+ * tocar em NENHUMA parenização: `texOf(lhs/rhs, options)` já preserva os
+ * parênteses literais do texto de origem (o parser do mathjs mantém um
+ * `ParenthesisNode` para todo parêntese explícito da string em modo
+ * `parenthesis: 'keep'`, o default usado por este módulo) — este helper só
+ * decide o SEPARADOR entre os dois textos já corretamente renderizados,
+ * nunca como/quando parenizar.
+ *
+ * Restrito às formas literalmente pedidas pelo hotfix (verificado caso a
+ * caso contra a lista "não deve mudar" antes de generalizar qualquer
+ * regra):
+ * - fator à direita é exponencial/trigonométrica/logarítmica: sempre cai
+ *   ("(x-1)e^x", "2\sin(x)", "x\cos(x)", "3\ln(x)") — independente do que
+ *   está à esquerda, porque uma chamada de função nunca precisa de
+ *   "\cdot" antes dela na notação convencional.
+ * - fator à esquerda entre parênteses seguido de uma variável isolada à
+ *   direita: cai ("(x+1)x") — restrito a ESTE par de tipos porque
+ *   "2\cdot x"/"A\cdot B" (nenhum dos dois lados é parêntese) precisam
+ *   continuar exatamente como estão (centenas de testes existentes
+ *   dependem do "\cdot" nesses dois casos).
+ * Todo o resto (número·número, número·π, número·raiz, número·fração,
+ * número·(soma), (soma)·(soma), símbolo·símbolo) devolve `false` — mantém
+ * o comportamento default do mathjs (sempre "\cdot").
+ */
+function omitsMultiplicationDot(lhs: MathNode, rhs: MathNode): boolean {
+  if (rhs.type === "FunctionNode") {
+    const name = functionName(rhs);
+    if (name === "exp" || (name !== null && CDOT_DROPPING_FUNCTION_NAMES.has(name))) {
+      return true;
+    }
+  }
+  if (lhs.type === "ParenthesisNode" && rhs.type === "SymbolNode") return true;
+  return false;
+}
+
+/**
  * Handler passado ao `toTex` do mathjs — cobre só o vocabulário do produto
  * e os wrappers de cálculo; todo o resto (frações, raízes, potências,
  * trigonometria canônica, matrizes) fica com o serializer default do
  * mathjs.
  */
 function productHandler(node: MathNode, options: TexOptions): string | undefined {
+  if (node.type === "OperatorNode") {
+    const fn = (node as unknown as { fn?: string }).fn;
+    const implicit = (node as unknown as { implicit?: boolean }).implicit;
+    const operands = args(node);
+    if (fn === "multiply" && implicit !== true && operands.length === 2) {
+      const [lhs, rhs] = operands;
+      if (omitsMultiplicationDot(lhs, rhs)) {
+        return `${texOf(lhs, options)}${texOf(rhs, options)}`;
+      }
+    }
+    return undefined;
+  }
+
   if (node.type === "SymbolNode") {
     const name = (node as unknown as { name?: string }).name;
     if (name === "Infinity") return "\\infty";
