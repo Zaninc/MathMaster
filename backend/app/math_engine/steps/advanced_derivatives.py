@@ -31,6 +31,7 @@ from sympy.core.symbol import Symbol
 from ..calculus.derivatives import compute_derivative
 from ..calculus.dispatcher import parse_derivative_call
 from ..errors import ExpressionError
+from .formatting import wrap_if_sum
 from .models import MathStep
 from .validation import UNSUPPORTED_DERIVATIVE_MESSAGE
 
@@ -38,14 +39,6 @@ _ChainShape = tuple[str, Expr, int | None]
 
 _OUTER_TEMPLATE = {"sin": "sin(u)", "cos": "cos(u)", "exp": "exp(u)"}
 _TRIG_EXP_FUNCS = {sin: "sin", cos: "cos", exp: "exp"}
-
-
-def _paren_if_sum(expr: Expr) -> str:
-    """Parênteses só quando `expr` é uma soma no topo — evita ambiguidade
-    ao concatenar manualmente termos de um produto (mesma lição da
-    V2.10.2, `definite_integrals._substitute_bound_text`: nunca
-    concatenar sem parênteses ao redor de uma soma)."""
-    return f"({expr})" if expr.is_Add else str(expr)
 
 
 def _chain_shape(expr: Expr, symbol: Symbol) -> _ChainShape | None:
@@ -113,7 +106,7 @@ def _pow_chain_apply_text(exponent: int, inner: Expr, inner_derivative: Expr) ->
     `Mul` não avaliado sozinho)."""
     inner_text = f"({inner})"
     power_text = inner_text if exponent - 1 == 1 else f"{inner_text}**{exponent - 1}"
-    return f"{exponent}*{power_text}*{_paren_if_sum(inner_derivative)}"
+    return f"{exponent}*{power_text}*{wrap_if_sum(inner_derivative)}"
 
 
 def _chain_rule_steps(expr: Expr, symbol: Symbol, shape: _ChainShape) -> tuple[Expr, list[MathStep]]:
@@ -150,18 +143,31 @@ def _chain_rule_steps(expr: Expr, symbol: Symbol, shape: _ChainShape) -> tuple[E
     return total, steps
 
 
-def _factor_derivative_steps(expr: Expr, symbol: Symbol, label: str) -> tuple[Expr, list[MathStep]]:
-    """Derivada de UM fator de um produto: se o fator exige a regra da
-    cadeia, embute os passos completos (`_chain_rule_steps`); senão, um
-    único passo "Derivando {label}" com o valor real de
-    `compute_derivative` — cobre tanto fatores triviais (`x`, `x+1`)
-    quanto funções já simples cujo argumento é a própria variável
-    (`sin(x)`, `exp(x)` — sem cadeia de verdade)."""
+def factor_derivative_steps(
+    expr: Expr, symbol: Symbol, label: str, *, trivial_title: str | None = None
+) -> tuple[Expr, list[MathStep]]:
+    """Derivada de UMA parte isolada — um fator de produto (V2.11) ou o
+    numerador/denominador de um quociente (V2.13): se a parte exige a
+    regra da cadeia, embute os passos completos (`_chain_rule_steps`); se
+    exige a regra do produto (ex. `(x+1)*(x²+3)` como numerador de um
+    quociente), embute `_product_rule_steps` recursivamente; senão, um
+    único passo com o valor real de `compute_derivative` — cobre tanto
+    partes triviais (`x`, `x+1`) quanto funções já simples cujo argumento
+    é a própria variável (`sin(x)`, `exp(x)` — sem cadeia de verdade).
+    `trivial_title` sobrescreve o título padrão "Derivando {label}" do
+    caso trivial (V2.13 usa "Calculando {label}'"); `None` preserva o
+    comportamento exato já usado pela V2.11 desde sempre."""
     shape = _chain_shape(expr, symbol)
     if shape is not None:
         return _chain_rule_steps(expr, symbol, shape)
+    product = _product_shape(expr, symbol)
+    if product is not None:
+        f, g = product
+        derivative = compute_derivative(expr, symbol)
+        return derivative, _product_rule_steps(expr, f, g, symbol)
     derivative = compute_derivative(expr, symbol)
-    return derivative, [MathStep(title=f"Derivando {label}", expression=str(derivative))]
+    title = trivial_title if trivial_title is not None else f"Derivando {label}"
+    return derivative, [MathStep(title=title, expression=str(derivative))]
 
 
 def _product_rule_steps(expr: Expr, f: Expr, g: Expr, symbol: Symbol) -> list[MathStep]:
@@ -175,14 +181,14 @@ def _product_rule_steps(expr: Expr, f: Expr, g: Expr, symbol: Symbol) -> list[Ma
         ),
     ]
 
-    f_derivative, f_steps = _factor_derivative_steps(f, symbol, "f")
+    f_derivative, f_steps = factor_derivative_steps(f, symbol, "f")
     steps.extend(f_steps)
-    g_derivative, g_steps = _factor_derivative_steps(g, symbol, "g")
+    g_derivative, g_steps = factor_derivative_steps(g, symbol, "g")
     steps.extend(g_steps)
 
     substitution = (
-        f"{_paren_if_sum(f_derivative)}*{_paren_if_sum(g)}"
-        f"+{_paren_if_sum(f)}*{_paren_if_sum(g_derivative)}"
+        f"{wrap_if_sum(f_derivative)}*{wrap_if_sum(g)}"
+        f"+{wrap_if_sum(f)}*{wrap_if_sum(g_derivative)}"
     )
     steps.append(MathStep(title="Substituindo", expression=substitution))
 

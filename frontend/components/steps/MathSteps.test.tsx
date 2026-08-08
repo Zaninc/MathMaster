@@ -990,7 +990,10 @@ describe("MathSteps — compatibilidade com passos de regra do produto e regra d
     expect(screen.getAllByText("Simplificando").length).toBe(2);
   });
 
-  it("mostra erro amigável para derivada de quociente (regra do quociente fora de escopo), sem quebrar a tela", async () => {
+  it("mostra erro amigável para expoente fracionário (fora de escopo), sem quebrar a tela", async () => {
+    // d/dx(x/sin(x)) deixou de ser um exemplo de rejeição desde a Sprint
+    // V2.13 (regra do quociente, ver describe block dedicado abaixo);
+    // expoente fracionário continua fora de escopo.
     const { ApiError } = await import("@/lib/api/errors");
     vi.mocked(apiClient.solveSteps).mockRejectedValue(
       new ApiError(
@@ -999,7 +1002,7 @@ describe("MathSteps — compatibilidade com passos de regra do produto e regra d
       )
     );
 
-    render(<MathSteps expression="d/dx(x/sin(x))" />);
+    render(<MathSteps expression="d/dx(x**(1/2))" />);
     fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
 
     await waitFor(() =>
@@ -1571,5 +1574,233 @@ describe("MathSteps — compatibilidade com passos da Regra de L'Hôpital (Sprin
       ).toBeInTheDocument()
     );
     expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Sprint V2.13 (Passo a Passo — Regra do Quociente) — ZERO componente novo
+ * (`MathSteps`/`MathStepItem`/`MixedMathText` intocados) e ZERO mudança em
+ * `to-latex.ts`: a fórmula `derivada(f/g, x)=(derivada(f, x)*g-f*derivada(g,
+ * x))/g**2` (reaproveitando a notação de derivada e o placeholder "g" já
+ * seguro desde a V2.11) e frações com denominador ao quadrado já passam
+ * pelo MESMO pipeline `valueToLatex` usado desde a V2.9 — confirmado por
+ * debug-render antes de escrever este arquivo.
+ */
+describe("MathSteps — compatibilidade com passos de regra do quociente (Sprint V2.13)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.solveSteps).mockReset();
+  });
+
+  it("renderiza x/sen(x) com a Regra do Quociente em KaTeX", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "d/dx(x/sin(x))",
+      result: "Derivada: -x*cos(x)/sin(x)² + 1/sin(x)",
+      steps: [
+        {
+          title: "Função original",
+          title_segments: null,
+          expression: "derivada(x/sin(x), x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando um quociente",
+          title_segments: null,
+          expression: "f=x, g=sin(x)",
+          explanation: null,
+        },
+        {
+          title: "Aplicando a Regra do Quociente",
+          title_segments: null,
+          expression: "derivada(f/g, x)=(derivada(f, x)*g-f*derivada(g, x))/g**2",
+          explanation: null,
+        },
+        { title: "Calculando f'", title_segments: null, expression: "1", explanation: null },
+        { title: "Calculando g'", title_segments: null, expression: "cos(x)", explanation: null },
+        {
+          title: "Substituindo",
+          title_segments: null,
+          expression: "(sin(x)-x*cos(x))/(sin(x)**2)",
+          explanation: null,
+        },
+        {
+          title: "Simplificando",
+          title_segments: null,
+          expression: "-x*cos(x)/sin(x)**2 + 1/sin(x)",
+          explanation: null,
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="d/dx(x/sin(x))" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(7));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex === "f=x,\\;g=\\sin\\left(x\\right)")).toBe(true);
+    expect(screen.getByText("Calculando f'")).toBeInTheDocument();
+    expect(screen.getByText("Calculando g'")).toBeInTheDocument();
+    expect(
+      annotations.some(
+        (latex) =>
+          latex ===
+          "\\frac{d}{dx}\\left(\\frac{f}{g}\\right)=\\frac{\\left(\\frac{d}{dx}\\left(f\\right)\\cdotg-f\\cdot\\frac{d}{dx}\\left(g\\right)\\right)}{{g}^{2}}"
+      )
+    ).toBe(true);
+    expect(
+      annotations.some(
+        (latex) => latex === "\\frac{\\left(\\sin\\left(x\\right)-x\\cdot\\cos\\left(x\\right)\\right)}{\\left({\\sin\\left(x\\right)}^{2}\\right)}"
+      )
+    ).toBe(true);
+  });
+
+  it("renderiza ln(x)/x nunca mostrando log(x) (convenção log=base10/ln=natural)", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "d/dx(ln(x)/x)",
+      result: "Derivada: -ln(x)/x² + x⁻²",
+      steps: [
+        {
+          title: "Função original",
+          title_segments: null,
+          expression: "derivada(ln(x)/x, x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando um quociente",
+          title_segments: null,
+          expression: "f=ln(x), g=x",
+          explanation: null,
+        },
+        {
+          title: "Aplicando a Regra do Quociente",
+          title_segments: null,
+          expression: "derivada(f/g, x)=(derivada(f, x)*g-f*derivada(g, x))/g**2",
+          explanation: null,
+        },
+        { title: "Calculando f'", title_segments: null, expression: "1/x", explanation: null },
+        { title: "Calculando g'", title_segments: null, expression: "1", explanation: null },
+        {
+          title: "Substituindo",
+          title_segments: null,
+          expression: "(1/x*x-ln(x))/(x**2)",
+          explanation: null,
+        },
+        {
+          title: "Simplificando",
+          title_segments: null,
+          expression: "-ln(x)/x**2 + x**(-2)",
+          explanation: null,
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="d/dx(ln(x)/x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(7));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex?.includes("\\ln"))).toBe(true);
+    expect(annotations.some((latex) => latex?.includes("\\log"))).toBe(false);
+  });
+
+  it("combina quociente e cadeia ((x²+1)³/(x+2)) sem colidir os passos", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "d/dx((x**2+1)**3/(x+2))",
+      result: "Derivada: 6x*(x² + 1)²/(x + 2) - (x² + 1)³/(x + 2)²",
+      steps: [
+        {
+          title: "Função original",
+          title_segments: null,
+          expression: "derivada((x**2 + 1)**3/(x + 2), x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando um quociente",
+          title_segments: null,
+          expression: "f=(x**2 + 1)**3, g=x + 2",
+          explanation: null,
+        },
+        {
+          title: "Aplicando a Regra do Quociente",
+          title_segments: null,
+          expression: "derivada(f/g, x)=(derivada(f, x)*g-f*derivada(g, x))/g**2",
+          explanation: null,
+        },
+        {
+          title: "Identificando função composta",
+          title_segments: null,
+          expression: "u=x**2 + 1, y=u**3",
+          explanation: null,
+        },
+        { title: "Derivando a externa", title_segments: null, expression: "3*u**2", explanation: null },
+        { title: "Derivando a interna", title_segments: null, expression: "2*x", explanation: null },
+        {
+          title: "Aplicando a regra da cadeia",
+          title_segments: null,
+          expression: "3*(x**2 + 1)**2*2*x",
+          explanation: null,
+        },
+        {
+          title: "Simplificando",
+          title_segments: null,
+          expression: "6*x*(x**2 + 1)**2",
+          explanation: null,
+        },
+        { title: "Calculando g'", title_segments: null, expression: "1", explanation: null },
+        {
+          title: "Substituindo",
+          title_segments: null,
+          expression: "(6*x*(x**2 + 1)**2*(x + 2)-(x**2 + 1)**3)/((x + 2)**2)",
+          explanation: null,
+        },
+        {
+          title: "Simplificando",
+          title_segments: null,
+          expression: "6*x*(x**2 + 1)**2/(x + 2) - (x**2 + 1)**3/(x + 2)**2",
+          explanation: null,
+        },
+      ],
+    });
+
+    render(<MathSteps expression="d/dx((x**2+1)**3/(x+2))" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(screen.getAllByText("Identificando um quociente").length).toBe(1));
+    expect(screen.getAllByText("Identificando função composta").length).toBe(1);
+  });
+
+  it("nunca esconde o denominador constante atrás da regra do quociente (regressão)", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "d/dx(x**2/5)",
+      result: "Derivada: 2x/5",
+      steps: [
+        {
+          title: "Função original",
+          title_segments: null,
+          expression: "derivada(x**2/5, x)",
+          explanation: null,
+        },
+        {
+          title: "Derivando 1/5x² pela regra da potência",
+          title_segments: [
+            { type: "text", content: "Derivando" },
+            { type: "math", content: "x**2/5" },
+            { type: "text", content: "pela regra da potência" },
+          ],
+          expression: "2*1/5*x",
+          explanation: null,
+        },
+        { title: "Simplificando", title_segments: null, expression: "2*x/5", explanation: null },
+      ],
+    });
+
+    render(<MathSteps expression="d/dx(x**2/5)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(screen.getByText("Simplificando")).toBeInTheDocument());
+    expect(screen.queryByText("Identificando um quociente")).not.toBeInTheDocument();
   });
 });

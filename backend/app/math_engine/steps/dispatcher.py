@@ -74,7 +74,16 @@ graus), que continua sendo tentado para qualquer razão inteiramente
 polinomial. Só indeterminações 0/0 (ponto finito) e ∞/∞ (`x→∞`) com UMA
 única aplicação são suportadas; se o novo limite ainda for indeterminado,
 `lhopital.py` rejeita com mensagem amigável dedicada (aplicações
-sucessivas ficam para versões futuras)."""
+sucessivas ficam para versões futuras).
+
+Sprint V2.13 — dentro de uma chamada `derivada(expr, var)` já confirmada,
+uma TERCEIRA decisão (`quotient_rule.is_quotient_shape`, sobre a ÁRVORE
+já parseada, nunca regex) escolhe entre `advanced_derivatives.py`
+(produto/cadeia, denominador == 1), `quotient_rule.py` (denominador
+dependendo da variável) e `derivatives.py` (V2.10, denominador constante
+— `x²/5` continua sendo um monômio comum). Estrutural, sem sobreposição:
+`is_product_or_chain_shape` já exclui QUALQUER denominador != 1, então
+`x/sen(x)` nunca chega lá — cai direto na checagem de quociente."""
 from __future__ import annotations
 
 from sympy import degree, expand
@@ -115,6 +124,7 @@ from .linear_equations import generate_linear_equation_steps, parse_equation_sid
 from .linear_systems import generate_linear_system_steps
 from .models import MathStep
 from .quadratic_equations import generate_quadratic_equation_steps
+from .quotient_rule import generate_quotient_rule_steps, is_quotient_shape
 from .trigonometric_limits import (
     generate_trigonometric_limit_steps,
     is_trigonometric_fundamental_shape,
@@ -180,6 +190,8 @@ def generate_steps(expression: str) -> list[MathStep]:
         expr, symbol = parse_derivative_call(normalized)
         if is_product_or_chain_shape(expr, symbol):
             return generate_advanced_derivative_steps(normalized)
+        if is_quotient_shape(expr, symbol) is not None:
+            return generate_quotient_rule_steps(normalized)
         return generate_derivative_steps(normalized)
 
     if is_indefinite_integral_call(normalized):

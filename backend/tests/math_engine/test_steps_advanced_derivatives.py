@@ -198,21 +198,18 @@ def test_bare_exp_still_rejected_no_chain_needed() -> None:
         generate_steps("d/dx(exp(x))")
 
 
-# --- Fora de escopo: erro amigável, nunca interno ---------------------------
+# --- Regressão: quociente tem seu próprio módulo dedicado desde a V2.13 --------
 
 
-def test_quotient_rejected_with_friendly_message() -> None:
-    with pytest.raises(ExpressionError, match="ainda não foi implementado"):
-        generate_steps("d/dx(x/sin(x))")
-
-
-def test_quotient_still_works_via_solve_despite_steps_rejection() -> None:
-    from app.math_engine.dispatcher import solve_expression
-
-    # O passo a passo é rejeitado, mas o /solve continua calculando
-    # normalmente — motor de cálculo 100% intocado.
-    result = solve_expression("d/dx(x/sin(x))")
-    assert result.startswith("Derivada:")
+def test_quotient_has_own_dedicated_module_since_v2_13() -> None:
+    # `x/sin(x)` tinha denominador != 1 e por isso ficava fora do escopo
+    # da V2.11 (regra do produto/cadeia, que só trata denominador == 1);
+    # desde a Sprint V2.13 tem seu próprio módulo, `quotient_rule.py` —
+    # ver `test_steps_quotient_rule.py` para a cobertura completa. Aqui só
+    # confirma que não cai mais na rejeição amigável genérica.
+    steps = generate_steps("d/dx(x/sin(x))")
+    assert steps[-1].title == "Simplificando"
+    assert steps[-1].expression == "-x*cos(x)/sin(x)**2 + 1/sin(x)"
 
 
 # --- Contrato geral -----------------------------------------------------------

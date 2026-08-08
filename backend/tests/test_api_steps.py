@@ -357,19 +357,10 @@ def test_solve_steps_product_and_chain_combined(client: TestClient) -> None:
     assert body["steps"][-1]["expression"] == "6*x*(x**2 + 1)**2*sin(x) + (x**2 + 1)**3*cos(x)"
 
 
-def test_solve_steps_quotient_unsupported_returns_friendly_400(client: TestClient) -> None:
+def test_solve_steps_quotient_now_supported_since_v2_13(client: TestClient) -> None:
+    # `x/sin(x)` era o exemplo de "quociente ainda não suportado" — desde
+    # a Sprint V2.13 tem seu próprio módulo dedicado (ver seção abaixo).
     response = client.post("/solve/steps", json={"expression": "d/dx(x/sin(x))"})
-    assert response.status_code == 400
-    assert "ainda não foi implementado" in response.json()["detail"]
-
-
-def test_solve_endpoint_unaffected_by_unsupported_quotient_derivative_steps(
-    client: TestClient,
-) -> None:
-    """`/solve` continua calculando normalmente uma derivada de quociente,
-    mesmo sem passo a passo (regra do quociente fica para versões
-    futuras) — motor de cálculo 100% intocado."""
-    response = client.post("/solve", json={"expression": "d/dx(x/sin(x))"})
     assert response.status_code == 200
     assert response.json()["result"] == "Derivada: -x*cos(x)/sin(x)² + 1/sin(x)"
 
@@ -533,3 +524,103 @@ def test_solve_steps_rational_limit_still_uses_v2_12_path(client: TestClient) ->
     assert response.status_code == 200
     titles = [step["title"] for step in response.json()["steps"]]
     assert "Reconhecendo o limite fundamental" not in titles
+
+
+# --- Sprint V2.13: regra do quociente ----------------------------------------
+
+
+def test_solve_steps_x_over_sin_x(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "d/dx(x/sin(x))"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Derivada: -x*cos(x)/sin(x)² + 1/sin(x)"
+    titles = [step["title"] for step in body["steps"]]
+    assert titles == [
+        "Função original",
+        "Identificando um quociente",
+        "Aplicando a Regra do Quociente",
+        "Calculando f'",
+        "Calculando g'",
+        "Substituindo",
+        "Simplificando",
+    ]
+    assert body["steps"][-1]["expression"] == "-x*cos(x)/sin(x)**2 + 1/sin(x)"
+
+
+def test_solve_steps_polynomial_over_polynomial_quotient(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "d/dx((x**2+1)/(x-3))"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Derivada: 2x/(x - 3) - (x² + 1)/(x - 3)²"
+    assert body["steps"][-1]["expression"] == "2*x/(x - 3) - (x**2 + 1)/(x - 3)**2"
+
+
+def test_solve_steps_ln_over_x_never_shows_log(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "d/dx(ln(x)/x)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Derivada: -ln(x)/x² + x⁻²"
+    for step in body["steps"]:
+        assert "log(" not in step["expression"]
+    identify_step = next(s for s in body["steps"] if s["title"] == "Identificando um quociente")
+    assert identify_step["expression"] == "f=ln(x), g=x"
+    assert body["steps"][-1]["expression"] == "-ln(x)/x**2 + x**(-2)"
+
+
+def test_solve_steps_exp_over_x_squared(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "d/dx(exp(x)/x**2)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Derivada: exp(x)/x² - 2*exp(x)/x³"
+    assert body["steps"][-1]["expression"] == "exp(x)/x**2 - 2*exp(x)/x**3"
+
+
+def test_solve_steps_chain_shaped_numerator_reuses_chain_rule(client: TestClient) -> None:
+    response = client.post(
+        "/solve/steps", json={"expression": "d/dx((x**2+1)**3/(x+2))"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Derivada: 6x*(x² + 1)²/(x + 2) - (x² + 1)³/(x + 2)²"
+    titles = [step["title"] for step in body["steps"]]
+    assert "Identificando função composta" in titles
+    assert titles.count("Identificando um quociente") == 1
+    assert body["steps"][-1]["expression"] == (
+        "6*x*(x**2 + 1)**2/(x + 2) - (x**2 + 1)**3/(x + 2)**2"
+    )
+
+
+def test_solve_steps_product_shaped_numerator_reuses_product_rule(client: TestClient) -> None:
+    response = client.post(
+        "/solve/steps", json={"expression": "d/dx((x+1)*(x**2+3)/(x-1))"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    titles = [step["title"] for step in body["steps"]]
+    assert "Identificando um produto" in titles
+    assert titles.count("Identificando um quociente") == 1
+
+
+def test_solve_steps_constant_denominator_still_uses_v2_10_path(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "d/dx(x**2/5)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "Derivada: 2x/5"
+    titles = [step["title"] for step in body["steps"]]
+    assert "Identificando um quociente" not in titles
+
+
+def test_solve_steps_pure_chain_rule_without_quotient_still_works(client: TestClient) -> None:
+    # Regressão: (x²+1)³ sozinho (sem divisão) continua pelo caminho da
+    # V2.11, nunca pelo novo módulo de quociente.
+    response = client.post("/solve/steps", json={"expression": "d/dx((x**2+1)**3)"})
+    assert response.status_code == 200
+    titles = [step["title"] for step in response.json()["steps"]]
+    assert "Identificando um quociente" not in titles
+
+
+def test_solve_steps_pure_product_rule_without_quotient_still_works(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "d/dx(x**2*sin(x))"})
+    assert response.status_code == 200
+    titles = [step["title"] for step in response.json()["steps"]]
+    assert "Identificando um quociente" not in titles

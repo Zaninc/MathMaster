@@ -140,6 +140,21 @@ def substitute_symbol_text(expression: Expr, symbol: Expr, value: Expr) -> str:
     return re.sub(rf"\b{re.escape(str(symbol))}\b", f"({value})", str(expression))
 
 
+# --- Sprint V2.13 — compartilhado entre advanced_derivatives.py e --------
+# quotient_rule.py (originalmente privado em advanced_derivatives.py como
+# `_paren_if_sum`; promovido aqui para `quotient_rule.py` reaproveitar a
+# MESMA regra em vez de duplicá-la — a mesma lição da V2.10.2 se aplica a
+# qualquer módulo que concatene termos manualmente.)
+
+
+def wrap_if_sum(expr: Expr) -> str:
+    """Parênteses só quando `expr` é uma soma no topo — evita ambiguidade
+    ao concatenar manualmente termos de um produto/quociente (mesma lição
+    da V2.10.2, `definite_integrals._substitute_bound_text`: nunca
+    concatenar sem parênteses ao redor de uma soma)."""
+    return f"({expr})" if expr.is_Add else str(expr)
+
+
 def linear_combination_expression(terms: list[Expr], symbol: Expr, operation: str) -> str:
     """"{operation}(t1, x)+{operation}(t2, x)-{operation}(t3, x)..." — cada
     termo isolado dentro da chamada técnica (`derivada(...)`/`integral(...)`,

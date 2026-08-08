@@ -132,9 +132,17 @@ def test_sin_still_works_via_solve_despite_steps_rejection() -> None:
     assert solve_expression("d/dx(sin(x))") == "Derivada: cos(x)"
 
 
-def test_negative_or_fractional_exponent_rejected() -> None:
-    with pytest.raises(ExpressionError, match="ainda não foi implementado"):
-        generate_steps("d/dx(x**(-1))")
+def test_negative_exponent_now_uses_quotient_rule_since_v2_13() -> None:
+    # x**(-1) e "1/x" são a MESMA árvore SymPy (numer=1, denom=x) — desde
+    # a Sprint V2.13, a regra do quociente reconhece essa forma
+    # estruturalmente (nunca uma lista de exemplos hardcoded), então este
+    # caso deixou de ser rejeitado. Ver `test_steps_quotient_rule.py`.
+    steps = generate_steps("d/dx(x**(-1))")
+    assert steps[-1].title == "Simplificando"
+    assert steps[-1].expression == "-1/x**2"
+
+
+def test_fractional_exponent_still_rejected() -> None:
     with pytest.raises(ExpressionError, match="ainda não foi implementado"):
         generate_steps("d/dx(x**(1/2))")
 
