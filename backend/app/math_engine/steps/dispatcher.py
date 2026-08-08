@@ -83,7 +83,20 @@ já parseada, nunca regex) escolhe entre `advanced_derivatives.py`
 dependendo da variável) e `derivatives.py` (V2.10, denominador constante
 — `x²/5` continua sendo um monômio comum). Estrutural, sem sobreposição:
 `is_product_or_chain_shape` já exclui QUALQUER denominador != 1, então
-`x/sen(x)` nunca chega lá — cai direto na checagem de quociente."""
+`x/sen(x)` nunca chega lá — cai direto na checagem de quociente.
+
+Sprint V2.14 — dentro de uma chamada `integral(expr, var)` INDEFINIDA já
+confirmada, uma segunda decisão (`u_substitution.find_substitution`,
+sobre a ÁRVORE já parseada, nunca regex) escolhe entre
+`u_substitution.py` (substituição imediata `∫f(g(x))·g'(x)dx`) e
+`integrals.py` (V2.10.1, regra da potência/linearidade) — ANTES da
+regra da potência, pelo mesmo motivo estrutural da V2.11:
+`2x(x²+1)³` TAMBÉM se expande para um polinômio que `integrals.py`
+saberia integrar termo a termo, mas o objetivo desta sprint é ensinar a
+substituição nesses casos, não escondê-la atrás da expansão. Integral
+DEFINIDA continua inteiramente fora deste roteamento (fora de escopo da
+V2.14) — `is_definite_integral_call` é checado separadamente, sem
+nenhuma consulta a `u_substitution.py`."""
 from __future__ import annotations
 
 from sympy import degree, expand
@@ -96,6 +109,7 @@ from ..calculus.dispatcher import (
     is_indefinite_integral_call,
     is_limit_call,
     parse_derivative_call,
+    parse_integral_call,
     parse_limit_call,
 )
 from ..combinatorics.dispatcher import is_combinatorics_domain_expression
@@ -129,6 +143,7 @@ from .trigonometric_limits import (
     generate_trigonometric_limit_steps,
     is_trigonometric_fundamental_shape,
 )
+from .u_substitution import find_substitution, generate_u_substitution_steps
 from .validation import (
     EMPTY_EXPRESSION_MESSAGE,
     UNSUPPORTED_DOMAIN_MESSAGE,
@@ -195,6 +210,9 @@ def generate_steps(expression: str) -> list[MathStep]:
         return generate_derivative_steps(normalized)
 
     if is_indefinite_integral_call(normalized):
+        expr, symbol = parse_integral_call(normalized)
+        if find_substitution(expr, symbol) is not None:
+            return generate_u_substitution_steps(normalized)
         return generate_integral_steps(normalized)
 
     if is_definite_integral_call(normalized):

@@ -12,6 +12,14 @@ from sympy.core.expr import Expr
 
 from .models import TitleSegment
 
+# --- Sprint V2.10.1 — compartilhado entre integrals.py e u_substitution.py --
+# (originalmente privado em integrals.py; promovido aqui na V2.14 para
+# `u_substitution.py` reaproveitar o MESMO texto em vez de duplicá-lo.)
+INTEGRATION_CONSTANT_EXPLANATION = (
+    "Como a derivada de uma constante é zero, adicionamos uma constante "
+    "arbitrária C."
+)
+
 
 def eq_text(lhs: Expr, rhs: Expr) -> str:
     return f"{lhs}={rhs}"

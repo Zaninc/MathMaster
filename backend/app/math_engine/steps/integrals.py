@@ -30,6 +30,7 @@ from ..calculus.dispatcher import parse_integral_call
 from ..calculus.integrals import compute_indefinite_integral
 from ..errors import ExpressionError
 from .formatting import (
+    INTEGRATION_CONSTANT_EXPLANATION,
     classify_polynomial_term,
     linear_combination_expression,
     math_segment,
@@ -39,11 +40,6 @@ from .formatting import (
 )
 from .models import MathStep
 from .validation import UNSUPPORTED_INTEGRAL_MESSAGE
-
-_INTEGRATION_CONSTANT_EXPLANATION = (
-    "Como a derivada de uma constante é zero, adicionamos uma constante "
-    "arbitrária C."
-)
 
 
 def _term_steps(coeff: Expr, exponent: int, symbol: Symbol, *, standalone: bool) -> list[MathStep]:
@@ -118,7 +114,7 @@ def generate_integral_steps(text: str) -> list[MathStep]:
     steps.append(
         MathStep(
             title="Adicionando a constante de integração",
-            explanation=_INTEGRATION_CONSTANT_EXPLANATION,
+            explanation=INTEGRATION_CONSTANT_EXPLANATION,
             expression=f"{primitive} + C",
         )
     )

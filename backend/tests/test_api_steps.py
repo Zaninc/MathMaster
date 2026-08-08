@@ -231,6 +231,64 @@ def test_solve_endpoint_unaffected_by_unsupported_integral_steps(client: TestCli
     assert response.json()["result"] == "Integral: -cos(x) + C"
 
 
+# --- Sprint V2.14: integração por substituição (u-substitution) ------------------
+
+
+def test_solve_steps_u_substitution_power_case(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(2*x*(x**2+1)**3, x)"})
+    assert response.status_code == 200
+    body = response.json()
+    titles = [s["title"] for s in body["steps"]]
+    assert titles == [
+        "Integral original",
+        "Identificando uma substituição",
+        "Derivando u",
+        "Substituindo",
+        "Integrando",
+        "Voltando para x",
+        "Adicionando a constante de integração",
+    ]
+    assert body["steps"][1]["expression"] == "u=x**2 + 1"
+    assert body["steps"][-1]["expression"] == "x**8/4 + x**6 + 3*x**4/2 + x**2 + C"
+
+
+def test_solve_steps_u_substitution_combined_coefficient_case(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(6*x*(x**2+1)**5, x)"})
+    assert response.status_code == 200
+    steps = response.json()["steps"]
+    assert steps[3]["expression"] == "3*integral(u**5, u)"
+    assert steps[-1]["expression"] == "x**12/2 + 3*x**10 + 15*x**8/2 + 10*x**6 + 15*x**4/2 + 3*x**2 + C"
+
+
+def test_solve_steps_u_substitution_rational_case_uses_natural_log(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(1/(2*x+1)*2, x)"})
+    assert response.status_code == 200
+    steps = response.json()["steps"]
+    assert steps[-1]["expression"] == "ln(2*x + 1) + C"
+    assert all("log(" not in s["expression"] for s in steps)
+
+
+def test_solve_steps_u_substitution_constant_step_has_explanation(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(sin(5*x)*5, x)"})
+    steps = response.json()["steps"]
+    assert steps[-1]["explanation"] == (
+        "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C."
+    )
+
+
+def test_solve_steps_bare_polynomial_still_uses_old_module_not_substitution(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(x**2, x)"})
+    assert response.status_code == 200
+    titles = [s["title"] for s in response.json()["steps"]]
+    assert "Identificando uma substituição" not in titles
+
+
+def test_solve_steps_u_substitution_out_of_scope_returns_friendly_400(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(x*sin(x), x)"})
+    assert response.status_code == 400
+    assert "ainda não foi implementado" in response.json()["detail"]
+
+
 # --- Sprint V2.10.2: integrais definidas -----------------------------------------
 
 

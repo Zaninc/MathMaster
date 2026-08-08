@@ -1804,3 +1804,169 @@ describe("MathSteps — compatibilidade com passos de regra do quociente (Sprint
     expect(screen.queryByText("Identificando um quociente")).not.toBeInTheDocument();
   });
 });
+
+/**
+ * Sprint V2.14 (Passo a Passo — Integração por Substituição) — ZERO
+ * componente novo (`MathSteps`/`MathStepItem`/`MixedMathText` intocados) e
+ * ZERO mudança em `to-latex.ts`: "u=...", "du=...*dx" e
+ * "coeficiente*integral(u**n, u)" já passam pelo MESMO pipeline
+ * `valueToLatex` usado desde a V2.9 — confirmado por debug-render antes de
+ * escrever este arquivo (inclusive que "du"/"dx" são lidos como
+ * identificadores próprios pelo mathjs, sem multiplicação implícita
+ * indevida "d*u"/"d*x").
+ */
+describe("MathSteps — compatibilidade com passos de substituição / u-substitution (Sprint V2.14)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.solveSteps).mockReset();
+  });
+
+  it("renderiza ∫2x(x²+1)³dx com substituição em KaTeX", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(2*x*(x**2+1)**3, x)",
+      result: "Integral: x⁸/4 + x⁶ + 3x⁴/2 + x² + C",
+      steps: [
+        {
+          title: "Integral original",
+          title_segments: null,
+          expression: "integral(2*x*(x**2 + 1)**3, x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando uma substituição",
+          title_segments: null,
+          expression: "u=x**2 + 1",
+          explanation: null,
+        },
+        { title: "Derivando u", title_segments: null, expression: "du=2*x*dx", explanation: null },
+        { title: "Substituindo", title_segments: null, expression: "integral(u**3, u)", explanation: null },
+        { title: "Integrando", title_segments: null, expression: "u**4/4", explanation: null },
+        {
+          title: "Voltando para x",
+          title_segments: null,
+          expression: "(x**2 + 1)**4/4",
+          explanation: null,
+        },
+        {
+          title: "Adicionando a constante de integração",
+          title_segments: null,
+          expression: "x**8/4 + x**6 + 3*x**4/2 + x**2 + C",
+          explanation:
+            "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.",
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral(2*x*(x**2+1)**3, x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(7));
+    expect(screen.getByText("Identificando uma substituição")).toBeInTheDocument();
+    expect(screen.getByText("Derivando u")).toBeInTheDocument();
+    expect(screen.getByText("Voltando para x")).toBeInTheDocument();
+
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex === "u={x}^{2}+1")).toBe(true);
+    expect(annotations.some((latex) => latex === "du=2\\cdotx\\cdotdx")).toBe(true);
+    expect(annotations.some((latex) => latex === "\\int{u}^{3}\\,du")).toBe(true);
+  });
+
+  it("fatora o coeficiente corretamente em ∫6x(x²+1)⁵dx (caso combinado)", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(6*x*(x**2+1)**5, x)",
+      result: "Integral: x¹²/2 + 3x¹⁰ + 15x⁸/2 + 10x⁶ + 15x⁴/2 + 3x² + C",
+      steps: [
+        {
+          title: "Integral original",
+          title_segments: null,
+          expression: "integral(6*x*(x**2 + 1)**5, x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando uma substituição",
+          title_segments: null,
+          expression: "u=x**2 + 1",
+          explanation: null,
+        },
+        { title: "Derivando u", title_segments: null, expression: "du=2*x*dx", explanation: null },
+        {
+          title: "Substituindo",
+          title_segments: null,
+          expression: "3*integral(u**5, u)",
+          explanation: null,
+        },
+        { title: "Integrando", title_segments: null, expression: "u**6/2", explanation: null },
+        {
+          title: "Voltando para x",
+          title_segments: null,
+          expression: "(x**2 + 1)**6/2",
+          explanation: null,
+        },
+        {
+          title: "Adicionando a constante de integração",
+          title_segments: null,
+          expression: "x**12/2 + 3*x**10 + 15*x**8/2 + 10*x**6 + 15*x**4/2 + 3*x**2 + C",
+          explanation:
+            "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.",
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral(6*x*(x**2+1)**5, x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(7));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex === "3\\cdot\\int{u}^{5}\\,du")).toBe(true);
+  });
+
+  it("renderiza ∫1/(2x+1)·2dx com ln (nunca log) para a substituição racional", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(1/(2*x+1)*2, x)",
+      result: "Integral: ln(2x + 1) + C",
+      steps: [
+        {
+          title: "Integral original",
+          title_segments: null,
+          expression: "integral(2/(2*x + 1), x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando uma substituição",
+          title_segments: null,
+          expression: "u=2*x + 1",
+          explanation: null,
+        },
+        { title: "Derivando u", title_segments: null, expression: "du=2*dx", explanation: null },
+        { title: "Substituindo", title_segments: null, expression: "integral(1/u, u)", explanation: null },
+        { title: "Integrando", title_segments: null, expression: "ln(u)", explanation: null },
+        {
+          title: "Voltando para x",
+          title_segments: null,
+          expression: "ln((2*x + 1))",
+          explanation: null,
+        },
+        {
+          title: "Adicionando a constante de integração",
+          title_segments: null,
+          expression: "ln(2*x + 1) + C",
+          explanation:
+            "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.",
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral(1/(2*x+1)*2, x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(7));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex?.includes("\\ln"))).toBe(true);
+    expect(annotations.some((latex) => latex?.includes("\\log"))).toBe(false);
+  });
+});
