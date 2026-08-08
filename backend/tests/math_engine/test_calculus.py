@@ -63,6 +63,72 @@ def test_limit_with_bare_e_power_never_shows_ln_of_e() -> None:
     assert _solve("limite((e**(2*x)-1)/x, x, 0)") == "Limite: 2"
 
 
+# --- Hotfix V2.15.1: paridade de Euler entre /solve e /solve/steps -------
+#
+# `/solve` (`solve_calculus_text`, acima) já canonicalizava "e" via
+# `canonicalize_euler_constant`, mas só no RESULTADO de cada operação —
+# nunca na ENTRADA. `/solve/steps` (pacote `math_engine.steps`) precisa
+# classificar a FORMA da entrada (`x.func == exp`?) ANTES de integrar, e
+# `Pow(Symbol('e'), x)` (o que "e^x"/"e**x" digitado à mão produzia) nunca
+# bate essa checagem — só `exp(x)` bate. Corrigido no ÚNICO ponto de saída
+# do parsing que TODO o pacote `steps/` consome: os 4 `parse_*_call` de
+# `calculus/dispatcher.py` agora devolvem `expr` (e os demais campos Expr)
+# já passados por `canonicalize_euler_constant`, o MESMO helper que
+# `/solve` já usava — nenhuma canonicalização nova, nenhum reconhecimento
+# especial de `Pow(Symbol('e'), ...)` foi adicionado em nenhum detector.
+
+
+def test_parse_integral_call_canonicalizes_bare_e_power() -> None:
+    from sympy import Symbol, exp
+
+    from app.math_engine.calculus.dispatcher import parse_integral_call
+
+    expr, symbol = parse_integral_call("integral(x*e^x, x)")
+    assert str(symbol) == "x"
+    factor_funcs = {factor.func for factor in expr.args}
+    assert exp in factor_funcs
+    assert not expr.has(Symbol("e"))
+
+
+def test_parse_derivative_call_canonicalizes_bare_e_power() -> None:
+    from sympy import exp
+
+    from app.math_engine.calculus.dispatcher import parse_derivative_call
+
+    expr, symbol = parse_derivative_call("derivada(x*e**x, x)")
+    factor_funcs = {factor.func for factor in expr.args}
+    assert exp in factor_funcs
+
+
+def test_parse_limit_call_canonicalizes_bare_e_power() -> None:
+    from sympy import Symbol
+
+    from app.math_engine.calculus.dispatcher import parse_limit_call
+
+    expr, symbol, point = parse_limit_call("limite((e^(2*x)-1)/x, x, 0)")
+    assert not expr.has(Symbol("e"))
+
+
+def test_parse_definite_integral_call_canonicalizes_bare_e_power() -> None:
+    from sympy import exp
+
+    from app.math_engine.calculus.dispatcher import parse_definite_integral_call
+
+    expr, symbol, lower, upper = parse_definite_integral_call("integral(x*e^x, x, 0, 1)")
+    factor_funcs = {factor.func for factor in expr.args}
+    assert exp in factor_funcs
+
+
+def test_parse_integral_call_still_no_op_when_e_absent() -> None:
+    """Nenhuma substituição desnecessária quando "e" nunca aparece —
+    `canonicalize_euler_constant` é no-op por construção; confirmamos que
+    o comportamento de uma integral comum não muda em nada."""
+    from app.math_engine.calculus.dispatcher import parse_integral_call
+
+    expr, symbol = parse_integral_call("integral(x**2+3*x, x)")
+    assert str(expr) == "x**2 + 3*x"
+
+
 def test_limit_diverging_sides_raises_without_leaking_internal_repr() -> None:
     with pytest.raises(ExpressionError) as exc_info:
         _solve("limite(1/x, x, 0)")

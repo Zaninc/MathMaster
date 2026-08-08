@@ -67,6 +67,27 @@ def test_case_3_exponential_composite() -> None:
     assert steps[-1].expression == "exp(3*x) + C"
 
 
+# --- Hotfix V2.15.1: paridade de Euler (e^(...) escolhe a mesma técnica) -------
+#
+# `2*x*e^(x**2)` digitado à mão virava `Pow(Symbol('e'), x**2)` — nunca
+# reconhecido por `_outer_shape` (que compara `factor.func` contra
+# `exp`), então a substituição nunca era escolhida. Corrigido no parsing
+# compartilhado (`calculus/dispatcher.py:parse_integral_call`), não com
+# reconhecimento especial de `Pow(Symbol("e"), ...)` dentro deste módulo.
+
+
+@pytest.mark.parametrize(
+    "expr", ["integral(2*x*e^(x**2), x)", "integral(2*x*e**(x**2), x)"]
+)
+def test_bare_e_power_composite_uses_substitution_same_as_exp(expr: str) -> None:
+    steps = generate_steps(expr)
+    reference = generate_steps("integral(2*x*exp(x**2), x)")
+    assert [(s.title, s.expression) for s in steps] == [
+        (s.title, s.expression) for s in reference
+    ]
+    assert steps[-1].expression == "exp(x**2) + C"
+
+
 # --- Caso 4: racional composto (log natural, sem duplicar log/ln) --------------
 
 

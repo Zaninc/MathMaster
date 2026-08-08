@@ -157,7 +157,11 @@ def parse_derivative_call(expression: str) -> tuple[Expr, Symbol]:
     novo), devolvendo `(expr, symbol)` já prontos em vez de já calcular a
     derivada. `compute_derivative`/`solve_calculus_text` continuam
     100% intocados — esta função só expõe o parsing que eles já usavam
-    internamente."""
+    internamente.
+
+    Hotfix V2.15.1 (paridade de Euler) — `expr` sai daqui já passado por
+    `canonicalize_euler_constant` (ver nota completa em `parse_integral_call`
+    abaixo)."""
     match = _CALL_PATTERN.match(expression)
     if not match or match.group(1) != "derivada":
         raise ExpressionError(f"Não foi possível interpretar a expressão: {expression}")
@@ -168,7 +172,7 @@ def parse_derivative_call(expression: str) -> tuple[Expr, Symbol]:
             "derivada(...) espera exatamente 2 argumentos: expressão e variável."
         )
     symbol = _parse_variable(partes[1])
-    expr = _parse_fragment(partes[0], symbol)
+    expr = canonicalize_euler_constant(_parse_fragment(partes[0], symbol))
     return expr, symbol
 
 
@@ -178,7 +182,31 @@ def parse_integral_call(expression: str) -> tuple[Expr, Symbol]:
     já faz para `integral(expr, var)`, restrito à forma INDEFINIDA (2
     argumentos — a única suportada pelo passo a passo nesta versão).
     `compute_indefinite_integral`/`solve_calculus_text` continuam 100%
-    intocados."""
+    intocados.
+
+    Hotfix V2.15.1 (paridade de Euler entre `/solve` e `/solve/steps`) —
+    `expr` sai daqui já passado por `canonicalize_euler_constant`
+    (`app/canonical_constants.py`, o MESMO helper que `solve_calculus_text`
+    já aplicava ao RESULTADO de cada operação, e que `logarithms/
+    dispatcher.py` já aplica à ENTRADA antes de classificar, ver linha 86
+    daquele arquivo — mesmo precedente, reaproveitado aqui, nunca
+    duplicado). Sem isto, `e^x`/`e**x` digitado à mão vira
+    `Pow(Symbol('e'), x)` — uma árvore estruturalmente diferente de
+    `exp(x)` para QUALQUER classificador que compare `factor.func` (
+    `u_substitution._outer_shape`, `integration_by_parts._classify_factor`,
+    e qualquer detector futuro que precise reconhecer uma exponencial) —
+    fazendo `/solve/steps` cair no fallback amigável enquanto `/solve`
+    (que nunca precisa classificar a FORMA da entrada, só integra/deriva
+    direto e canonicaliza o resultado depois) resolvia normalmente.
+    Aplicado aqui — no ÚNICO ponto de saída do parsing compartilhado por
+    TODOS os módulos de `steps/` (cada um chama esta função ou uma das
+    3 irmãs abaixo, nunca reimplementa parsing próprio) — em vez de
+    dentro de cada detector individual, que duplicaria conhecimento
+    sintático e deixaria qualquer detector futuro vulnerável ao mesmo
+    bug. `_parse_fragment`/`solve_calculus_text` (o `/solve` propriamente
+    dito) continuam INTOCADOS — só os 4 `parse_*_call` que o pacote
+    `steps/` consome são afetados; `/solve` já tinha sua própria
+    canonicalização (pós-cálculo) e seu comportamento não muda."""
     match = _CALL_PATTERN.match(expression)
     if not match or match.group(1) != "integral":
         raise ExpressionError(f"Não foi possível interpretar a expressão: {expression}")
@@ -190,7 +218,7 @@ def parse_integral_call(expression: str) -> tuple[Expr, Symbol]:
             "(2 argumentos: expressão e variável) nesta versão."
         )
     symbol = _parse_variable(partes[1])
-    expr = _parse_fragment(partes[0], symbol)
+    expr = canonicalize_euler_constant(_parse_fragment(partes[0], symbol))
     return expr, symbol
 
 
@@ -198,7 +226,11 @@ def parse_definite_integral_call(expression: str) -> tuple[Expr, Symbol, Expr, E
     """Sprint V2.10.2 (Passo a Passo — Integrais Definidas) — mesmo
     espírito de `parse_integral_call`, restrito à forma DEFINIDA (4
     argumentos). `compute_definite_integral`/`solve_calculus_text`
-    continuam 100% intocados."""
+    continuam 100% intocados.
+
+    Hotfix V2.15.1 (paridade de Euler) — `expr`/`lower`/`upper` saem
+    daqui já canonicalizados (ver nota completa em `parse_integral_call`
+    acima)."""
     match = _CALL_PATTERN.match(expression)
     if not match or match.group(1) != "integral":
         raise ExpressionError(f"Não foi possível interpretar a expressão: {expression}")
@@ -211,9 +243,9 @@ def parse_definite_integral_call(expression: str) -> tuple[Expr, Symbol, Expr, E
             "superior) nesta versão."
         )
     symbol = _parse_variable(partes[1])
-    expr = _parse_fragment(partes[0], symbol)
-    lower = _parse_fragment(partes[2], symbol)
-    upper = _parse_fragment(partes[3], symbol)
+    expr = canonicalize_euler_constant(_parse_fragment(partes[0], symbol))
+    lower = canonicalize_euler_constant(_parse_fragment(partes[2], symbol))
+    upper = canonicalize_euler_constant(_parse_fragment(partes[3], symbol))
     return expr, symbol, lower, upper
 
 
@@ -224,7 +256,10 @@ def parse_limit_call(expression: str) -> tuple[Expr, Symbol, Expr]:
     level_args`, `_parse_variable`, `_parse_fragment` — nunca regex frágil
     novo), devolvendo `(expr, symbol, point)` já prontos em vez de já
     calcular o limite. `compute_limit`/`solve_calculus_text` continuam
-    100% intocados."""
+    100% intocados.
+
+    Hotfix V2.15.1 (paridade de Euler) — `expr`/`point` saem daqui já
+    canonicalizados (ver nota completa em `parse_integral_call` acima)."""
     match = _CALL_PATTERN.match(expression)
     if not match or match.group(1) != "limite":
         raise ExpressionError(f"Não foi possível interpretar a expressão: {expression}")
@@ -235,8 +270,8 @@ def parse_limit_call(expression: str) -> tuple[Expr, Symbol, Expr]:
             "limite(...) espera exatamente 3 argumentos: expressão, variável e ponto."
         )
     symbol = _parse_variable(partes[1])
-    expr = _parse_fragment(partes[0], symbol)
-    point = _parse_fragment(partes[2], symbol)
+    expr = canonicalize_euler_constant(_parse_fragment(partes[0], symbol))
+    point = canonicalize_euler_constant(_parse_fragment(partes[2], symbol))
     return expr, symbol, point
 
 

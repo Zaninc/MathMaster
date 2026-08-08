@@ -3,6 +3,7 @@ regressão explícita de que `/solve` continua 100% intocado (mesmo
 contrato `{expression, result, approx}`, ver CLAUDE_RULES.md)."""
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -364,6 +365,31 @@ def test_solve_endpoint_unaffected_by_integration_by_parts_repetition_rejection(
     response = client.post("/solve", json={"expression": "integral(x**2*exp(x), x)"})
     assert response.status_code == 200
     assert response.json()["result"] == "Integral: (x² - 2x + 2)*exp(x) + C"
+
+
+# --- Hotfix V2.15.1: paridade de Euler entre /solve e /solve/steps ---------------
+
+
+@pytest.mark.parametrize("expression", ["integral(x*e^x, x)", "integral(x*e**x, x)"])
+def test_solve_steps_bare_e_power_uses_integration_by_parts_not_fallback(
+    client: TestClient, expression: str
+) -> None:
+    response = client.post("/solve/steps", json={"expression": expression})
+    assert response.status_code == 200
+    body = response.json()
+    titles = [s["title"] for s in body["steps"]]
+    assert titles == [
+        "Integral original",
+        "Identificando integração por partes",
+        "Derivando u",
+        "Integrando dv",
+        "Aplicando a fórmula",
+        "Substituindo",
+        "Calculando a integral restante",
+        "Adicionando a constante de integração",
+    ]
+    assert body["steps"][1]["expression"] == "u=x, dv=exp(x)*dx"
+    assert body["steps"][-1]["expression"] == "(x - 1)*exp(x) + C"
 
 
 # --- Sprint V2.10.2: integrais definidas -----------------------------------------

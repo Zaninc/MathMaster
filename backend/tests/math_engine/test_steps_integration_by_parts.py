@@ -100,6 +100,33 @@ def test_case_5_polynomial_times_logarithm() -> None:
     assert steps[-1].expression == "x**2*ln(x)/2 - x**2/4 + C"
 
 
+# --- Hotfix V2.15.1: paridade de Euler (e^x / e**x == exp(x)) --------------------
+#
+# `x*e^x`/`x*e**x` digitados à mão viravam `Pow(Symbol('e'), x)` — árvore
+# estruturalmente diferente de `exp(x)` para `_classify_factor`, então
+# caíam no fallback amigável mesmo com `x*exp(x)` funcionando. Corrigido
+# em `calculus/dispatcher.py:parse_integral_call` (canonicaliza "e" antes
+# de qualquer detector rodar) — não em `integration_by_parts.py`.
+
+
+@pytest.mark.parametrize("expr", ["integral(x*e^x, x)", "integral(x*e**x, x)"])
+def test_bare_e_power_uses_integration_by_parts_same_as_exp(expr: str) -> None:
+    steps = generate_steps(expr)
+    reference = generate_steps("integral(x*exp(x), x)")
+    assert [(s.title, s.expression) for s in steps] == [
+        (s.title, s.expression) for s in reference
+    ]
+    assert steps[-1].expression == "(x - 1)*exp(x) + C"
+
+
+def test_find_integration_by_parts_does_not_return_none_for_bare_e_power() -> None:
+    from app.math_engine.calculus.dispatcher import parse_integral_call
+    from app.math_engine.steps.integration_by_parts import find_integration_by_parts
+
+    expr, symbol = parse_integral_call("integral(x*e^x, x)")
+    assert find_integration_by_parts(expr, symbol) is not None
+
+
 # --- O valor final sempre bate com o motor real de /solve -------------------------
 
 
