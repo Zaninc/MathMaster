@@ -392,6 +392,92 @@ def test_solve_steps_bare_e_power_uses_integration_by_parts_not_fallback(
     assert body["steps"][-1]["expression"] == "(x - 1)*exp(x) + C"
 
 
+# --- Sprint V2.16: frações parciais -----------------------------------------------
+
+
+def test_solve_steps_partial_fractions_distinct_linear_factors(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(1/((x+1)*(x+2)), x)"})
+    assert response.status_code == 200
+    body = response.json()
+    titles = [s["title"] for s in body["steps"]]
+    assert titles == [
+        "Integral original",
+        "Identificando uma função racional",
+        "Fatorando o denominador",
+        "Montando as frações parciais",
+        "Eliminando os denominadores",
+        "Determinando os coeficientes",
+        "Substituindo",
+        "Separando a integral",
+        "Integrando",
+        "Adicionando a constante de integração",
+    ]
+    assert body["steps"][5]["expression"] == "A=1, B=-1"
+    assert body["steps"][-1]["expression"] == "ln(x + 1) - ln(x + 2) + C"
+
+
+def test_solve_steps_partial_fractions_repeated_linear_factor(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(1/(x*(x+1)**2), x)"})
+    assert response.status_code == 200
+    steps = response.json()["steps"]
+    assert steps[3]["expression"] == "1/(x*(x + 1)**2)=A/x + B/(x + 1) + C/(x + 1)**2"
+    assert steps[5]["expression"] == "A=1, B=-1, C=-1"
+    assert steps[-1]["expression"] == "ln(x) - ln(x + 1) + 1/(x + 1) + C"
+
+
+def test_solve_steps_partial_fractions_constant_step_has_explanation(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(1/(x*(x+1)), x)"})
+    steps = response.json()["steps"]
+    assert steps[-1]["explanation"] == (
+        "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C."
+    )
+
+
+def test_solve_steps_partial_fractions_never_steals_substitution_or_by_parts(
+    client: TestClient,
+) -> None:
+    substitution = client.post(
+        "/solve/steps", json={"expression": "integral(2*x*(x**2+1)**3, x)"}
+    )
+    assert substitution.status_code == 200
+    substitution_titles = [s["title"] for s in substitution.json()["steps"]]
+    assert "Identificando uma substituição" in substitution_titles
+    assert "Identificando uma função racional" not in substitution_titles
+
+    by_parts = client.post("/solve/steps", json={"expression": "integral(x*exp(x), x)"})
+    assert by_parts.status_code == 200
+    by_parts_titles = [s["title"] for s in by_parts.json()["steps"]]
+    assert "Identificando integração por partes" in by_parts_titles
+    assert "Identificando uma função racional" not in by_parts_titles
+
+
+def test_solve_steps_partial_fractions_improper_returns_dedicated_friendly_400(
+    client: TestClient,
+) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral((x**2+1)/(x+1), x)"})
+    assert response.status_code == 400
+    assert "divisão polinomial antes da decomposição em frações parciais" in response.json()["detail"]
+
+
+def test_solve_steps_partial_fractions_irreducible_quadratic_returns_friendly_400(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/solve/steps", json={"expression": "integral(1/((x**2+1)*(x+1)), x)"}
+    )
+    assert response.status_code == 400
+    assert "ainda não foi implementado" in response.json()["detail"]
+
+
+def test_solve_endpoint_unaffected_by_improper_rational_rejection(client: TestClient) -> None:
+    """`/solve` continua calculando normalmente mesmo quando `/solve/steps`
+    ainda não sabe explicar a divisão polinomial necessária — o motor de
+    cálculo nunca foi alterado."""
+    response = client.post("/solve", json={"expression": "integral((x**2+1)/(x+1), x)"})
+    assert response.status_code == 200
+    assert response.json()["result"] == "Integral: x²/2 - x + 2*ln(x + 1) + C"
+
+
 # --- Sprint V2.10.2: integrais definidas -----------------------------------------
 
 

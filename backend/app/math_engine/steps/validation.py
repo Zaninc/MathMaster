@@ -45,6 +45,10 @@ UNSUPPORTED_INTEGRATION_BY_PARTS_MULTIPLE_APPLICATIONS_MESSAGE = (
     "Esta integral requer aplicações sucessivas de integração por partes, que "
     "ainda não fazem parte desta versão."
 )
+UNSUPPORTED_IMPROPER_RATIONAL_FUNCTION_MESSAGE = (
+    "Esta integral exige divisão polinomial antes da decomposição em frações "
+    "parciais, etapa que ainda não possui passo a passo nesta versão."
+)
 
 
 def require_single_symbol(symbols: set) -> None:

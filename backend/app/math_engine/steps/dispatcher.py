@@ -109,7 +109,24 @@ porque `find_substitution` já o reivindicou antes) quando aplicável.
 Estrutural, sem sobreposição: `find_substitution` só reivindica
 composições `f(g(x))·g'(x)` genuínas (`_outer_shape` exige que a base/
 argumento seja DIFERENTE da própria variável), então `x·eˣ`/`x·sen(x)`/
-`ln(x)` nunca casam lá — chegam intactos à checagem de partes."""
+`ln(x)` nunca casam lá — chegam intactos à checagem de partes.
+
+Sprint V2.16 — dentro de uma chamada `integral(expr, var)` INDEFINIDA já
+confirmada, uma QUARTA decisão é tentada DEPOIS de
+`integration_by_parts.find_integration_by_parts` e ANTES do fallback para
+`integrals.py`: `partial_fractions.is_improper_rational_function` é
+checada primeiro (levanta a mensagem amigável DEDICADA sobre divisão
+polinomial se `expr` for uma função racional genuína porém imprópria —
+grau do numerador >= grau do denominador — ANTES de qualquer outra
+tentativa), depois `partial_fractions.find_partial_fractions` (sobre a
+ÁRVORE já parseada, nunca regex) escolhe `partial_fractions.py` quando o
+denominador fatora em 2+ fatores LINEARES (`factor_list`, distintos ou
+repetidos). Estrutural, sem sobreposição: `2x(x²+1)³`/`x·eˣ` nunca têm
+denominador != 1 (`.as_numer_denom()` devolve `denom=1` pra qualquer
+produto puro), então nunca chegam a esta checagem; `1/(x²+1)` (fator
+irredutível de grau >= 2) e `1/(x+1)²` (um único fator, decomposição
+pedagogicamente vazia) devolvem `None` e caem no fallback amigável
+genérico de `integrals.py`, sem nenhum código de rejeição dedicado."""
 from __future__ import annotations
 
 from sympy import degree, expand
@@ -151,6 +168,11 @@ from .limits import generate_limit_steps
 from .linear_equations import generate_linear_equation_steps, parse_equation_sides
 from .linear_systems import generate_linear_system_steps
 from .models import MathStep
+from .partial_fractions import (
+    find_partial_fractions,
+    generate_partial_fraction_steps,
+    is_improper_rational_function,
+)
 from .quadratic_equations import generate_quadratic_equation_steps
 from .quotient_rule import generate_quotient_rule_steps, is_quotient_shape
 from .trigonometric_limits import (
@@ -162,6 +184,7 @@ from .validation import (
     EMPTY_EXPRESSION_MESSAGE,
     UNSUPPORTED_DOMAIN_MESSAGE,
     UNSUPPORTED_EQUATION_MESSAGE,
+    UNSUPPORTED_IMPROPER_RATIONAL_FUNCTION_MESSAGE,
     UNSUPPORTED_INEQUALITY_MESSAGE,
     require_single_symbol,
 )
@@ -229,6 +252,10 @@ def generate_steps(expression: str) -> list[MathStep]:
             return generate_u_substitution_steps(normalized)
         if find_integration_by_parts(expr, symbol) is not None:
             return generate_integration_by_parts_steps(normalized)
+        if is_improper_rational_function(expr, symbol):
+            raise ExpressionError(UNSUPPORTED_IMPROPER_RATIONAL_FUNCTION_MESSAGE)
+        if find_partial_fractions(expr, symbol) is not None:
+            return generate_partial_fraction_steps(normalized)
         return generate_integral_steps(normalized)
 
     if is_definite_integral_call(normalized):

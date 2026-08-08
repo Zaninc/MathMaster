@@ -7,6 +7,7 @@ matematicamente novo."""
 from __future__ import annotations
 
 import re
+from typing import Callable
 
 from sympy.core.expr import Expr
 
@@ -163,13 +164,16 @@ def wrap_if_sum(expr: Expr) -> str:
     return f"({expr})" if expr.is_Add else str(expr)
 
 
-def linear_combination_expression(terms: list[Expr], symbol: Expr, operation: str) -> str:
-    """"{operation}(t1, x)+{operation}(t2, x)-{operation}(t3, x)..." — cada
-    termo isolado dentro da chamada técnica (`derivada(...)`/`integral(...)`,
-    ambas já reconhecidas pelo `productHandler` existente em
-    `to-latex.ts`), com o sinal de subtração aparecendo FORA da chamada
-    (nunca "derivada(-5*x, x)", que esconderia o sinal dentro dos
-    parênteses)."""
+def signed_terms_text(terms: list[Expr], formatter: Callable[[Expr], str] = str) -> str:
+    """"t1-t2+t3..." — o sinal de cada termo (`could_extract_minus_sign()`,
+    nunca `.is_negative`, que só funciona pra números literais — mesma
+    lição da V2.9.1/V2.10.2) aparece sempre FORA do termo, nunca escondido
+    dentro de um valor negativo cru concatenado ("x*-cos(x)", ambíguo).
+    `formatter` decora cada termo já com o sinal extraído antes de
+    concatenar — o caso default (`str`) é o termo puro; `operation(t, x)`
+    (`linear_combination_expression` abaixo) é a única outra forma usada
+    até agora, mas qualquer decoração futura pode reaproveitar esta MESMA
+    lógica de sinal em vez de duplicá-la."""
     parts: list[str] = []
     for index, term in enumerate(terms):
         negative = term.could_extract_minus_sign()
@@ -178,5 +182,16 @@ def linear_combination_expression(terms: list[Expr], symbol: Expr, operation: st
             sign = "-" if negative else ""
         else:
             sign = "-" if negative else "+"
-        parts.append(f"{sign}{operation}({piece}, {symbol})")
+        parts.append(f"{sign}{formatter(piece)}")
     return "".join(parts)
+
+
+def linear_combination_expression(terms: list[Expr], symbol: Expr, operation: str) -> str:
+    """"{operation}(t1, x)+{operation}(t2, x)-{operation}(t3, x)..." — cada
+    termo isolado dentro da chamada técnica (`derivada(...)`/`integral(...)`,
+    ambas já reconhecidas pelo `productHandler` existente em
+    `to-latex.ts`), com o sinal de subtração aparecendo FORA da chamada
+    (nunca "derivada(-5*x, x)", que esconderia o sinal dentro dos
+    parênteses). Fina camada sobre `signed_terms_text` — só decide COMO
+    decorar cada termo já com sinal extraído."""
+    return signed_terms_text(terms, lambda piece: f"{operation}({piece}, {symbol})")

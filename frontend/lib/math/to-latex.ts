@@ -550,6 +550,26 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
     // mathjs trata "g" solto como a unidade embutida "grama", renderizando
     // "\mathrm{g}" em vez do itálico padrão de símbolo matemático.
     if (name === "g") return "g";
+    // Sprint V2.16 (passo a passo de frações parciais — coeficientes
+    // "A/(x+1) + B/(x+2)") — mesmo problema e mesma correção de "b"/"C"/
+    // "g" acima: mathjs trata "A"/"B" soltos como as unidades embutidas
+    // ampere/bel, renderizando "\mathrm{A}"/"\mathrm{B}" em vez do
+    // itálico padrão de símbolo matemático. "D" (usada quando há 4+
+    // fatores lineares) já renderiza itálico sem exceção nenhuma —
+    // confirmado empiricamente antes de escrever este código, mesmo
+    // padrão de verificação já registrado desde a V2.10.1 para toda
+    // letra maiúscula nova.
+    //
+    // Regressão pega pelos testes existentes: devolver a letra crua SEM
+    // o espaço inicial que o serializer default do mathjs sempre inclui
+    // antes de um símbolo comum (confirmado: "x*y" -> " x\cdot y", nunca
+    // "x\cdoty") quebra "A*B" (Motor de Matrizes, V2.2/V2.15.1) —
+    // "\cdot" seguido imediatamente de uma letra sem separador vira UM
+    // ÚNICO comando LaTeX desconhecido ("\cdotB"), erro de parse real do
+    // KaTeX. O espaço inicial replica exatamente o comportamento default
+    // do mathjs para qualquer símbolo comum, sem introduzir nada novo.
+    if (name === "A") return " A";
+    if (name === "B") return " B";
     return undefined;
   }
 
