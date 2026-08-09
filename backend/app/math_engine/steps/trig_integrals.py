@@ -119,20 +119,30 @@ def _verify_equivalent(original: Expr, transformed: Expr) -> None:
         raise ExpressionError(UNSUPPORTED_INTEGRAL_MESSAGE)
 
 
+def power_reduction_identity(symbol: Symbol, which: str) -> tuple[Expr, str]:
+    """`(1±cos(2·symbol))/2` — a identidade de redução de potência de
+    `sen²`/`cos²`, devolvida como `(Expr, texto)`. Promovida a pública na
+    V2.19 para `trig_substitution.py` reaproveitar a MESMA identidade
+    (ex. `cos²(θ)` depois de `x=a·sen(θ)`) sem reescrevê-la — construída
+    por TEXTO, não via `str()` do valor avaliado: o SymPy distribui
+    "(1-cos(2x))/2" automaticamente em "1/2 - cos(2x)/2" ao ser calculado,
+    perdendo a forma agrupada pedagógica — mesmo espírito de
+    `substitute_symbol_text`/Bhaskara (V2.9.1/V2.10.2): nunca deixar o
+    SymPy decidir sozinho a apresentação de uma igualdade que precisa
+    ficar visualmente agrupada. Funciona para QUALQUER `symbol` (nunca
+    hardcoda "x") — `which` é sempre "sin" ou "cos"."""
+    sign = "-" if which == "sin" else "+"
+    text = f"(1{sign}cos(2*{symbol}))/2"
+    return sympify(text), text
+
+
 def _power_reduction_steps(expr: Expr, symbol: Symbol, which: str) -> list[MathStep]:
     """`sen²(x)` e `cos²(x)` — a MESMA técnica (identidade de redução de
     potência, fatorar a constante, integrar), parametrizada só pelo sinal
     da identidade. Reaproveitada para os dois casos em vez de duas
     implementações quase idênticas."""
     sign = "-" if which == "sin" else "+"
-    identity_rhs_text = f"(1{sign}cos(2*{symbol}))/2"
-    # Construído por TEXTO, não via `str()` do valor avaliado: o SymPy
-    # distribui "(1-cos(2x))/2" automaticamente em "1/2 - cos(2x)/2" ao
-    # ser calculado, perdendo a forma agrupada pedagógica — mesmo
-    # espírito de `substitute_symbol_text`/Bhaskara (V2.9.1/V2.10.2):
-    # nunca deixar o SymPy decidir sozinho a apresentação de uma
-    # igualdade que precisa ficar visualmente agrupada.
-    identity_rhs = sympify(identity_rhs_text)
+    identity_rhs, identity_rhs_text = power_reduction_identity(symbol, which)
     _verify_equivalent(expr, identity_rhs)
 
     body_text = f"1{sign}cos(2*{symbol})"

@@ -154,9 +154,19 @@ const BARE_WORD = /^[A-Za-z]{3,}$/;
  * (não é um alias de nenhuma função/constante em `parser/normalize.py`),
  * então esta exceção não colide com nenhum caso de "palavra pura"
  * legítimo já coberto pelo guard geral.
+ *
+ * Sprint V2.19 (Passo a Passo — Substituição Trigonométrica): mesma
+ * exceção, mesmo motivo, para "theta" — `math_engine/steps/
+ * trig_substitution.py` envia "theta=..." como LADO INTEIRO de uma
+ * equação no passo "Voltando para x" (ex. "theta=asin(x/3)"), e "theta"
+ * sozinho (5 letras, nenhum dígito/operador) cai no bare-word guard do
+ * mesmo jeito que "Delta" caía — confirmado por debug-render ANTES do
+ * código. "theta" também nunca é digitado pelo usuário como rótulo solto
+ * (mesma garantia de "Delta").
  */
 const NAMED_SYMBOL_LATEX: Record<string, string> = {
   Delta: "\\Delta",
+  theta: "\\theta",
 };
 
 const SUBSCRIPT_VARIABLE = /^([A-Za-z])([₀₁₂₃₄₅₆₇₈₉]+)$/;

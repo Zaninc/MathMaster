@@ -2900,3 +2900,140 @@ describe("MathSteps — compatibilidade com passos de integrais trigonométricas
     expect(screen.getByRole("alert")).toBeInTheDocument();
   });
 });
+
+/**
+ * Sprint V2.19 (Passo a Passo — Substituição Trigonométrica) — ZERO
+ * componente novo (`MathSteps`/`MathStepItem`/`MixedMathText` intocados).
+ * ÚNICA mudança de frontend: "theta" (usado como LADO INTEIRO de uma
+ * equação no passo "Voltando para x", ex. "theta=asin(x/3)") precisou da
+ * MESMA exceção pontual ao guard `BARE_WORD` que "Delta" já tinha desde a
+ * V2.9.1 (`NAMED_SYMBOL_LATEX` em `to-latex.ts`) — confirmado por
+ * debug-render ANTES do código que, sem essa entrada, "theta" sozinho
+ * (ou como lado esquerdo de uma equação) devolvia `null` e quebrava a
+ * renderização do passo inteiro. Todas as outras 56 strings novas (θ
+ * embutido em sen/cos/tan/sec, identidades, `atan/asin` como
+ * `\sin^{-1}`/`\tan^{-1}`, "dtheta" como diferencial — mesma convenção já
+ * aceita para "du"/"dx" desde a V2.14) já passam pelo pipeline
+ * `valueToLatex` existente, confirmado por debug-render.
+ */
+describe("MathSteps — compatibilidade com passos de substituição trigonométrica (Sprint V2.19)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.solveSteps).mockReset();
+  });
+
+  it("renderiza ∫√(9-x²)dx com substituição x=3sen(θ) em KaTeX (forma direta, reaproveita a identidade da V2.17)", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(sqrt(9-x**2), x)",
+      result: "Integral: x*sqrt(9 - x**2)/2 + 9*asin(x/3)/2 + C",
+      steps: [
+        { title: "Integral original", title_segments: null, expression: "integral(sqrt(9 - x**2), x)", explanation: null },
+        { title: "Identificando o padrão", title_segments: null, expression: "9 - x**2", explanation: "O radical tem a forma √(a²-x²)." },
+        { title: "Encontrando a", title_segments: null, expression: "a**2=9, a=3", explanation: null },
+        { title: "Escolhendo a substituição", title_segments: null, expression: "x=3*sin(theta)", explanation: null },
+        { title: "Calculando dx", title_segments: null, expression: "dx=3*cos(theta)*dtheta", explanation: null },
+        { title: "Substituindo no radical", title_segments: null, expression: "sqrt(9 - x**2)=sqrt(9 - 9*sin(theta)**2)", explanation: null },
+        { title: "Fatorando", title_segments: null, expression: "sqrt(9 - 9*sin(theta)**2)=3*sqrt(1 - sin(theta)**2)", explanation: null },
+        { title: "Usando a identidade pitagórica", title_segments: null, expression: "1-sin(theta)**2=cos(theta)**2", explanation: null },
+        {
+          title: "Considerando o intervalo escolhido",
+          title_segments: null,
+          expression: "sqrt(cos(theta)**2)=cos(theta)",
+          explanation: "Escolhemos theta em [-π/2, π/2], onde cos(theta) ≥ 0.",
+        },
+        { title: "Concluindo a substituição do radical", title_segments: null, expression: "sqrt(9 - x**2)=3*cos(theta)", explanation: null },
+        { title: "Substituindo na integral", title_segments: null, expression: "integral(sqrt(9 - x**2), x)=9*integral(cos(theta)**2, theta)", explanation: null },
+        { title: "Aplicando a identidade de redução de potência", title_segments: null, expression: "cos(theta)**2=(1+cos(2*theta))/2", explanation: null },
+        { title: "Integrando em θ", title_segments: null, expression: "9*theta/2 + 9*sin(theta)*cos(theta)/2", explanation: null },
+        { title: "Voltando para x", title_segments: null, expression: "x*sqrt(9 - x**2)/2 + 9*asin(x/3)/2", explanation: null },
+        {
+          title: "Adicionando a constante de integração",
+          title_segments: null,
+          expression: "x*sqrt(9 - x**2)/2 + 9*asin(x/3)/2 + C",
+          explanation: "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.",
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral(sqrt(9-x**2), x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(15));
+    expect(screen.getByText("Identificando o padrão")).toBeInTheDocument();
+    expect(screen.getByText("Considerando o intervalo escolhido")).toBeInTheDocument();
+
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex === "x=3\\sin\\left(\\theta\\right)")).toBe(true);
+    expect(annotations.some((latex) => latex === "\\sqrt{{\\cos\\left(\\theta\\right)}^{2}}=\\cos\\left(\\theta\\right)")).toBe(
+      true
+    );
+    expect(
+      annotations.some(
+        (latex) => latex === "\\frac{x\\cdot\\sqrt{9-{x}^{2}}}{2}+\\frac{9\\sin^{-1}\\left(\\frac{x}{3}\\right)}{2}+C"
+      )
+    ).toBe(true);
+    expect(annotations.some((latex) => latex?.includes("\\mathrm"))).toBe(false);
+  });
+
+  it("renderiza ∫1/√(9-x²)dx simplificando até θ+C (teste ouro, sem precisar da identidade de redução de potência)", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(1/sqrt(9-x**2), x)",
+      result: "Integral: asin(x/3) + C",
+      steps: [
+        { title: "Integral original", title_segments: null, expression: "integral(1/sqrt(9 - x**2), x)", explanation: null },
+        { title: "Identificando o padrão", title_segments: null, expression: "9 - x**2", explanation: null },
+        { title: "Encontrando a", title_segments: null, expression: "a**2=9, a=3", explanation: null },
+        { title: "Escolhendo a substituição", title_segments: null, expression: "x=3*sin(theta)", explanation: null },
+        { title: "Calculando dx", title_segments: null, expression: "dx=3*cos(theta)*dtheta", explanation: null },
+        { title: "Substituindo no radical", title_segments: null, expression: "sqrt(9 - x**2)=sqrt(9 - 9*sin(theta)**2)", explanation: null },
+        { title: "Fatorando", title_segments: null, expression: "sqrt(9 - 9*sin(theta)**2)=3*sqrt(1 - sin(theta)**2)", explanation: null },
+        { title: "Usando a identidade pitagórica", title_segments: null, expression: "1-sin(theta)**2=cos(theta)**2", explanation: null },
+        { title: "Considerando o intervalo escolhido", title_segments: null, expression: "sqrt(cos(theta)**2)=cos(theta)", explanation: null },
+        { title: "Concluindo a substituição do radical", title_segments: null, expression: "sqrt(9 - x**2)=3*cos(theta)", explanation: null },
+        { title: "Substituindo na integral", title_segments: null, expression: "integral(1/sqrt(9 - x**2), x)=integral(1, theta)", explanation: null },
+        { title: "Integrando em θ", title_segments: null, expression: "theta", explanation: null },
+        { title: "Voltando para x", title_segments: null, expression: "asin(x/3)", explanation: null },
+        {
+          title: "Adicionando a constante de integração",
+          title_segments: null,
+          expression: "asin(x/3) + C",
+          explanation: "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.",
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral(1/sqrt(9-x**2), x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(14));
+    const titles = Array.from(container.querySelectorAll("h3, [class*='title']")).map((n) => n.textContent);
+    expect(titles.join(" ")).not.toContain("Aplicando a identidade de redução de potência");
+
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(annotations.some((latex) => latex === "\\theta")).toBe(true);
+    expect(annotations.some((latex) => latex === "\\sin^{-1}\\left(\\frac{x}{3}\\right)+C")).toBe(true);
+  });
+
+  it("mostra erro amigável genérico para forma fora de escopo (√(x²+4) sem o 1/, levaria a sec³(θ)), sem quebrar a tela", async () => {
+    const { ApiError } = await import("@/lib/api/errors");
+    vi.mocked(apiClient.solveSteps).mockRejectedValue(
+      new ApiError(
+        "invalid_expression",
+        "O passo a passo para este tipo de integral ainda não foi implementado nesta versão."
+      )
+    );
+
+    render(<MathSteps expression="integral(sqrt(x**2+4), x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("O passo a passo para este tipo de integral ainda não foi implementado nesta versão.")
+      ).toBeInTheDocument()
+    );
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});

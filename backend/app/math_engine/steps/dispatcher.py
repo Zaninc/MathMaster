@@ -209,6 +209,7 @@ from .polynomial_division import find_polynomial_division, generate_polynomial_d
 from .quadratic_equations import generate_quadratic_equation_steps
 from .quotient_rule import generate_quotient_rule_steps, is_quotient_shape
 from .trig_integrals import generate_trig_integral_steps, is_trig_power_shape
+from .trig_substitution import find_trig_substitution, generate_trig_substitution_steps
 from .trigonometric_limits import (
     generate_trigonometric_limit_steps,
     is_trigonometric_fundamental_shape,
@@ -291,6 +292,8 @@ def generate_steps(expression: str) -> list[MathStep]:
             return generate_partial_fraction_steps(normalized)
         if is_trig_power_shape(expr, symbol):
             return generate_trig_integral_steps(normalized)
+        if find_trig_substitution(expr, symbol) is not None:
+            return generate_trig_substitution_steps(normalized)
         return generate_integral_steps(normalized)
 
     if is_definite_integral_call(normalized):

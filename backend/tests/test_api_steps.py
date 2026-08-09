@@ -675,6 +675,98 @@ def test_solve_steps_polynomial_division_never_steals_substitution_or_by_parts(
     assert "Identificando uma fração imprópria" not in by_parts_titles
 
 
+# --- Sprint V2.19: substituição trigonométrica ------------------------------------
+
+
+def test_solve_steps_trig_substitution_case_a_direct(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(sqrt(9-x**2), x)"})
+    assert response.status_code == 200
+    body = response.json()
+    titles = [s["title"] for s in body["steps"]]
+    assert titles == [
+        "Integral original",
+        "Identificando o padrão",
+        "Encontrando a",
+        "Escolhendo a substituição",
+        "Calculando dx",
+        "Substituindo no radical",
+        "Fatorando",
+        "Usando a identidade pitagórica",
+        "Considerando o intervalo escolhido",
+        "Concluindo a substituição do radical",
+        "Substituindo na integral",
+        "Aplicando a identidade de redução de potência",
+        "Integrando em θ",
+        "Voltando para x",
+        "Adicionando a constante de integração",
+    ]
+    assert body["steps"][2]["expression"] == "a**2=9, a=3"
+    assert body["steps"][-1]["expression"] == "x*sqrt(9 - x**2)/2 + 9*asin(x/3)/2 + C"
+
+
+def test_solve_steps_trig_substitution_case_a_inverse_golden_example(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(1/sqrt(9-x**2), x)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["steps"][-1]["expression"] == "asin(x/3) + C"
+    titles = [s["title"] for s in body["steps"]]
+    assert "Aplicando a identidade de redução de potência" not in titles
+
+
+def test_solve_steps_trig_substitution_case_b(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(1/sqrt(x**2+4), x)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["steps"][3]["expression"] == "x=2*tan(theta)"
+    assert body["steps"][-1]["expression"] == "asinh(x/2) + C"
+
+
+def test_solve_steps_trig_substitution_case_c(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(1/sqrt(x**2-9), x)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["steps"][3]["expression"] == "x=3*sec(theta)"
+    assert body["steps"][-1]["expression"] == "ln(x + sqrt(x**2 - 9)) + C"
+
+
+def test_solve_steps_trig_substitution_no_hardcode(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(sqrt(25-x**2), x)"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["steps"][2]["expression"] == "a**2=25, a=5"
+    assert body["steps"][-1]["expression"] == "x*sqrt(25 - x**2)/2 + 25*asin(x/5)/2 + C"
+
+
+def test_solve_steps_trig_substitution_out_of_scope_returns_friendly_400(client: TestClient) -> None:
+    # √(x²+4) SEM o "1/" levaria a ∫sec³(θ)dθ — nenhuma infraestrutura
+    # existente sabe explicar essa etapa, rejeição amigável genérica.
+    response = client.post("/solve/steps", json={"expression": "integral(sqrt(x**2+4), x)"})
+    assert response.status_code == 400
+    assert "ainda não foi implementado" in response.json()["detail"]
+
+
+def test_solve_endpoint_unaffected_by_trig_substitution_out_of_scope_rejection(
+    client: TestClient,
+) -> None:
+    response = client.post("/solve", json={"expression": "integral(sqrt(x**2+4), x)"})
+    assert response.status_code == 200
+    assert response.json()["result"].startswith("Integral:")
+
+
+def test_solve_steps_trig_substitution_never_steals_u_substitution_multiplied_radical(
+    client: TestClient,
+) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(x*sqrt(x**2+4), x)"})
+    # Fora de escopo tanto de `trig_substitution.py` quanto de
+    # `u_substitution.py` hoje (lacuna pré-existente, documentada no
+    # relatório) — o importante é NUNCA ser reivindicado incorretamente
+    # como substituição trigonométrica, e `/solve` nunca quebrar.
+    if response.status_code == 200:
+        assert "Identificando o padrão" not in [s["title"] for s in response.json()["steps"]]
+    solve_response = client.post("/solve", json={"expression": "integral(x*sqrt(x**2+4), x)"})
+    assert solve_response.status_code == 200
+
+
 # --- Sprint V2.10.2: integrais definidas -----------------------------------------
 
 
