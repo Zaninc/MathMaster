@@ -140,7 +140,29 @@ de formas suportadas (`sen²`, `cos²`, `sen³`, `cos³`, `sen²cos²`,
 formas acima tem denominador != 1 nem casa como `f(g(x))·g'(x)` genuíno
 (`sen(x)²` sozinho falha o teste de coeficiente constante de
 `find_substitution`, confirmado empiricamente), então substituição/partes/
-frações parciais nunca as reivindicam antes desta checagem chegar."""
+frações parciais nunca as reivindicam antes desta checagem chegar.
+
+Sprint V2.18 — dentro de uma chamada `integral(expr, var)` INDEFINIDA já
+confirmada, `polynomial_division.find_polynomial_division` passa a ser
+checada ANTES de `partial_fractions.find_partial_fractions` (na MESMA
+posição que a V2.16 já reservava para a checagem de fração imprópria,
+substituindo a antiga rejeição imediata `is_improper_rational_function`
+por uma divisão de verdade): quando `expr` é uma fração racional genuína
+porém IMPRÓPRIA (grau do numerador >= grau do denominador), `p(x)/q(x) =
+Q(x) + r(x)/q(x)` é calculado via `sympy.div` e a parte fracionária
+`r(x)/q(x)`, quando ainda precisa de decomposição, REAPROVEITA o mesmo
+`partial_fractions._decomposition_body` que `find_partial_fractions` já
+usa — nunca um segundo resolvedor. Como toda fração imprópria falha o
+teste de propriedade (`grau(numer) < grau(denom)`) de `find_partial_
+fractions`, a ORDEM entre as duas checagens não muda qual delas reivindica
+qual caso (são mutuamente exclusivas por construção); a ordem é mantida
+apenas por continuidade com a posição que a V2.16 já documentava aqui.
+Um denominador com fator de grau >= 3 ou múltiplos fatores quadráticos
+continua fora de escopo mesmo depois da divisão — `find_polynomial_
+division` devolve `None` nesse caso (nunca finge dividir só pela metade),
+caindo adiante na cascata até o fallback amigável genérico de
+`integrals.py`, exatamente como qualquer outra forma fora de escopo desde
+a V2.16."""
 from __future__ import annotations
 
 from sympy import degree, expand
@@ -182,11 +204,8 @@ from .limits import generate_limit_steps
 from .linear_equations import generate_linear_equation_steps, parse_equation_sides
 from .linear_systems import generate_linear_system_steps
 from .models import MathStep
-from .partial_fractions import (
-    find_partial_fractions,
-    generate_partial_fraction_steps,
-    is_improper_rational_function,
-)
+from .partial_fractions import find_partial_fractions, generate_partial_fraction_steps
+from .polynomial_division import find_polynomial_division, generate_polynomial_division_steps
 from .quadratic_equations import generate_quadratic_equation_steps
 from .quotient_rule import generate_quotient_rule_steps, is_quotient_shape
 from .trig_integrals import generate_trig_integral_steps, is_trig_power_shape
@@ -199,7 +218,6 @@ from .validation import (
     EMPTY_EXPRESSION_MESSAGE,
     UNSUPPORTED_DOMAIN_MESSAGE,
     UNSUPPORTED_EQUATION_MESSAGE,
-    UNSUPPORTED_IMPROPER_RATIONAL_FUNCTION_MESSAGE,
     UNSUPPORTED_INEQUALITY_MESSAGE,
     require_single_symbol,
 )
@@ -267,8 +285,8 @@ def generate_steps(expression: str) -> list[MathStep]:
             return generate_u_substitution_steps(normalized)
         if find_integration_by_parts(expr, symbol) is not None:
             return generate_integration_by_parts_steps(normalized)
-        if is_improper_rational_function(expr, symbol):
-            raise ExpressionError(UNSUPPORTED_IMPROPER_RATIONAL_FUNCTION_MESSAGE)
+        if find_polynomial_division(expr, symbol) is not None:
+            return generate_polynomial_division_steps(normalized)
         if find_partial_fractions(expr, symbol) is not None:
             return generate_partial_fraction_steps(normalized)
         if is_trig_power_shape(expr, symbol):

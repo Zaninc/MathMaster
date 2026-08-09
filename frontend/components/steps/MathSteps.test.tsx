@@ -2387,29 +2387,11 @@ describe("MathSteps — compatibilidade com passos de frações parciais (Sprint
     expect(annotations.some((latex) => latex === "A=1,\\;B=-1,\\;C=-1")).toBe(true);
   });
 
-  it("mostra erro amigável DEDICADO para fração imprópria (divisão polinomial necessária), sem quebrar a tela", async () => {
-    const { ApiError } = await import("@/lib/api/errors");
-    vi.mocked(apiClient.solveSteps).mockRejectedValue(
-      new ApiError(
-        "invalid_expression",
-        "Esta integral exige divisão polinomial antes da decomposição em frações parciais, etapa que ainda não possui passo a passo nesta versão."
-      )
-    );
-
-    render(<MathSteps expression="integral((x**2+1)/(x+1), x)" />);
-    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
-
-    await waitFor(() =>
-      expect(
-        screen.getByText(
-          "Esta integral exige divisão polinomial antes da decomposição em frações parciais, etapa que ainda não possui passo a passo nesta versão."
-        )
-      ).toBeInTheDocument()
-    );
-    expect(screen.getByRole("alert")).toBeInTheDocument();
-  });
-
-  it("mostra erro amigável para fator quadrático irredutível (fora de escopo), sem quebrar a tela", async () => {
+  it("mostra erro amigável genérico para fator irredutível grau >= 3 (fora de escopo), sem quebrar a tela", async () => {
+    // Fração imprópria E fator quadrático irredutível ganharam passo a
+    // passo próprio na V2.18 (ver `describe` dedicado abaixo) — esta
+    // rejeição genérica continua valendo para o que ainda está fora de
+    // escopo (fator grau >= 3, múltiplos quadráticos).
     const { ApiError } = await import("@/lib/api/errors");
     vi.mocked(apiClient.solveSteps).mockRejectedValue(
       new ApiError(
@@ -2418,7 +2400,169 @@ describe("MathSteps — compatibilidade com passos de frações parciais (Sprint
       )
     );
 
-    render(<MathSteps expression="integral(1/((x**2+1)*(x+1)), x)" />);
+    render(<MathSteps expression="integral((x**4+1)/((x+1)*(x**3+2)), x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("O passo a passo para este tipo de integral ainda não foi implementado nesta versão.")
+      ).toBeInTheDocument()
+    );
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Sprint V2.18 (Passo a Passo — Divisão Polinomial + Frações Parciais
+ * Avançadas) — ZERO componente novo e ZERO mudança em `to-latex.ts`:
+ * confirmado por debug-render antes de escrever este arquivo que
+ * "x**2 + 1=(x + 1)*(x - 1)+2" (identidade de divisão), "A/(x + 1) +
+ * (B*x + C)/(x**2 + 1)" (ansatz quadrático) e "atan(x) + C" (mathjs
+ * renderiza como `\tan^{-1}\left(x\right)`, o padrão default, sem
+ * exceção pontual de símbolo) já passam pelo MESMO pipeline
+ * `valueToLatex` usado desde a V2.9.
+ */
+describe("MathSteps — compatibilidade com passos de divisão polinomial e frações parciais avançadas (Sprint V2.18)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.solveSteps).mockReset();
+  });
+
+  it("renderiza ∫(x²+1)/(x+1)dx com divisão polinomial em KaTeX (Exemplo 1)", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral((x**2+1)/(x+1), x)",
+      result: "Integral: x**2/2 - x + 2*ln(x + 1) + C",
+      steps: [
+        { title: "Integral original", title_segments: null, expression: "integral((x**2 + 1)/(x + 1), x)", explanation: null },
+        {
+          title: "Identificando uma fração imprópria",
+          title_segments: null,
+          expression: "(x**2 + 1)/(x + 1)",
+          explanation:
+            "O grau do numerador (2) é maior ou igual ao grau do denominador (1), então é preciso dividir os polinômios antes de integrar.",
+        },
+        {
+          title: "Dividindo os polinômios",
+          title_segments: null,
+          expression: "Q=x - 1, R=2",
+          explanation: "Q é o quociente e R é o resto da divisão.",
+        },
+        { title: "Verificando a divisão", title_segments: null, expression: "x**2 + 1=(x + 1)*(x - 1)+2", explanation: null },
+        { title: "Reescrevendo a integral", title_segments: null, expression: "(x**2 + 1)/(x + 1)=x - 1+2/(x + 1)", explanation: null },
+        { title: "Separando a integral", title_segments: null, expression: "integral(x - 1, x)+integral(2/(x + 1), x)", explanation: null },
+        { title: "Integrando", title_segments: null, expression: "x**2/2 - x+2*ln(x + 1)", explanation: null },
+        {
+          title: "Adicionando a constante de integração",
+          title_segments: null,
+          expression: "x**2/2 - x + 2*ln(x + 1) + C",
+          explanation: "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.",
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral((x**2+1)/(x+1), x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(8));
+    expect(screen.getByText("Identificando uma fração imprópria")).toBeInTheDocument();
+    expect(screen.getByText("Verificando a divisão")).toBeInTheDocument();
+
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(
+      annotations.some((latex) => latex === "{x}^{2}+1=\\left(x+1\\right)\\cdot\\left(x-1\\right)+2")
+    ).toBe(true);
+    expect(
+      annotations.some((latex) => latex === "\\frac{{x}^{2}}{2}-x+2\\ln\\left(x+1\\right)+C")
+    ).toBe(true);
+  });
+
+  it("renderiza ∫1/((x+1)(x²+1))dx com fator quadrático irredutível em KaTeX (golden example, 11 passos)", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(1/((x+1)*(x**2+1)), x)",
+      result: "Integral: ln(x + 1)/2 - ln(x**2 + 1)/4 + atan(x)/2 + C",
+      steps: [
+        { title: "Integral original", title_segments: null, expression: "integral(1/((x + 1)*(x**2 + 1)), x)", explanation: null },
+        { title: "Identificando uma função racional", title_segments: null, expression: "1/((x + 1)*(x**2 + 1))", explanation: null },
+        { title: "Fatorando o denominador", title_segments: null, expression: "(x + 1)*(x**2 + 1)", explanation: null },
+        {
+          title: "Reconhecendo fator quadrático irredutível",
+          title_segments: null,
+          expression: "x**2 + 1",
+          explanation:
+            "Este fator não se divide em fatores lineares reais, então seu numerador na decomposição precisa ser da forma B*x+C, nunca só uma constante.",
+        },
+        {
+          title: "Montando as frações parciais",
+          title_segments: null,
+          expression: "1/((x + 1)*(x**2 + 1))=A/(x + 1) + (B*x + C)/(x**2 + 1)",
+          explanation: null,
+        },
+        { title: "Eliminando os denominadores", title_segments: null, expression: "1=A*(x**2 + 1)+(B*x + C)*(x + 1)", explanation: null },
+        { title: "Determinando os coeficientes", title_segments: null, expression: "A=1/2, B=-1/2, C=1/2", explanation: null },
+        {
+          title: "Substituindo",
+          title_segments: null,
+          expression: "1/((x + 1)*(x**2 + 1))=(1/2)/(x + 1)+(-x/2+1/2)/(x**2 + 1)",
+          explanation: null,
+        },
+        {
+          title: "Separando a integral",
+          title_segments: null,
+          expression: "integral((1/2)/(x + 1), x)-integral((1/2)*x/(x**2 + 1), x)+integral((1/2)/(x**2 + 1), x)",
+          explanation: null,
+        },
+        { title: "Integrando", title_segments: null, expression: "ln(x + 1)/2-ln(x**2 + 1)/4+atan(x)/2", explanation: null },
+        {
+          title: "Adicionando a constante de integração",
+          title_segments: null,
+          expression: "ln(x + 1)/2 - ln(x**2 + 1)/4 + atan(x)/2 + C",
+          explanation: "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.",
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral(1/((x+1)*(x**2+1)), x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(11));
+    expect(screen.getByText("Reconhecendo fator quadrático irredutível")).toBeInTheDocument();
+
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(
+      annotations.some(
+        (latex) =>
+          latex ===
+          "\\frac{1}{\\left(\\left(x+1\\right)\\cdot\\left({x}^{2}+1\\right)\\right)}=\\frac{A}{\\left(x+1\\right)}+\\frac{\\left(B\\cdotx+C\\right)}{\\left({x}^{2}+1\\right)}"
+      )
+    ).toBe(true);
+    expect(
+      annotations.some((latex) => latex === "A=\\frac{1}{2},\\;B=\\frac{-1}{2},\\;C=\\frac{1}{2}")
+    ).toBe(true);
+    expect(
+      annotations.some(
+        (latex) =>
+          latex ===
+          "\\frac{\\ln\\left(x+1\\right)}{2}-\\frac{\\ln\\left({x}^{2}+1\\right)}{4}+\\frac{\\tan^{-1}\\left(x\\right)}{2}+C"
+      )
+    ).toBe(true);
+    expect(annotations.some((latex) => latex?.includes("\\mathrm{A}"))).toBe(false);
+    expect(annotations.some((latex) => latex?.includes("\\mathrm{B}"))).toBe(false);
+    expect(annotations.some((latex) => latex?.includes("\\mathrm{C}"))).toBe(false);
+  });
+
+  it("mostra erro amigável para forma fora de escopo (fator irredutível grau >= 3), sem quebrar a tela", async () => {
+    const { ApiError } = await import("@/lib/api/errors");
+    vi.mocked(apiClient.solveSteps).mockRejectedValue(
+      new ApiError(
+        "invalid_expression",
+        "O passo a passo para este tipo de integral ainda não foi implementado nesta versão."
+      )
+    );
+
+    render(<MathSteps expression="integral((x**4+1)/((x+1)*(x**3+2)), x)" />);
     fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
 
     await waitFor(() =>

@@ -451,28 +451,12 @@ def test_solve_steps_partial_fractions_never_steals_substitution_or_by_parts(
     assert "Identificando uma função racional" not in by_parts_titles
 
 
-def test_solve_steps_partial_fractions_improper_returns_dedicated_friendly_400(
-    client: TestClient,
-) -> None:
-    response = client.post("/solve/steps", json={"expression": "integral((x**2+1)/(x+1), x)"})
-    assert response.status_code == 400
-    assert "divisão polinomial antes da decomposição em frações parciais" in response.json()["detail"]
-
-
-def test_solve_steps_partial_fractions_irreducible_quadratic_returns_friendly_400(
-    client: TestClient,
-) -> None:
-    response = client.post(
-        "/solve/steps", json={"expression": "integral(1/((x**2+1)*(x+1)), x)"}
-    )
-    assert response.status_code == 400
-    assert "ainda não foi implementado" in response.json()["detail"]
-
-
-def test_solve_endpoint_unaffected_by_improper_rational_rejection(client: TestClient) -> None:
-    """`/solve` continua calculando normalmente mesmo quando `/solve/steps`
-    ainda não sabe explicar a divisão polinomial necessária — o motor de
-    cálculo nunca foi alterado."""
+def test_solve_endpoint_unaffected_by_improper_rational_handling(client: TestClient) -> None:
+    """`/solve` sempre calculou este valor corretamente, independente do
+    que `/solve/steps` sabia (ou não) explicar — o motor de cálculo nunca
+    foi alterado. Desde a V2.18, `/solve/steps` também sabe explicar (ver
+    `# --- Sprint V2.18` abaixo); este teste só confirma que `/solve`
+    continua batendo com o mesmo valor de sempre."""
     response = client.post("/solve", json={"expression": "integral((x**2+1)/(x+1), x)"})
     assert response.status_code == 200
     assert response.json()["result"] == "Integral: x²/2 - x + 2*ln(x + 1) + C"
@@ -586,6 +570,109 @@ def test_solve_endpoint_unaffected_by_trig_out_of_scope_rejection(client: TestCl
     nunca foi alterado."""
     response = client.post("/solve", json={"expression": "integral(tan(x)**3, x)"})
     assert response.status_code == 200
+
+
+# --- Sprint V2.18: divisão polinomial + frações parciais avançadas ---------------
+
+
+def test_solve_steps_polynomial_division_example_1(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral((x**2+1)/(x+1), x)"})
+    assert response.status_code == 200
+    body = response.json()
+    titles = [s["title"] for s in body["steps"]]
+    assert titles == [
+        "Integral original",
+        "Identificando uma fração imprópria",
+        "Dividindo os polinômios",
+        "Verificando a divisão",
+        "Reescrevendo a integral",
+        "Separando a integral",
+        "Integrando",
+        "Adicionando a constante de integração",
+    ]
+    assert body["steps"][3]["expression"] == "x**2 + 1=(x + 1)*(x - 1)+2"
+    assert body["steps"][-1]["expression"] == "x**2/2 - x + 2*ln(x + 1) + C"
+
+
+def test_solve_steps_polynomial_division_exact_never_forces_partial_fractions(
+    client: TestClient,
+) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral((x**3+1)/(x+1), x)"})
+    assert response.status_code == 200
+    titles = [s["title"] for s in response.json()["steps"]]
+    assert "Separando a integral" not in titles
+    assert "Fatorando o denominador" not in titles
+    assert response.json()["steps"][-1]["expression"] == "x**3/3 - x**2/2 + x + C"
+
+
+def test_solve_steps_polynomial_division_combined_with_partial_fractions(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/solve/steps", json={"expression": "integral((x**3+2*x**2+1)/(x**2-1), x)"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    titles = [s["title"] for s in body["steps"]]
+    assert "Dividindo os polinômios" in titles
+    assert "Fatorando o denominador" in titles
+    assert "Montando as frações parciais" in titles
+    assert body["steps"][-1]["expression"] == "x**2/2 + 2*x + 2*ln(x - 1) - ln(x + 1) + C"
+
+
+def test_solve_steps_irreducible_quadratic_golden_example(client: TestClient) -> None:
+    """Golden example 2 do ticket da V2.18: `1/((x+1)(x²+1))`, 11 passos,
+    A=1/2, B=-1/2, C=1/2."""
+    response = client.post(
+        "/solve/steps", json={"expression": "integral(1/((x+1)*(x**2+1)), x)"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["steps"]) == 11
+    titles = [s["title"] for s in body["steps"]]
+    assert titles == [
+        "Integral original",
+        "Identificando uma função racional",
+        "Fatorando o denominador",
+        "Reconhecendo fator quadrático irredutível",
+        "Montando as frações parciais",
+        "Eliminando os denominadores",
+        "Determinando os coeficientes",
+        "Substituindo",
+        "Separando a integral",
+        "Integrando",
+        "Adicionando a constante de integração",
+    ]
+    assert body["steps"][6]["expression"] == "A=1/2, B=-1/2, C=1/2"
+    assert body["steps"][-1]["expression"] == "ln(x + 1)/2 - ln(x**2 + 1)/4 + atan(x)/2 + C"
+
+
+def test_solve_steps_polynomial_division_out_of_scope_returns_friendly_400(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/solve/steps", json={"expression": "integral(1/((x**2+1)*(x**2+4)), x)"}
+    )
+    assert response.status_code == 400
+    assert "ainda não foi implementado" in response.json()["detail"]
+
+
+def test_solve_steps_polynomial_division_never_steals_substitution_or_by_parts(
+    client: TestClient,
+) -> None:
+    substitution = client.post(
+        "/solve/steps", json={"expression": "integral(2*x*(x**2+1)**3, x)"}
+    )
+    assert substitution.status_code == 200
+    substitution_titles = [s["title"] for s in substitution.json()["steps"]]
+    assert "Identificando uma substituição" in substitution_titles
+    assert "Identificando uma fração imprópria" not in substitution_titles
+
+    by_parts = client.post("/solve/steps", json={"expression": "integral(x*exp(x), x)"})
+    assert by_parts.status_code == 200
+    by_parts_titles = [s["title"] for s in by_parts.json()["steps"]]
+    assert "Identificando integração por partes" in by_parts_titles
+    assert "Identificando uma fração imprópria" not in by_parts_titles
 
 
 # --- Sprint V2.10.2: integrais definidas -----------------------------------------

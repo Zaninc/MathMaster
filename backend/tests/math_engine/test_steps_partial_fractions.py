@@ -176,28 +176,41 @@ def test_definite_integral_still_works_and_never_uses_partial_fractions_module()
     assert steps[-1].expression == "8/3"
 
 
-# --- Frações impróprias: mensagem amigável dedicada, nunca finge dividir ---------
+# --- Frações impróprias: a partir da V2.18 a divisão polinomial passa a --
+# ter passo a passo próprio (`polynomial_division.py`) — ver
+# `test_steps_polynomial_division.py` para a cobertura completa. Aqui só
+# confirma que este módulo específico (`partial_fractions.py`) não é mais
+# quem intercepta/rejeita o caso (responsabilidade movida, não removida).
 
 
-def test_improper_rational_function_returns_dedicated_friendly_message() -> None:
-    with pytest.raises(
-        ExpressionError, match="divisão polinomial antes da decomposição em frações parciais"
-    ):
-        generate_steps("integral((x**2+1)/(x+1), x)")
+def test_improper_rational_function_no_longer_rejected_by_this_module() -> None:
+    # Antes da V2.18 isto era rejeitado com uma mensagem dedicada sobre
+    # divisão polinomial; agora tem passo a passo completo (outro módulo).
+    steps = generate_steps("integral((x**2+1)/(x+1), x)")
+    assert "Identificando uma fração imprópria" in _titles("integral((x**2+1)/(x+1), x)")
+    assert steps[-1].expression == "x**2/2 - x + 2*ln(x + 1) + C"
 
 
-def test_solve_endpoint_unaffected_by_improper_rational_rejection() -> None:
+def test_solve_endpoint_unaffected_by_improper_rational_handling() -> None:
     from app.math_engine.dispatcher import solve_expression
 
     assert solve_expression("integral((x**2+1)/(x+1), x)") == "Integral: x**2/2 - x + 2*ln(x + 1) + C"
 
 
-# --- Quadráticas irredutíveis: fora de escopo, rejeição amigável genérica --------
+# --- Quadráticas irredutíveis: um fator quadrático simples (combinado com -
+# outro fator) ganhou passo a passo na V2.18 — ver
+# `test_steps_polynomial_division.py`/`test_api_steps.py` para a cobertura
+# completa do golden example. Uma quadrática SOZINHA continua fora de
+# escopo (ver `test_bare_irreducible_quadratic_never_claimed_as_partial_
+# fractions` abaixo, inalterado).
 
 
-def test_irreducible_quadratic_factor_rejected_with_friendly_message() -> None:
-    with pytest.raises(ExpressionError, match="ainda não foi implementado"):
-        generate_steps("integral(1/((x**2+1)*(x+1)), x)")
+def test_irreducible_quadratic_factor_now_gets_full_steps() -> None:
+    steps = generate_steps("integral(1/((x**2+1)*(x+1)), x)")
+    assert "Reconhecendo fator quadrático irredutível" in _titles(
+        "integral(1/((x**2+1)*(x+1)), x)"
+    )
+    assert steps[-1].expression == "ln(x + 1)/2 - ln(x**2 + 1)/4 + atan(x)/2 + C"
 
 
 def test_bare_irreducible_quadratic_never_claimed_as_partial_fractions() -> None:
