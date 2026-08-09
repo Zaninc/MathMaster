@@ -2429,3 +2429,330 @@ describe("MathSteps — compatibilidade com passos de frações parciais (Sprint
     expect(screen.getByRole("alert")).toBeInTheDocument();
   });
 });
+
+/**
+ * Sprint V2.17 (Passo a Passo — Integrais Trigonométricas) — ZERO
+ * componente novo (`MathSteps`/`MathStepItem`/`MixedMathText` intocados)
+ * e ZERO mudança em `to-latex.ts`: "sin(x)**3=sin(x)*sin(x)**2",
+ * "u=cos(x), du=-sin(x)*dx" e "sec(x)**2-1" já passam pelo MESMO pipeline
+ * `valueToLatex` usado desde a V2.9 — confirmado por debug-render antes
+ * de escrever este arquivo, incluindo que `sec` (que nem está na
+ * whitelist de ENTRADA do parser do backend) já renderiza corretamente
+ * como saída via o comando `\sec` nativo do KaTeX, sem nenhuma exceção
+ * pontual de símbolo necessária (diferente de "A"/"B"/"b"/"C"/"g" em
+ * sprints anteriores).
+ */
+describe("MathSteps — compatibilidade com passos de integrais trigonométricas (Sprint V2.17)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.solveSteps).mockReset();
+  });
+
+  it("renderiza ∫sen²(x)dx com a identidade de redução de potência em KaTeX", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(sin(x)**2, x)",
+      result: "Integral: x/2 - sin(x)*cos(x)/2 + C",
+      steps: [
+        {
+          title: "Integral original",
+          title_segments: null,
+          expression: "integral(sin(x)**2, x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando uma potência trigonométrica",
+          title_segments: null,
+          expression: "sin(x)**2",
+          explanation: null,
+        },
+        {
+          title: "Aplicando a identidade de redução de potência",
+          title_segments: null,
+          expression: "sin(x)**2=(1-cos(2*x))/2",
+          explanation: null,
+        },
+        {
+          title: "Substituindo na integral",
+          title_segments: null,
+          expression: "integral((1-cos(2*x))/2, x)",
+          explanation: null,
+        },
+        {
+          title: "Fatorando a constante",
+          title_segments: null,
+          expression: "1/2*integral(1-cos(2*x), x)",
+          explanation: null,
+        },
+        { title: "Integrando", title_segments: null, expression: "x/2 - sin(2*x)/4", explanation: null },
+        {
+          title: "Adicionando a constante de integração",
+          title_segments: null,
+          expression: "x/2 - sin(x)*cos(x)/2 + C",
+          explanation:
+            "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.",
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral(sin(x)**2, x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(7));
+    expect(screen.getByText("Identificando uma potência trigonométrica")).toBeInTheDocument();
+    expect(screen.getByText("Aplicando a identidade de redução de potência")).toBeInTheDocument();
+
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(
+      annotations.some(
+        (latex) => latex === "{\\sin\\left(x\\right)}^{2}=\\frac{\\left(1-\\cos\\left(2\\cdotx\\right)\\right)}{2}"
+      )
+    ).toBe(true);
+    expect(
+      annotations.some((latex) => latex === "\\frac{x}{2}-\\frac{\\sin\\left(x\\right)\\cos\\left(x\\right)}{2}+C")
+    ).toBe(true);
+  });
+
+  it("renderiza ∫sen³(x)dx separando um fator e reutilizando a técnica de substituição", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(sin(x)**3, x)",
+      result: "Integral: cos(x)**3/3 - cos(x) + C",
+      steps: [
+        {
+          title: "Integral original",
+          title_segments: null,
+          expression: "integral(sin(x)**3, x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando uma potência ímpar de sin",
+          title_segments: null,
+          expression: "sin(x)**3",
+          explanation: null,
+        },
+        {
+          title: "Separando um fator sin(x)",
+          title_segments: null,
+          expression: "sin(x)**3=sin(x)*sin(x)**2",
+          explanation: null,
+        },
+        {
+          title: "Aplicando sin²(x)=1-cos²(x)",
+          title_segments: null,
+          expression: "sin(x)**2=1-cos(x)**2",
+          explanation: null,
+        },
+        {
+          title: "Reescrevendo a integral",
+          title_segments: null,
+          expression: "integral((1 - cos(x)**2)*sin(x), x)",
+          explanation: null,
+        },
+        {
+          title: "Aplicando a substituição",
+          title_segments: null,
+          expression: "u=cos(x), du=-sin(x)*dx",
+          explanation: null,
+        },
+        { title: "Integrando", title_segments: null, expression: "u**3/3 - u", explanation: null },
+        {
+          title: "Voltando para x",
+          title_segments: null,
+          expression: "(cos(x))**3/3 - (cos(x))",
+          explanation: null,
+        },
+        {
+          title: "Adicionando a constante de integração",
+          title_segments: null,
+          expression: "cos(x)**3/3 - cos(x) + C",
+          explanation:
+            "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.",
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral(sin(x)**3, x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(9));
+    expect(screen.getByText("Separando um fator sin(x)")).toBeInTheDocument();
+    expect(screen.getByText("Aplicando a substituição")).toBeInTheDocument();
+    expect(screen.getByText("Voltando para x")).toBeInTheDocument();
+
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(
+      annotations.some((latex) => latex === "u=\\cos\\left(x\\right),\\;du=-\\sin\\left(x\\right)\\cdotdx")
+    ).toBe(true);
+    expect(
+      annotations.some(
+        (latex) => latex === "\\frac{{\\cos\\left(x\\right)}^{3}}{3}-\\cos\\left(x\\right)+C"
+      )
+    ).toBe(true);
+  });
+
+  it("renderiza ∫sen²(x)cos²(x)dx (teste ouro: ângulo duplo + redução de potência)", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(sin(x)**2*cos(x)**2, x)",
+      result: "Integral: x/8 - sin(2*x)*cos(2*x)/16 + C",
+      steps: [
+        {
+          title: "Integral original",
+          title_segments: null,
+          expression: "integral(sin(x)**2*cos(x)**2, x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando potências pares de seno e cosseno",
+          title_segments: null,
+          expression: "sin(x)**2*cos(x)**2",
+          explanation: null,
+        },
+        {
+          title: "Utilizando a identidade de ângulo duplo",
+          title_segments: null,
+          expression: "sin(x)*cos(x)=sin(2*x)/2",
+          explanation: null,
+        },
+        {
+          title: "Elevando ao quadrado",
+          title_segments: null,
+          expression: "sin(x)**2*cos(x)**2=sin(2*x)**2/4",
+          explanation: null,
+        },
+        {
+          title: "Aplicando redução de potência",
+          title_segments: null,
+          expression: "sin(2*x)**2=(1-cos(4*x))/2",
+          explanation: null,
+        },
+        {
+          title: "Reescrevendo",
+          title_segments: null,
+          expression: "sin(x)**2*cos(x)**2=(1-cos(4*x))/8",
+          explanation: null,
+        },
+        {
+          title: "Substituindo na integral",
+          title_segments: null,
+          expression: "integral((1-cos(4*x))/8, x)",
+          explanation: null,
+        },
+        {
+          title: "Integrando",
+          title_segments: null,
+          expression: "x/8 - sin(4*x)/32",
+          explanation: null,
+        },
+        {
+          title: "Adicionando a constante de integração",
+          title_segments: null,
+          expression: "x/8 - sin(2*x)*cos(2*x)/16 + C",
+          explanation:
+            "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.",
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral(sin(x)**2*cos(x)**2, x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(9));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(
+      annotations.some((latex) => latex === "\\sin\\left(x\\right)\\cos\\left(x\\right)=\\frac{\\sin\\left(2\\cdotx\\right)}{2}")
+    ).toBe(true);
+    expect(
+      annotations.some(
+        (latex) => latex === "\\frac{x}{8}-\\frac{\\sin\\left(2\\cdotx\\right)\\cos\\left(2\\cdotx\\right)}{16}+C"
+      )
+    ).toBe(true);
+  });
+
+  it("renderiza ∫tan²(x)dx com a identidade tan²(x)=sec²(x)-1, sec renderizando corretamente", async () => {
+    vi.mocked(apiClient.solveSteps).mockResolvedValue({
+      expression: "integral(tan(x)**2, x)",
+      result: "Integral: -x + sin(x)/cos(x) + C",
+      steps: [
+        {
+          title: "Integral original",
+          title_segments: null,
+          expression: "integral(tan(x)**2, x)",
+          explanation: null,
+        },
+        {
+          title: "Identificando uma potência de tangente",
+          title_segments: null,
+          expression: "tan(x)**2",
+          explanation: null,
+        },
+        {
+          title: "Aplicando tan²(x)=sec²(x)-1",
+          title_segments: null,
+          expression: "tan(x)**2=sec(x)**2-1",
+          explanation: null,
+        },
+        {
+          title: "Substituindo na integral",
+          title_segments: null,
+          expression: "integral(sec(x)**2-1, x)",
+          explanation: null,
+        },
+        {
+          title: "Separando a integral",
+          title_segments: null,
+          expression: "integral(sec(x)**2, x)-integral(1, x)",
+          explanation: null,
+        },
+        {
+          title: "Integrando",
+          title_segments: null,
+          expression: "-x + sin(x)/cos(x)",
+          explanation: null,
+        },
+        {
+          title: "Adicionando a constante de integração",
+          title_segments: null,
+          expression: "-x + sin(x)/cos(x) + C",
+          explanation:
+            "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C.",
+        },
+      ],
+    });
+
+    const { container } = render(<MathSteps expression="integral(tan(x)**2, x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() => expect(container.querySelectorAll(".katex").length).toBe(7));
+    const annotations = Array.from(container.querySelectorAll("annotation")).map((node) =>
+      node.textContent?.replace(/\s/g, "")
+    );
+    expect(
+      annotations.some((latex) => latex === "{\\tan\\left(x\\right)}^{2}={\\sec\\left(x\\right)}^{2}-1")
+    ).toBe(true);
+    expect(annotations.some((latex) => latex?.includes("\\sec"))).toBe(true);
+  });
+
+  it("mostra erro amigável para formas fora do escopo (ex. tan³(x)), sem quebrar a tela", async () => {
+    const { ApiError } = await import("@/lib/api/errors");
+    vi.mocked(apiClient.solveSteps).mockRejectedValue(
+      new ApiError(
+        "invalid_expression",
+        "O passo a passo para este tipo de integral ainda não foi implementado nesta versão."
+      )
+    );
+
+    render(<MathSteps expression="integral(tan(x)**3, x)" />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver passo a passo" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("O passo a passo para este tipo de integral ainda não foi implementado nesta versão.")
+      ).toBeInTheDocument()
+    );
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});

@@ -478,6 +478,116 @@ def test_solve_endpoint_unaffected_by_improper_rational_rejection(client: TestCl
     assert response.json()["result"] == "Integral: x²/2 - x + 2*ln(x + 1) + C"
 
 
+# --- Sprint V2.17: integrais trigonométricas --------------------------------------
+
+
+def test_solve_steps_trig_sin_squared(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(sin(x)**2, x)"})
+    assert response.status_code == 200
+    body = response.json()
+    titles = [s["title"] for s in body["steps"]]
+    assert titles == [
+        "Integral original",
+        "Identificando uma potência trigonométrica",
+        "Aplicando a identidade de redução de potência",
+        "Substituindo na integral",
+        "Fatorando a constante",
+        "Integrando",
+        "Adicionando a constante de integração",
+    ]
+    assert body["steps"][2]["expression"] == "sin(x)**2=(1-cos(2*x))/2"
+    assert body["steps"][-1]["expression"] == "x/2 - sin(x)*cos(x)/2 + C"
+
+
+def test_solve_steps_trig_sin_cubed_uses_substitution_technique(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(sin(x)**3, x)"})
+    assert response.status_code == 200
+    steps = response.json()["steps"]
+    titles = [s["title"] for s in steps]
+    assert titles == [
+        "Integral original",
+        "Identificando uma potência ímpar de sin",
+        "Separando um fator sin(x)",
+        "Aplicando sin²(x)=1-cos²(x)",
+        "Reescrevendo a integral",
+        "Aplicando a substituição",
+        "Integrando",
+        "Voltando para x",
+        "Adicionando a constante de integração",
+    ]
+    assert steps[5]["expression"] == "u=cos(x), du=-sin(x)*dx"
+    assert steps[-1]["expression"] == "cos(x)**3/3 - cos(x) + C"
+
+
+def test_solve_steps_trig_sin_squared_cos_squared_golden_test(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(sin(x)**2*cos(x)**2, x)"})
+    assert response.status_code == 200
+    steps = response.json()["steps"]
+    assert [s["title"] for s in steps] == [
+        "Integral original",
+        "Identificando potências pares de seno e cosseno",
+        "Utilizando a identidade de ângulo duplo",
+        "Elevando ao quadrado",
+        "Aplicando redução de potência",
+        "Reescrevendo",
+        "Substituindo na integral",
+        "Integrando",
+        "Adicionando a constante de integração",
+    ]
+    assert steps[2]["expression"] == "sin(x)*cos(x)=sin(2*x)/2"
+    assert steps[-1]["expression"] == "x/8 - sin(2*x)*cos(2*x)/16 + C"
+
+
+def test_solve_steps_trig_tan_squared(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(tan(x)**2, x)"})
+    assert response.status_code == 200
+    steps = response.json()["steps"]
+    assert steps[2]["expression"] == "tan(x)**2=sec(x)**2-1"
+    assert steps[-1]["expression"] == "-x + sin(x)/cos(x) + C"
+
+
+def test_solve_steps_trig_constant_step_has_explanation(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(cos(x)**2, x)"})
+    steps = response.json()["steps"]
+    assert steps[-1]["explanation"] == (
+        "Como a derivada de uma constante é zero, adicionamos uma constante arbitrária C."
+    )
+
+
+def test_solve_steps_trig_never_steals_substitution_by_parts_or_partial_fractions(
+    client: TestClient,
+) -> None:
+    substitution = client.post("/solve/steps", json={"expression": "integral(2*x*sin(x**2), x)"})
+    assert substitution.status_code == 200
+    assert "Identificando uma substituição" in [s["title"] for s in substitution.json()["steps"]]
+
+    by_parts = client.post("/solve/steps", json={"expression": "integral(x*sin(x), x)"})
+    assert by_parts.status_code == 200
+    assert "Identificando integração por partes" in [s["title"] for s in by_parts.json()["steps"]]
+
+    partial_fractions = client.post(
+        "/solve/steps", json={"expression": "integral(1/((x+1)*(x+2)), x)"}
+    )
+    assert partial_fractions.status_code == 200
+    assert "Identificando uma função racional" in [
+        s["title"] for s in partial_fractions.json()["steps"]
+    ]
+
+
+def test_solve_steps_trig_out_of_scope_returns_friendly_400(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "integral(tan(x)**3, x)"})
+    assert response.status_code == 400
+    assert "ainda não foi implementado" in response.json()["detail"]
+
+
+def test_solve_endpoint_unaffected_by_trig_out_of_scope_rejection(client: TestClient) -> None:
+    """`/solve` continua calculando normalmente mesmo quando `/solve/steps`
+    ainda não sabe explicar essa forma trigonométrica — o motor de cálculo
+    nunca foi alterado."""
+    response = client.post("/solve", json={"expression": "integral(tan(x)**3, x)"})
+    assert response.status_code == 200
+
+
 # --- Sprint V2.10.2: integrais definidas -----------------------------------------
 
 

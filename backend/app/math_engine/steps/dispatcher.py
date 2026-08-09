@@ -126,7 +126,21 @@ denominador != 1 (`.as_numer_denom()` devolve `denom=1` pra qualquer
 produto puro), então nunca chegam a esta checagem; `1/(x²+1)` (fator
 irredutível de grau >= 2) e `1/(x+1)²` (um único fator, decomposição
 pedagogicamente vazia) devolvem `None` e caem no fallback amigável
-genérico de `integrals.py`, sem nenhum código de rejeição dedicado."""
+genérico de `integrals.py`, sem nenhum código de rejeição dedicado.
+
+Sprint V2.17 — dentro de uma chamada `integral(expr, var)` INDEFINIDA já
+confirmada, uma QUINTA (e última) decisão é tentada DEPOIS de
+`partial_fractions.find_partial_fractions` e ANTES do fallback para
+`integrals.py`: `trig_integrals.is_trig_power_shape` (sobre a ÁRVORE já
+parseada, nunca regex) escolhe `trig_integrals.py` quando `expr` é
+EXATAMENTE um produto de potências de `sen(x)`/`cos(x)`/`tan(x)` (argumento
+igual à própria variável, nunca composto) pertencente a uma tabela FIXA
+de formas suportadas (`sen²`, `cos²`, `sen³`, `cos³`, `sen²cos²`,
+`sen³cos²`, `sen²cos³`, `tan²`). Estrutural, sem sobreposição: nenhuma das
+formas acima tem denominador != 1 nem casa como `f(g(x))·g'(x)` genuíno
+(`sen(x)²` sozinho falha o teste de coeficiente constante de
+`find_substitution`, confirmado empiricamente), então substituição/partes/
+frações parciais nunca as reivindicam antes desta checagem chegar."""
 from __future__ import annotations
 
 from sympy import degree, expand
@@ -175,6 +189,7 @@ from .partial_fractions import (
 )
 from .quadratic_equations import generate_quadratic_equation_steps
 from .quotient_rule import generate_quotient_rule_steps, is_quotient_shape
+from .trig_integrals import generate_trig_integral_steps, is_trig_power_shape
 from .trigonometric_limits import (
     generate_trigonometric_limit_steps,
     is_trigonometric_fundamental_shape,
@@ -256,6 +271,8 @@ def generate_steps(expression: str) -> list[MathStep]:
             raise ExpressionError(UNSUPPORTED_IMPROPER_RATIONAL_FUNCTION_MESSAGE)
         if find_partial_fractions(expr, symbol) is not None:
             return generate_partial_fraction_steps(normalized)
+        if is_trig_power_shape(expr, symbol):
+            return generate_trig_integral_steps(normalized)
         return generate_integral_steps(normalized)
 
     if is_definite_integral_call(normalized):
