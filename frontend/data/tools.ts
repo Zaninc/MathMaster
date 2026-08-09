@@ -9,8 +9,10 @@ export interface Tool {
 /**
  * "live" só quando a ferramenta realmente funciona hoje — nada de
  * funcionalidade falsa (decisão explícita do briefing). Histórico e
- * Fórmulas são as únicas duas que não dependem de nenhum recurso ainda
- * não construído.
+ * Fórmulas apontam pra suas próprias páginas; "Banco de questões" (Hotfix
+ * — Card funcional em Ferramentas) aponta pra `/aprendizado`, que já É a
+ * fonte única de exercícios do produto — nenhuma página nova de banco de
+ * questões foi criada, o card só passou a linkar pro que já existe.
  */
 export const TOOLS: Tool[] = [
   {
@@ -40,8 +42,8 @@ export const TOOLS: Tool[] = [
   {
     title: "Banco de questões",
     description: "Explore questões organizadas por tópico e dificuldade.",
-    status: "planned",
-    version: "V1.1",
+    status: "live",
+    href: "/aprendizado",
   },
   {
     title: "Revisão rápida",

@@ -21,11 +21,22 @@ describe("TOOLS", () => {
     expect(formulas.status).toBe("live");
   });
 
+  // --- Hotfix: card "Banco de questões" funcional em Ferramentas ------
+
+  it("Banco de questões está disponível e aponta para /aprendizado (fonte única de exercícios, nenhuma página nova)", () => {
+    const bancoDeQuestoes = findTool("Banco de questões");
+    expect(bancoDeQuestoes.status).toBe("live");
+    expect(bancoDeQuestoes.href).toBe("/aprendizado");
+    expect(bancoDeQuestoes.version).toBeUndefined();
+  });
+
   it("ferramentas planejadas continuam sem href", () => {
     const planned = TOOLS.filter((tool) => tool.status === "planned");
     expect(planned.length).toBeGreaterThan(0);
     for (const tool of planned) {
       expect(tool.href).toBeUndefined();
     }
+    // "Banco de questões" não pode mais estar entre os planejados.
+    expect(planned.some((tool) => tool.title === "Banco de questões")).toBe(false);
   });
 });
