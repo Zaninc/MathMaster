@@ -192,6 +192,145 @@ describe("convert — ângulo (forma exata em π priorizada sobre decimal)", () 
   });
 });
 
+describe("convert — dados (Sprint V2.20.1, base decimal, nunca KiB/MiB/GiB)", () => {
+  it("8 bit -> byte = 1", () => {
+    expect(convert("dados", 8, unit("dados", "bit"), unit("dados", "byte"))?.value).toBe(1);
+  });
+
+  it("1 byte -> bit = 8", () => {
+    expect(convert("dados", 1, unit("dados", "byte"), unit("dados", "bit"))?.value).toBe(8);
+  });
+
+  it("1000 byte -> KB = 1", () => {
+    expect(convert("dados", 1000, unit("dados", "byte"), unit("dados", "KB"))?.value).toBe(1);
+  });
+
+  it("1 MB -> byte = 1000000", () => {
+    expect(convert("dados", 1, unit("dados", "MB"), unit("dados", "byte"))?.value).toBe(1_000_000);
+  });
+
+  it("1 GB -> MB = 1000", () => {
+    expect(convert("dados", 1, unit("dados", "GB"), unit("dados", "MB"))?.value).toBe(1000);
+  });
+
+  it("1 TB -> GB = 1000", () => {
+    expect(convert("dados", 1, unit("dados", "TB"), unit("dados", "GB"))?.value).toBe(1000);
+  });
+
+  it("passo a passo bate com o exemplo do ticket (1 GB -> MB)", () => {
+    const outcome = convert("dados", 1, unit("dados", "GB"), unit("dados", "MB"));
+    expect(outcome?.steps).toEqual(["1 GB = 1000 MB", "1 × 1000 = 1000"]);
+  });
+});
+
+describe("convert — energia (Sprint V2.20.1)", () => {
+  it("1 kJ -> J = 1000", () => {
+    expect(convert("energia", 1, unit("energia", "kJ"), unit("energia", "J"))?.value).toBe(1000);
+  });
+
+  it("1 cal -> J = 4.184", () => {
+    expect(convert("energia", 1, unit("energia", "cal"), unit("energia", "J"))?.value).toBe(4.184);
+  });
+
+  it("1 kcal -> J = 4184", () => {
+    expect(convert("energia", 1, unit("energia", "kcal"), unit("energia", "J"))?.value).toBe(4184);
+  });
+
+  it("1 Wh -> J = 3600", () => {
+    expect(convert("energia", 1, unit("energia", "Wh"), unit("energia", "J"))?.value).toBe(3600);
+  });
+
+  it("1 kWh -> Wh = 1000", () => {
+    expect(convert("energia", 1, unit("energia", "kWh"), unit("energia", "Wh"))?.value).toBe(1000);
+  });
+
+  it("passo a passo bate com o exemplo do ticket (1 kcal -> J)", () => {
+    const outcome = convert("energia", 1, unit("energia", "kcal"), unit("energia", "J"));
+    expect(outcome?.steps).toEqual(["1 kcal = 4184 J", "1 × 4184 = 4184"]);
+  });
+});
+
+describe("convert — pressão (Sprint V2.20.1)", () => {
+  it("1 kPa -> Pa = 1000", () => {
+    expect(convert("pressao", 1, unit("pressao", "kPa"), unit("pressao", "Pa"))?.value).toBe(1000);
+  });
+
+  it("1 bar -> Pa = 100000", () => {
+    expect(convert("pressao", 1, unit("pressao", "bar"), unit("pressao", "Pa"))?.value).toBe(100_000);
+  });
+
+  it("1 atm -> Pa = 101325", () => {
+    expect(convert("pressao", 1, unit("pressao", "atm"), unit("pressao", "Pa"))?.value).toBe(101_325);
+  });
+
+  it("1 atm -> kPa = 101.325", () => {
+    expect(convert("pressao", 1, unit("pressao", "atm"), unit("pressao", "kPa"))?.value).toBeCloseTo(101.325, 9);
+  });
+
+  it("1 psi -> Pa ≈ 6894.7573 (sem excesso de casas na exibição)", () => {
+    const outcome = convert("pressao", 1, unit("pressao", "psi"), unit("pressao", "Pa"));
+    expect(outcome?.value).toBeCloseTo(6894.757293168, 6);
+    expect(outcome?.formatted).toBe("6894.76");
+  });
+
+  it("passo a passo bate com o exemplo do ticket (1 atm -> kPa) — resultado exibido em 2 casas (101.33), consistente com formatNumber", () => {
+    const outcome = convert("pressao", 1, unit("pressao", "atm"), unit("pressao", "kPa"));
+    expect(outcome?.steps).toEqual(["1 atm = 101.325 kPa", "1 × 101.325 = 101.33"]);
+    expect(outcome?.value).toBe(101.325);
+  });
+});
+
+describe("convert — potência (Sprint V2.20.1, hp = horsepower mecânico, nunca CV)", () => {
+  it("1 kW -> W = 1000", () => {
+    expect(convert("potencia", 1, unit("potencia", "kW"), unit("potencia", "W"))?.value).toBe(1000);
+  });
+
+  it("1 hp -> W ≈ 745.6999", () => {
+    expect(convert("potencia", 1, unit("potencia", "hp"), unit("potencia", "W"))?.value).toBeCloseTo(745.6999, 4);
+  });
+
+  it("1000 W -> kW = 1", () => {
+    expect(convert("potencia", 1000, unit("potencia", "W"), unit("potencia", "kW"))?.value).toBe(1);
+  });
+});
+
+describe("convert — frequência (Sprint V2.20.1)", () => {
+  it("1000 Hz -> kHz = 1", () => {
+    expect(convert("frequencia", 1000, unit("frequencia", "Hz"), unit("frequencia", "kHz"))?.value).toBe(1);
+  });
+
+  it("1 MHz -> Hz = 1000000", () => {
+    expect(convert("frequencia", 1, unit("frequencia", "MHz"), unit("frequencia", "Hz"))?.value).toBe(1_000_000);
+  });
+
+  it("1 GHz -> MHz = 1000", () => {
+    expect(convert("frequencia", 1, unit("frequencia", "GHz"), unit("frequencia", "MHz"))?.value).toBe(1000);
+  });
+
+  it("2.4 GHz -> MHz = 2400", () => {
+    expect(convert("frequencia", 2.4, unit("frequencia", "GHz"), unit("frequencia", "MHz"))?.value).toBe(2400);
+  });
+
+  it("passo a passo bate com o exemplo do ticket (2.4 GHz -> MHz)", () => {
+    const outcome = convert("frequencia", 2.4, unit("frequencia", "GHz"), unit("frequencia", "MHz"));
+    expect(outcome?.steps).toEqual(["1 GHz = 1000 MHz", "2.4 × 1000 = 2400"]);
+  });
+});
+
+describe("convert — regressão explícita das categorias da V2.20 (matemática intocada)", () => {
+  it("180° -> rad = π", () => {
+    expect(convert("angulo", 180, unit("angulo", "deg"), unit("angulo", "rad"))?.exactLatex).toBe("\\pi");
+  });
+
+  it("0°C -> °F = 32", () => {
+    expect(convert("temperatura", 0, unit("temperatura", "C"), unit("temperatura", "F"))?.value).toBe(32);
+  });
+
+  it("1 km -> m = 1000", () => {
+    expect(convert("comprimento", 1, unit("comprimento", "km"), unit("comprimento", "m"))?.value).toBe(1000);
+  });
+});
+
 describe("convert — casos gerais (0, negativo, decimal, mesma unidade)", () => {
   it("valor 0 nunca quebra (qualquer categoria linear)", () => {
     expect(convert("comprimento", 0, unit("comprimento", "km"), unit("comprimento", "m"))?.value).toBe(0);

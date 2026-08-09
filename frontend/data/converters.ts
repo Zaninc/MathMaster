@@ -14,7 +14,12 @@ export type ConverterCategoryId =
   | "tempo"
   | "temperatura"
   | "velocidade"
-  | "angulo";
+  | "angulo"
+  | "dados"
+  | "energia"
+  | "pressao"
+  | "potencia"
+  | "frequencia";
 
 export interface ConverterUnit {
   /** Identificador estável usado pelas tabelas de conversão — nunca o rótulo (pode mudar de exibição sem quebrar a lógica). */
@@ -31,6 +36,13 @@ export interface ConverterCategory {
   units: ConverterUnit[];
   defaultFromId: string;
   defaultToId: string;
+  /**
+   * Sprint V2.20.1 — nota discreta opcional mostrada abaixo do título da
+   * categoria (ex. a convenção decimal de "Dados", pra nunca deixar
+   * KB/MB/GB parecendo KiB/MiB/GiB por ambiguidade silenciosa). Ausente
+   * em toda categoria que não precisa dessa ressalva.
+   */
+  note?: string;
 }
 
 /**
@@ -142,6 +154,71 @@ export const CONVERTER_CATEGORIES: ConverterCategory[] = [
     units: [
       { id: "deg", label: "graus", name: "Grau" },
       { id: "rad", label: "radianos", name: "Radiano" },
+    ],
+  },
+  {
+    id: "dados",
+    label: "Dados",
+    defaultFromId: "MB",
+    defaultToId: "byte",
+    note: "KB/MB/GB usam base decimal (1000), nunca KiB/MiB/GiB (base 1024).",
+    units: [
+      { id: "bit", label: "bit", name: "Bit" },
+      { id: "byte", label: "byte", name: "Byte (1 byte = 8 bits)" },
+      { id: "KB", label: "KB", name: "Kilobyte" },
+      { id: "MB", label: "MB", name: "Megabyte" },
+      { id: "GB", label: "GB", name: "Gigabyte" },
+      { id: "TB", label: "TB", name: "Terabyte" },
+    ],
+  },
+  {
+    id: "energia",
+    label: "Energia",
+    defaultFromId: "kcal",
+    defaultToId: "J",
+    units: [
+      { id: "J", label: "J", name: "Joule" },
+      { id: "kJ", label: "kJ", name: "Quilojoule" },
+      { id: "cal", label: "cal", name: "Caloria" },
+      { id: "kcal", label: "kcal", name: "Quilocaloria" },
+      { id: "Wh", label: "Wh", name: "Watt-hora" },
+      { id: "kWh", label: "kWh", name: "Quilowatt-hora" },
+    ],
+  },
+  {
+    id: "pressao",
+    label: "Pressão",
+    defaultFromId: "atm",
+    defaultToId: "kPa",
+    units: [
+      { id: "Pa", label: "Pa", name: "Pascal" },
+      { id: "kPa", label: "kPa", name: "Quilopascal" },
+      { id: "bar", label: "bar", name: "Bar" },
+      { id: "atm", label: "atm", name: "Atmosfera" },
+      { id: "psi", label: "psi", name: "Libra por polegada quadrada" },
+    ],
+  },
+  {
+    id: "potencia",
+    label: "Potência",
+    defaultFromId: "hp",
+    defaultToId: "W",
+    units: [
+      { id: "W", label: "W", name: "Watt" },
+      { id: "kW", label: "kW", name: "Quilowatt" },
+      { id: "hp", label: "hp", name: "Cavalo-vapor mecânico (horsepower)" },
+    ],
+  },
+  {
+    id: "frequencia",
+    label: "Frequência",
+    defaultFromId: "GHz",
+    defaultToId: "MHz",
+    units: [
+      { id: "Hz", label: "Hz", name: "Hertz" },
+      { id: "kHz", label: "kHz", name: "Quilohertz" },
+      { id: "MHz", label: "MHz", name: "Megahertz" },
+      { id: "GHz", label: "GHz", name: "Gigahertz" },
     ],
   },
 ];

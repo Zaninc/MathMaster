@@ -124,7 +124,7 @@ describe("ConvertersWorkspace", () => {
     expect(screen.queryByText("NaN")).not.toBeInTheDocument();
   });
 
-  it("todas as 8 categorias do ticket estão presentes, na ordem esperada", () => {
+  it("todas as 13 categorias (8 da V2.20 + 5 da V2.20.1) estão presentes, na ordem esperada", () => {
     render(<ConvertersWorkspace />);
     const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent);
     expect(tabs).toEqual([
@@ -136,6 +136,11 @@ describe("ConvertersWorkspace", () => {
       "Temperatura",
       "Velocidade",
       "Ângulo",
+      "Dados",
+      "Energia",
+      "Pressão",
+      "Potência",
+      "Frequência",
     ]);
   });
 
@@ -153,5 +158,91 @@ describe("ConvertersWorkspace", () => {
 
   it("nenhuma categoria de Conversores vaza para a navbar global (data/nav.ts continua intocado)", () => {
     expect(NAV_ITEMS.some((item) => item.label.toLowerCase().includes("conversor"))).toBe(false);
+  });
+
+  // --- Sprint V2.20.1: 5 novas categorias, mesma arquitetura ------------
+
+  it("Dados mostra a nota de convenção decimal (KB/MB/GB, nunca KiB/MiB/GiB)", () => {
+    render(<ConvertersWorkspace />);
+    fireEvent.click(screen.getByRole("tab", { name: "Dados" }));
+
+    expect(
+      screen.getByText("KB/MB/GB usam base decimal (1000), nunca KiB/MiB/GiB (base 1024).")
+    ).toBeInTheDocument();
+  });
+
+  it("Energia: 1 kcal -> J mostra a explicação correta (1 kcal = 4184 J)", () => {
+    render(<ConvertersWorkspace />);
+    fireEvent.click(screen.getByRole("tab", { name: "Energia" }));
+    fireEvent.change(fromSelect(), { target: { value: "kcal" } });
+    fireEvent.change(toSelect(), { target: { value: "J" } });
+    fireEvent.change(valueInput(), { target: { value: "1" } });
+
+    expect(screen.getByText("1 kcal = 4184 J")).toBeInTheDocument();
+    expect(screen.getByText("1 × 4184 = 4184")).toBeInTheDocument();
+  });
+
+  it("Pressão: 1 atm -> kPa mostra a explicação correta (valor exato, nunca arredondado por engano) e o Resultado nunca com casas excessivas", () => {
+    render(<ConvertersWorkspace />);
+    fireEvent.click(screen.getByRole("tab", { name: "Pressão" }));
+    fireEvent.change(fromSelect(), { target: { value: "atm" } });
+    fireEvent.change(toSelect(), { target: { value: "kPa" } });
+    fireEvent.change(valueInput(), { target: { value: "1" } });
+
+    expect(screen.getByText("1 atm = 101.325 kPa")).toBeInTheDocument();
+    // O "Resultado" (não a explicação, que mostra o fator exato de
+    // propósito) sempre passa por `formatNumber` — nunca mais de 2 casas.
+    expect(screen.getByText("101.33")).toBeInTheDocument();
+  });
+
+  it("Potência: hp é o mecânico (1 hp ≈ 745.69987 W, fator arredondado com '≈' pois não é exato em 8 algarismos)", () => {
+    render(<ConvertersWorkspace />);
+    fireEvent.click(screen.getByRole("tab", { name: "Potência" }));
+
+    expect(fromSelect().value).toBe("hp");
+    expect(toSelect().value).toBe("W");
+    expect(screen.getByText("1 hp ≈ 745.69987 W")).toBeInTheDocument();
+    expect(screen.getByText("745.7")).toBeInTheDocument(); // Resultado, via formatNumber (2 casas, sem zero à direita)
+  });
+
+  it("Frequência: 2.4 GHz -> MHz = 2400, sem zero à direita no fator (2.4, não 2.40)", () => {
+    render(<ConvertersWorkspace />);
+    fireEvent.click(screen.getByRole("tab", { name: "Frequência" }));
+    fireEvent.change(fromSelect(), { target: { value: "GHz" } });
+    fireEvent.change(toSelect(), { target: { value: "MHz" } });
+    fireEvent.change(valueInput(), { target: { value: "2.4" } });
+
+    expect(screen.getByText("2.4 × 1000 = 2400")).toBeInTheDocument();
+  });
+
+  it("troca de uma categoria antiga (Comprimento) para uma nova (Dados) funciona sem quebrar", () => {
+    render(<ConvertersWorkspace />);
+    fireEvent.click(screen.getByRole("tab", { name: "Dados" }));
+    expect(screen.getByRole("heading", { name: "Dados" })).toBeInTheDocument();
+    expect(fromSelect().value).toBe("MB");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Comprimento" }));
+    expect(screen.getByRole("heading", { name: "Comprimento" })).toBeInTheDocument();
+    expect(fromSelect().value).toBe("km");
+  });
+
+  it("categorias antigas continuam corretas depois de visitar as novas (180° -> rad = π)", () => {
+    render(<ConvertersWorkspace />);
+    fireEvent.click(screen.getByRole("tab", { name: "Frequência" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Ângulo" }));
+    fireEvent.change(valueInput(), { target: { value: "180" } });
+
+    expect(screen.getByText("180 × π/180")).toBeInTheDocument();
+    expect(document.querySelector(".katex")).not.toBeNull();
+  });
+
+  it("o último passo de 'Como foi convertido' ganha destaque visual (mais forte que os anteriores)", () => {
+    render(<ConvertersWorkspace />);
+    fireEvent.change(valueInput(), { target: { value: "5" } });
+
+    const lastStep = screen.getByText("5 × 1000 = 5000");
+    const firstStep = screen.getByText("1 km = 1000 m");
+    expect(lastStep.className).toContain("text-text-primary");
+    expect(firstStep.className).toContain("text-text-secondary");
   });
 });

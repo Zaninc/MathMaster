@@ -99,7 +99,10 @@ export function ConvertersWorkspace() {
         </div>
 
         <div className="flex flex-col gap-6 rounded-lg border border-border bg-surface p-4 sm:p-6">
-          <h2 className="text-lg font-semibold text-text-primary">{category.label}</h2>
+          <div className="flex flex-col gap-1">
+            <h2 className="text-lg font-semibold text-text-primary">{category.label}</h2>
+            {category.note !== undefined && <p className="text-xs text-text-muted">{category.note}</p>}
+          </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <label className="flex flex-1 flex-col gap-1 text-xs text-text-muted">
@@ -167,12 +170,39 @@ export function ConvertersWorkspace() {
           </div>
 
           {outcome !== null && (
-            <section aria-label="Como foi convertido" className="flex flex-col gap-1">
+            <section
+              aria-label="Como foi convertido"
+              className="rounded-md border border-border bg-surface px-4 py-3"
+            >
               <h3 className="text-xs font-medium text-text-secondary">Como foi convertido</h3>
-              <div className="flex flex-col gap-0.5 text-sm text-text-secondary">
-                {outcome.steps.map((step, index) => (
-                  <p key={index}>{step}</p>
-                ))}
+              <div className="mt-1.5 flex flex-col gap-1">
+                {outcome.steps.map((step, index) => {
+                  // Sprint V2.20.1 — o ÚLTIMO passo é sempre o resultado
+                  // da conta ("= X"); quando existe uma forma exata em
+                  // LaTeX (hoje só ângulo), ele ganha mais destaque
+                  // (cor/tamanho + o próprio pipeline KaTeX) do que os
+                  // passos de preparação acima — "a matemática deve ter
+                  // mais destaque que o texto". Os outros passos
+                  // continuam texto simples — nunca um segundo resultado
+                  // principal competindo com o card "Resultado" acima.
+                  const isLastStep = index === outcome.steps.length - 1;
+                  if (isLastStep && outcome.exactLatex !== null && step.startsWith("= ")) {
+                    return (
+                      <p key={index} className="flex items-baseline gap-1.5 text-sm text-text-primary">
+                        <span className="text-text-secondary">=</span>
+                        <MathFormula formula={outcome.exactLatex} />
+                      </p>
+                    );
+                  }
+                  return (
+                    <p
+                      key={index}
+                      className={cn("text-sm", isLastStep ? "font-medium text-text-primary" : "text-text-secondary")}
+                    >
+                      {step}
+                    </p>
+                  );
+                })}
               </div>
             </section>
           )}

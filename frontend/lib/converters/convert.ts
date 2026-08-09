@@ -8,15 +8,18 @@ import type { ConverterCategoryId, ConverterUnit } from "@/data/converters";
  * entrada fora do escopo desta versão (unidade desconhecida) devolve
  * `null`, o mesmo contrato de `find_*`/`compute_*` no backend.
  *
- * Categorias LINEARES (comprimento/massa/área/volume/tempo/velocidade)
- * passam por uma ÚNICA unidade-base por categoria (metros/gramas/m²/
- * litros/segundos/m por segundo) — `LINEAR_FACTORS[categoria][unidade]`
- * é "quantos <base> tem 1 <unidade>". A conversão de QUALQUER par nunca
- * precisa de uma tabela NxN manual: `fator = de.factor / para.factor`
- * (quantos "para" tem 1 "de"), sempre passando implicitamente pela base.
- * Temperatura é exceção deliberada (tem offset, não é multiplicativa) —
- * usa fórmulas dedicadas por par ordenado. Ângulo também é especial:
- * grau->radiano tenta preservar π como fração exata (`Bx+C`-style, ver
+ * Categorias LINEARES (comprimento/massa/área/volume/tempo/velocidade/
+ * dados/energia/pressão/potência/frequência — Sprint V2.20.1 adicionou
+ * as últimas 5 na MESMA tabela, zero função nova) passam por uma ÚNICA
+ * unidade-base por categoria (metros/gramas/m²/litros/segundos/m por
+ * segundo/bits/joules/pascais/watts/hertz) —
+ * `LINEAR_FACTORS[categoria][unidade]` é "quantos <base> tem 1
+ * <unidade>". A conversão de QUALQUER par nunca precisa de uma tabela
+ * NxN manual: `fator = de.factor / para.factor` (quantos "para" tem 1
+ * "de"), sempre passando implicitamente pela base. Temperatura é
+ * exceção deliberada (tem offset, não é multiplicativa) — usa fórmulas
+ * dedicadas por par ordenado. Ângulo também é especial: grau->radiano
+ * tenta preservar π como fração exata (`Bx+C`-style, ver
  * `exactRadiansFraction`) antes de cair pro decimal.
  *
  * Ruído de ponto flutuante: o FATOR par-a-par (`1 <de> = X <para>`) é
@@ -60,6 +63,26 @@ const LINEAR_FACTORS: Record<LinearCategoryId, Record<string, number>> = {
   tempo: { ms: 0.001, s: 1, min: 60, h: 3600, dia: 86400 },
   // base: metro por segundo. "nó" = milha náutica (1852 m) por hora.
   velocidade: { ms: 1, kmh: 1000 / 3600, mph: 1609.344 / 3600, kn: 1852 / 3600 },
+  // Sprint V2.20.1 — base: bit. 1 byte = 8 bits (definição explícita do
+  // ticket). KB/MB/GB/TB em base DECIMAL (SI, ×1000) — nunca KiB/MiB/GiB
+  // (base 1024, fora de escopo desta versão, documentado também na UI
+  // via `ConverterCategory.note`, pra nunca ficar ambíguo pro usuário).
+  dados: { bit: 1, byte: 8, KB: 8000, MB: 8_000_000, GB: 8_000_000_000, TB: 8_000_000_000_000 },
+  // base: joule. 1 cal = 4.184 J (caloria termoquímica, a convenção mais
+  // comum) — 1 kcal/1 Wh/1 kWh derivados dela e de 3600 s/h, nunca
+  // redigitados como constantes independentes.
+  energia: { J: 1, kJ: 1000, cal: 4.184, kcal: 4184, Wh: 3600, kWh: 3_600_000 },
+  // base: pascal. 1 psi = 6894.757293168 Pa (definição exata do ticket,
+  // derivada de 1 psi = 1 lbf/in² com lbf em newtons — reproduzida aqui
+  // como constante, nunca recalculada a partir de massa/comprimento).
+  pressao: { Pa: 1, kPa: 1000, bar: 100_000, atm: 101_325, psi: 6894.757293168 },
+  // base: watt. "hp" aqui é SEMPRE o horsepower MECÂNICO (745.6998715822702 W)
+  // — nunca confundido com CV (735.49875 W, métrico) nem com hp elétrico/
+  // caldeira; se um desses for necessário no futuro, entra como unidade
+  // PRÓPRIA (ex. "cv"), nunca reaproveitando o id "hp".
+  potencia: { W: 1, kW: 1000, hp: 745.6998715822702 },
+  // base: hertz.
+  frequencia: { Hz: 1, kHz: 1000, MHz: 1_000_000, GHz: 1_000_000_000 },
 };
 
 /**
