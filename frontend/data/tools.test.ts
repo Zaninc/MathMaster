@@ -30,13 +30,23 @@ describe("TOOLS", () => {
     expect(bancoDeQuestoes.version).toBeUndefined();
   });
 
+  // --- Sprint V2.20: card "Conversores" funcional em Ferramentas -------
+
+  it("Conversores está disponível e aponta para /ferramentas/conversores", () => {
+    const conversores = findTool("Conversores");
+    expect(conversores.status).toBe("live");
+    expect(conversores.href).toBe("/ferramentas/conversores");
+    expect(conversores.version).toBeUndefined();
+  });
+
   it("ferramentas planejadas continuam sem href", () => {
     const planned = TOOLS.filter((tool) => tool.status === "planned");
     expect(planned.length).toBeGreaterThan(0);
     for (const tool of planned) {
       expect(tool.href).toBeUndefined();
     }
-    // "Banco de questões" não pode mais estar entre os planejados.
+    // "Banco de questões"/"Conversores" não podem mais estar entre os planejados.
     expect(planned.some((tool) => tool.title === "Banco de questões")).toBe(false);
+    expect(planned.some((tool) => tool.title === "Conversores")).toBe(false);
   });
 });

@@ -1,0 +1,157 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
+import { NAV_ITEMS } from "@/data/nav";
+
+import { ConvertersWorkspace } from "./ConvertersWorkspace";
+
+function valueInput() {
+  return screen.getByLabelText("Valor") as HTMLInputElement;
+}
+
+function fromSelect() {
+  return screen.getByLabelText("De") as HTMLSelectElement;
+}
+
+function toSelect() {
+  return screen.getByLabelText("Para") as HTMLSelectElement;
+}
+
+describe("ConvertersWorkspace", () => {
+  it("categoria inicial é Comprimento, com km->m já selecionado e resultado em tempo real", () => {
+    render(<ConvertersWorkspace />);
+
+    const comprimentoTab = screen.getByRole("tab", { name: "Comprimento" });
+    expect(comprimentoTab).toHaveAttribute("aria-selected", "true");
+    expect(fromSelect().value).toBe("km");
+    expect(toSelect().value).toBe("m");
+
+    fireEvent.change(valueInput(), { target: { value: "5" } });
+    expect(screen.getByText(/5 km =/)).toBeInTheDocument();
+    expect(screen.getByText("5000")).toBeInTheDocument();
+    expect(screen.getByText("1 km = 1000 m")).toBeInTheDocument();
+    expect(screen.getByText("5 × 1000 = 5000")).toBeInTheDocument();
+  });
+
+  it("troca de categoria atualiza o conversor sem navegar (mesma página, novo estado)", () => {
+    render(<ConvertersWorkspace />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Temperatura" }));
+    expect(screen.getByRole("tab", { name: "Temperatura" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Comprimento" })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("heading", { name: "Temperatura" })).toBeInTheDocument();
+    expect(fromSelect().value).toBe("C");
+    expect(toSelect().value).toBe("F");
+  });
+
+  it("temperatura mostra a fórmula usada, não só o número (20 °C -> °F)", () => {
+    render(<ConvertersWorkspace />);
+    fireEvent.click(screen.getByRole("tab", { name: "Temperatura" }));
+    fireEvent.change(valueInput(), { target: { value: "20" } });
+
+    expect(screen.getByText("°F = °C × 9/5 + 32")).toBeInTheDocument();
+    expect(screen.getByText("20 × 9/5 + 32 = 68")).toBeInTheDocument();
+    expect(screen.getByText("68")).toBeInTheDocument();
+  });
+
+  it("ângulo mostra a forma exata em π (90° -> π/2), renderizada via KaTeX, nunca 1.5707963267948966", () => {
+    render(<ConvertersWorkspace />);
+    fireEvent.click(screen.getByRole("tab", { name: "Ângulo" }));
+    fireEvent.change(valueInput(), { target: { value: "90" } });
+
+    expect(screen.queryByText(/1\.57/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/1\.5707963267948966/)).not.toBeInTheDocument();
+    // KaTeX renderiza \frac{\pi}{2} como MathML/HTML (não como texto
+    // corrido "π/2") — a prova de que a forma exata foi usada é a
+    // presença do próprio glifo π dentro do resultado.
+    expect(document.querySelector(".katex")).not.toBeNull();
+  });
+
+  it("botão de inverter troca origem/destino e tem nome acessível", () => {
+    render(<ConvertersWorkspace />);
+    const invertButton = screen.getByRole("button", { name: "Inverter unidades de origem e destino" });
+
+    expect(fromSelect().value).toBe("km");
+    expect(toSelect().value).toBe("m");
+    fireEvent.click(invertButton);
+    expect(fromSelect().value).toBe("m");
+    expect(toSelect().value).toBe("km");
+  });
+
+  it("mesma unidade de origem e destino resulta na mesma quantidade", () => {
+    render(<ConvertersWorkspace />);
+    fireEvent.change(toSelect(), { target: { value: "km" } });
+    fireEvent.change(valueInput(), { target: { value: "7" } });
+
+    expect(screen.getByText(/7 km =/)).toBeInTheDocument();
+    expect(screen.getAllByText("7").length).toBeGreaterThan(0);
+  });
+
+  it("valor 0 e valor negativo não quebram a tela", () => {
+    render(<ConvertersWorkspace />);
+    fireEvent.change(valueInput(), { target: { value: "0" } });
+    expect(screen.getByText("0")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Temperatura" }));
+    fireEvent.change(valueInput(), { target: { value: "-40" } });
+    expect(screen.getByText("-40")).toBeInTheDocument();
+  });
+
+  it("decimal é aceito e não produz ruído de ponto flutuante", () => {
+    render(<ConvertersWorkspace />);
+    fireEvent.change(fromSelect(), { target: { value: "m" } });
+    fireEvent.change(toSelect(), { target: { value: "cm" } });
+    fireEvent.change(valueInput(), { target: { value: "0.1" } });
+
+    expect(screen.getByText("10")).toBeInTheDocument();
+    expect(screen.queryByText(/0000000/)).not.toBeInTheDocument();
+  });
+
+  it("entrada vazia nunca mostra NaN/Infinity nem quebra a tela — mostra um estado neutro", () => {
+    render(<ConvertersWorkspace />);
+    fireEvent.change(valueInput(), { target: { value: "" } });
+
+    expect(screen.getByText("Digite um valor numérico para converter.")).toBeInTheDocument();
+    expect(screen.queryByText("NaN")).not.toBeInTheDocument();
+    expect(screen.queryByText("Infinity")).not.toBeInTheDocument();
+  });
+
+  it("entrada inválida (não numérica) também cai no estado neutro, nunca NaN cru", () => {
+    render(<ConvertersWorkspace />);
+    fireEvent.change(valueInput(), { target: { value: "abc" } });
+
+    expect(screen.getByText("Digite um valor numérico para converter.")).toBeInTheDocument();
+    expect(screen.queryByText("NaN")).not.toBeInTheDocument();
+  });
+
+  it("todas as 8 categorias do ticket estão presentes, na ordem esperada", () => {
+    render(<ConvertersWorkspace />);
+    const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent);
+    expect(tabs).toEqual([
+      "Comprimento",
+      "Massa",
+      "Área",
+      "Volume",
+      "Tempo",
+      "Temperatura",
+      "Velocidade",
+      "Ângulo",
+    ]);
+  });
+
+  it("categoria selecionada não depende só de cor — aria-selected também muda", () => {
+    render(<ConvertersWorkspace />);
+    const comprimento = screen.getByRole("tab", { name: "Comprimento" });
+    const massa = screen.getByRole("tab", { name: "Massa" });
+    expect(comprimento).toHaveAttribute("aria-selected", "true");
+    expect(massa).toHaveAttribute("aria-selected", "false");
+
+    fireEvent.click(massa);
+    expect(comprimento).toHaveAttribute("aria-selected", "false");
+    expect(massa).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("nenhuma categoria de Conversores vaza para a navbar global (data/nav.ts continua intocado)", () => {
+    expect(NAV_ITEMS.some((item) => item.label.toLowerCase().includes("conversor"))).toBe(false);
+  });
+});

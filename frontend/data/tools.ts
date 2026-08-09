@@ -13,6 +13,11 @@ export interface Tool {
  * — Card funcional em Ferramentas) aponta pra `/aprendizado`, que já É a
  * fonte única de exercícios do produto — nenhuma página nova de banco de
  * questões foi criada, o card só passou a linkar pro que já existe.
+ * "Conversores" (Sprint V2.20) ganhou página própria (`/ferramentas/
+ * conversores`) — descrição atualizada de "Unidades, bases numéricas e
+ * notações matemáticas" (a versão "planejada") pra refletir só o que
+ * esta versão realmente entrega (conversão de unidades); bases numéricas
+ * e notações matemáticas continuam fora de escopo, não prometidas mais.
  */
 export const TOOLS: Tool[] = [
   {
@@ -65,8 +70,8 @@ export const TOOLS: Tool[] = [
   },
   {
     title: "Conversores",
-    description: "Unidades, bases numéricas e notações matemáticas.",
-    status: "planned",
-    version: "V1.5",
+    description: "Converta unidades e veja como o cálculo é feito.",
+    status: "live",
+    href: "/ferramentas/conversores",
   },
 ];

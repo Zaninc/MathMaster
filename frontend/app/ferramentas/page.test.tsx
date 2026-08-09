@@ -45,4 +45,34 @@ describe("FerramentasPage", () => {
     }
     expect(screen.getAllByText(/^Planejado/).length).toBeGreaterThan(0);
   });
+
+  // --- Sprint V2.20: card "Conversores" funcional em Ferramentas -------
+
+  it("Conversores aparece como card disponível, sem badge de planejado, com link para /ferramentas/conversores", () => {
+    render(<FerramentasPage />);
+
+    const heading = screen.getByRole("heading", { name: "Conversores" });
+    const card = heading.closest("a");
+    expect(card).not.toBeNull();
+    expect(card).toHaveAttribute("href", "/ferramentas/conversores");
+    expect(card).not.toHaveTextContent("Planejado");
+    expect(card).toHaveTextContent("Disponível");
+  });
+
+  it("Conversores segue o mesmo padrão visual dos demais cards disponíveis", () => {
+    render(<FerramentasPage />);
+
+    const historico = screen.getByRole("link", { name: /histórico/i });
+    const conversores = screen.getByRole("link", { name: /conversores/i });
+    expect(conversores.className).toBe(historico.className);
+  });
+
+  it("nenhuma nova opção aparece na navbar global por causa de Conversores", () => {
+    render(<FerramentasPage />);
+    // A navbar não é renderizada dentro de FerramentasPage (vive em
+    // app/layout.tsx) — confirma só que a página em si não introduz um
+    // link "Conversores" fora do card (ex. um atalho solto no topo).
+    const conversoresLinks = screen.getAllByRole("link", { name: /conversores/i });
+    expect(conversoresLinks).toHaveLength(1);
+  });
 });
