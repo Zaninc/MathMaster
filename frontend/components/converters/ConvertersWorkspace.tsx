@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { PageShell } from "@/components/layout/PageShell";
+import { FadeIn } from "@/components/shared/FadeIn";
 import { MathFormula } from "@/components/shared/MathFormula";
 import { CONVERTER_CATEGORIES, type ConverterCategoryId } from "@/data/converters";
 import { convert } from "@/lib/converters/convert";
@@ -28,6 +29,19 @@ const FIELD_CLASSES =
  * resultado + explicação) é sempre a MESMA estrutura, parametrizada pela
  * categoria ativa; toda a matemática específica de cada categoria vive
  * em `lib/converters/convert.ts` (puro, sem depender deste componente).
+ *
+ * Hotfix V2.20.2 (transição entre categorias) — o painel principal
+ * (`FadeIn`, já usado pra resultado de Calculadora/Geometria/gráficos)
+ * é montado com `key={categoryId}`: React desmonta e remonta só esse
+ * `<div>` quando a categoria muda, reproduzindo a animação de entrada de
+ * `FadeIn` (opacity 0→1 + translateY 4px→0, ~200ms, `--motion-easing`) —
+ * NUNCA quando só `value`/`fromId`/`toId` mudam (nenhum dos três entra
+ * na `key`), então digitar um valor, trocar De/Para ou inverter nunca
+ * disparam a transição. `prefers-reduced-motion` já vem de graça do
+ * atributo `data-motion-reveal` compartilhado (`globals.css`). A sidebar
+ * (`role="tablist"`, fora do `FadeIn`) nunca remonta — permanece 100%
+ * estável. `opacity`/`transform` nunca disparam reflow — zero layout
+ * shift por construção.
  */
 export function ConvertersWorkspace() {
   const [categoryId, setCategoryId] = useState<ConverterCategoryId>(CONVERTER_CATEGORIES[0].id);
@@ -98,7 +112,10 @@ export function ConvertersWorkspace() {
           ))}
         </div>
 
-        <div className="flex flex-col gap-6 rounded-lg border border-border bg-surface p-4 sm:p-6">
+        <FadeIn
+          key={categoryId}
+          className="flex flex-col gap-6 rounded-lg border border-border bg-surface p-4 sm:p-6"
+        >
           <div className="flex flex-col gap-1">
             <h2 className="text-lg font-semibold text-text-primary">{category.label}</h2>
             {category.note !== undefined && <p className="text-xs text-text-muted">{category.note}</p>}
@@ -206,7 +223,7 @@ export function ConvertersWorkspace() {
               </div>
             </section>
           )}
-        </div>
+        </FadeIn>
       </div>
     </PageShell>
   );

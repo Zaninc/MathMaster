@@ -245,4 +245,80 @@ describe("ConvertersWorkspace", () => {
     expect(lastStep.className).toContain("text-text-primary");
     expect(firstStep.className).toContain("text-text-secondary");
   });
+
+  // --- Hotfix V2.20.2: transição entre categorias -----------------------
+
+  it("trocar de categoria remonta (anima) só o painel principal — a sidebar permanece o MESMO nó do DOM", () => {
+    const { container } = render(<ConvertersWorkspace />);
+    const tablistBefore = screen.getByRole("tablist");
+    const panelBefore = container.querySelector("[data-motion-reveal]");
+    expect(panelBefore).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Massa" }));
+
+    expect(screen.getByRole("tablist")).toBe(tablistBefore);
+    expect(container.querySelector("[data-motion-reveal]")).not.toBe(panelBefore);
+  });
+
+  it("digitar um valor NÃO remonta/anima o painel", () => {
+    const { container } = render(<ConvertersWorkspace />);
+    const panelBefore = container.querySelector("[data-motion-reveal]");
+
+    fireEvent.change(valueInput(), { target: { value: "42" } });
+
+    expect(container.querySelector("[data-motion-reveal]")).toBe(panelBefore);
+  });
+
+  it("trocar só 'De' NÃO remonta/anima o painel", () => {
+    const { container } = render(<ConvertersWorkspace />);
+    const panelBefore = container.querySelector("[data-motion-reveal]");
+
+    fireEvent.change(fromSelect(), { target: { value: "m" } });
+
+    expect(container.querySelector("[data-motion-reveal]")).toBe(panelBefore);
+  });
+
+  it("trocar só 'Para' NÃO remonta/anima o painel", () => {
+    const { container } = render(<ConvertersWorkspace />);
+    const panelBefore = container.querySelector("[data-motion-reveal]");
+
+    fireEvent.change(toSelect(), { target: { value: "cm" } });
+
+    expect(container.querySelector("[data-motion-reveal]")).toBe(panelBefore);
+  });
+
+  it("botão de inverter NÃO remonta/anima o painel", () => {
+    const { container } = render(<ConvertersWorkspace />);
+    const panelBefore = container.querySelector("[data-motion-reveal]");
+
+    fireEvent.click(screen.getByRole("button", { name: "Inverter unidades de origem e destino" }));
+
+    expect(container.querySelector("[data-motion-reveal]")).toBe(panelBefore);
+  });
+
+  it("percorrendo várias trocas de categoria (incl. antiga->nova e nova->nova), o painel sempre remonta e a sidebar nunca muda", () => {
+    const { container } = render(<ConvertersWorkspace />);
+    const tablist = screen.getByRole("tablist");
+    const sequence = ["Massa", "Ângulo", "Dados", "Energia", "Pressão", "Potência", "Frequência"];
+
+    let previousPanel = container.querySelector("[data-motion-reveal]");
+    for (const label of sequence) {
+      fireEvent.click(screen.getByRole("tab", { name: label }));
+      const currentPanel = container.querySelector("[data-motion-reveal]");
+      expect(currentPanel, label).not.toBe(previousPanel);
+      expect(screen.getByRole("tablist")).toBe(tablist);
+      previousPanel = currentPanel;
+    }
+  });
+
+  it("o painel principal usa o atributo compartilhado de reduced-motion (data-motion-reveal), reaproveitando o suporte já existente", () => {
+    const { container } = render(<ConvertersWorkspace />);
+    expect(container.querySelector("[data-motion-reveal]")).not.toBeNull();
+  });
+
+  it("a transição usa opacity+transform (nunca propriedades que causam layout shift)", () => {
+    const { container } = render(<ConvertersWorkspace />);
+    const panel = container.querySelector("[data-motion-reveal]");
+    expect(panel?.className).toContain("transition-[opacity,transform]");
+  });
 });
