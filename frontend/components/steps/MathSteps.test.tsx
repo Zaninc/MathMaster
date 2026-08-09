@@ -2416,11 +2416,14 @@ describe("MathSteps — compatibilidade com passos de frações parciais (Sprint
  * Sprint V2.18 (Passo a Passo — Divisão Polinomial + Frações Parciais
  * Avançadas) — ZERO componente novo e ZERO mudança em `to-latex.ts`:
  * confirmado por debug-render antes de escrever este arquivo que
- * "x**2 + 1=(x + 1)*(x - 1)+2" (identidade de divisão), "A/(x + 1) +
- * (B*x + C)/(x**2 + 1)" (ansatz quadrático) e "atan(x) + C" (mathjs
- * renderiza como `\tan^{-1}\left(x\right)`, o padrão default, sem
- * exceção pontual de símbolo) já passam pelo MESMO pipeline
- * `valueToLatex` usado desde a V2.9.
+ * "x**2 + 1=(x + 1)*(x - 1)+2" (identidade de divisão) e "A/(x + 1) +
+ * (B*x + C)/(x**2 + 1)" (ansatz quadrático) já passam pelo MESMO
+ * pipeline `valueToLatex` usado desde a V2.9. "atan(x) + C" renderizava
+ * como `\tan^{-1}\left(x\right)` (padrão default do mathjs) até o
+ * Hotfix V2.19, que passou a converter `asin`/`acos`/`atan` pra
+ * `\operatorname{arcsin}`/`\operatorname{arccos}`/`\operatorname{arctan}`
+ * (evita a ambiguidade visual com `1/sin(x)`) — asserções abaixo já
+ * atualizadas pra essa notação.
  */
 describe("MathSteps — compatibilidade com passos de divisão polinomial e frações parciais avançadas (Sprint V2.18)", () => {
   beforeEach(() => {
@@ -2545,7 +2548,7 @@ describe("MathSteps — compatibilidade com passos de divisão polinomial e fra�
       annotations.some(
         (latex) =>
           latex ===
-          "\\frac{\\ln\\left(x+1\\right)}{2}-\\frac{\\ln\\left({x}^{2}+1\\right)}{4}+\\frac{\\tan^{-1}\\left(x\\right)}{2}+C"
+          "\\frac{\\ln\\left(x+1\\right)}{2}-\\frac{\\ln\\left({x}^{2}+1\\right)}{4}+\\frac{\\operatorname{arctan}\\left(x\\right)}{2}+C"
       )
     ).toBe(true);
     expect(annotations.some((latex) => latex?.includes("\\mathrm{A}"))).toBe(false);
@@ -2904,17 +2907,22 @@ describe("MathSteps — compatibilidade com passos de integrais trigonométricas
 /**
  * Sprint V2.19 (Passo a Passo — Substituição Trigonométrica) — ZERO
  * componente novo (`MathSteps`/`MathStepItem`/`MixedMathText` intocados).
- * ÚNICA mudança de frontend: "theta" (usado como LADO INTEIRO de uma
- * equação no passo "Voltando para x", ex. "theta=asin(x/3)") precisou da
- * MESMA exceção pontual ao guard `BARE_WORD` que "Delta" já tinha desde a
- * V2.9.1 (`NAMED_SYMBOL_LATEX` em `to-latex.ts`) — confirmado por
- * debug-render ANTES do código que, sem essa entrada, "theta" sozinho
- * (ou como lado esquerdo de uma equação) devolvia `null` e quebrava a
- * renderização do passo inteiro. Todas as outras 56 strings novas (θ
- * embutido em sen/cos/tan/sec, identidades, `atan/asin` como
- * `\sin^{-1}`/`\tan^{-1}`, "dtheta" como diferencial — mesma convenção já
- * aceita para "du"/"dx" desde a V2.14) já passam pelo pipeline
- * `valueToLatex` existente, confirmado por debug-render.
+ * "theta" (usado como LADO INTEIRO de uma equação no passo "Voltando
+ * para x", ex. "theta=asin(x/3)") precisou da MESMA exceção pontual ao
+ * guard `BARE_WORD` que "Delta" já tinha desde a V2.9.1
+ * (`NAMED_SYMBOL_LATEX` em `to-latex.ts`) — confirmado por debug-render
+ * ANTES do código que, sem essa entrada, "theta" sozinho (ou como lado
+ * esquerdo de uma equação) devolvia `null` e quebrava a renderização do
+ * passo inteiro. Todas as outras strings novas (θ embutido em
+ * sen/cos/tan/sec, identidades) já passavam pelo pipeline `valueToLatex`
+ * existente, confirmado por debug-render.
+ *
+ * Hotfix V2.19 (dθ + arco-seno) corrigiu duas apresentações NESTE mesmo
+ * fluxo (asserções abaixo já atualizadas): "dtheta" (o passo "Calculando
+ * dx") virou "d\theta" em vez de texto romano cru; `asin`/`acos`/`atan`
+ * (resultado real do motor) viram `\operatorname{arcsin}`/
+ * `\operatorname{arccos}`/`\operatorname{arctan}` em vez de
+ * `\sin^{-1}`/`\cos^{-1}`/`\tan^{-1}` (ambíguo com `1/sen(x)`).
  */
 describe("MathSteps — compatibilidade com passos de substituição trigonométrica (Sprint V2.19)", () => {
   beforeEach(() => {
@@ -2970,10 +2978,15 @@ describe("MathSteps — compatibilidade com passos de substituição trigonomét
     );
     expect(
       annotations.some(
-        (latex) => latex === "\\frac{x\\cdot\\sqrt{9-{x}^{2}}}{2}+\\frac{9\\sin^{-1}\\left(\\frac{x}{3}\\right)}{2}+C"
+        (latex) =>
+          latex ===
+          "\\frac{x\\cdot\\sqrt{9-{x}^{2}}}{2}+\\frac{9\\operatorname{arcsin}\\left(\\frac{x}{3}\\right)}{2}+C"
       )
     ).toBe(true);
+    expect(annotations.some((latex) => latex === "dx=3\\cos\\left(\\theta\\right)\\cdotd\\theta")).toBe(true);
+    expect(annotations.some((latex) => latex?.includes("dtheta"))).toBe(false);
     expect(annotations.some((latex) => latex?.includes("\\mathrm"))).toBe(false);
+    expect(annotations.some((latex) => latex?.includes("^{-1}"))).toBe(false);
   });
 
   it("renderiza ∫1/√(9-x²)dx simplificando até θ+C (teste ouro, sem precisar da identidade de redução de potência)", async () => {
@@ -3014,7 +3027,11 @@ describe("MathSteps — compatibilidade com passos de substituição trigonomét
       node.textContent?.replace(/\s/g, "")
     );
     expect(annotations.some((latex) => latex === "\\theta")).toBe(true);
-    expect(annotations.some((latex) => latex === "\\sin^{-1}\\left(\\frac{x}{3}\\right)+C")).toBe(true);
+    expect(
+      annotations.some((latex) => latex === "\\operatorname{arcsin}\\left(\\frac{x}{3}\\right)+C")
+    ).toBe(true);
+    expect(annotations.some((latex) => latex?.includes("dtheta"))).toBe(false);
+    expect(annotations.some((latex) => latex === "dx=3\\cos\\left(\\theta\\right)\\cdotd\\theta")).toBe(true);
   });
 
   it("mostra erro amigável genérico para forma fora de escopo (√(x²+4) sem o 1/, levaria a sec³(θ)), sem quebrar a tela", async () => {

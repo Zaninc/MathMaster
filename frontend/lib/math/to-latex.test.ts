@@ -636,6 +636,66 @@ describe("valueToLatex", () => {
   it("forma polar malformada (θ diferente em cos/sin) não é reconhecida (fail-closed)", async () => {
     expect(await valueToLatex("√2(cos(π/4)+i·sin(π/3))")).toBeNull();
   });
+
+  // --- Hotfix V2.19 (dθ + arco-seno) -----------------------------------
+
+  it("dtheta (diferencial de variável grega, ex. passo 'Calculando dx' da substituição trigonométrica) vira dθ, nunca texto cru", async () => {
+    const latex = normalized(await valueToLatex("dx=3*cos(theta)*dtheta"));
+    expect(latex).toContain("d\\theta");
+    expect(latex).not.toContain("dtheta");
+  });
+
+  it("generaliza pra QUALQUER letra grega, não só theta (ex. dphi)", async () => {
+    const latex = normalized(await valueToLatex("dx=dphi*2"));
+    expect(latex).toContain("d\\phi");
+    expect(latex).not.toContain("dphi");
+  });
+
+  it("REGRESSÃO: 'du'/'dx' (Latin, V2.10.1/V2.14) continuam intocados — não são letra grega", async () => {
+    const latex = normalized(await valueToLatex("du=cos(x)*dx"));
+    expect(latex).toContain("du");
+    expect(latex).toContain("dx");
+    expect(latex).not.toContain("d\\");
+  });
+
+  it("REGRESSÃO: 'Delta' sozinho (V2.9.1a) continua \\Delta — nunca colide com a regra de diferencial grego", async () => {
+    expect(normalized(await valueToLatex("Delta=49"))).toBe("\\Delta=49");
+  });
+
+  it("asin/acos/atan (resultado REAL do motor, ex. substituição trigonométrica) viram arcsin/arccos/arctan, nunca sin^{-1}", async () => {
+    expect(normalized(await valueToLatex("asin(x/3)+C"))).toBe(
+      "\\operatorname{arcsin}\\left(\\frac{x}{3}\\right)+C"
+    );
+    expect(normalized(await valueToLatex("acos(3/x)"))).toBe(
+      "\\operatorname{arccos}\\left(\\frac{3}{x}\\right)"
+    );
+    expect(normalized(await valueToLatex("atan(x/2)"))).toBe(
+      "\\operatorname{arctan}\\left(\\frac{x}{2}\\right)"
+    );
+    const latex = await valueToLatex("asin(x/3)+C");
+    expect(latex).not.toContain("^{-1}");
+  });
+
+  it("REGRESSÃO: 1/sen(x) e 1/sin(x) continuam o RECÍPROCO, nunca confundidos com arco-seno", async () => {
+    expect(normalized(await valueToLatex("1/sin(x)"))).toBe("\\frac{1}{\\sin\\left(x\\right)}");
+    expect(normalized(await valueToLatex("1/sen(x)"))).toBe(
+      "\\frac{1}{\\operatorname{sen}\\left(x\\right)}"
+    );
+  });
+
+  it("REGRESSÃO: sin/cos/tan (sem o 'a' de arco) continuam \\sin/\\cos/\\tan, intocados", async () => {
+    expect(normalized(await valueToLatex("sin(x)"))).toBe("\\sin\\left(x\\right)");
+    expect(normalized(await valueToLatex("cos(x)"))).toBe("\\cos\\left(x\\right)");
+    expect(normalized(await valueToLatex("tan(x)"))).toBe("\\tan\\left(x\\right)");
+  });
+
+  it("resultado final completo da V2.19 (∫√(9-x²)dx) renderiza arcsin, sem sin^{-1}", async () => {
+    const latex = normalized(
+      await valueToLatex("x*sqrt(9 - x**2)/2 + 9*asin(x/3)/2 + C")
+    );
+    expect(latex).toContain("\\operatorname{arcsin}");
+    expect(latex).not.toContain("^{-1}");
+  });
 });
 
 describe("resultToLatex", () => {

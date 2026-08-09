@@ -114,12 +114,28 @@ const SET_GLYPH_LATEX: Record<string, string> = {
  * natural, e `sen`/`tg` são a notação pt-BR legítima — preservada com
  * `\operatorname`, nunca "traduzida" para `\sin`/`\tan` (o echo deve
  * mostrar o que o usuário escreveu).
+ *
+ * Hotfix V2.19 (dθ + arco-seno) — `asin`/`acos`/`atan` (nomes REAIS que o
+ * SymPy devolve em qualquer resultado calculado, ex. `asin(x/3)` da
+ * substituição trigonométrica) também erram no default do mathjs: ele
+ * renderiza `\sin^{-1}(...)`, notação AMBÍGUA com `1/sin(...)` pra quem
+ * está aprendendo. `\operatorname{arcsin}` (mesma convenção do inglês/
+ * notação internacional já usada em toda a matemática computacional deste
+ * produto — confirmado que não existe nenhum precedente de "arcsen" em
+ * nenhum lugar do código; `sen`/`tg` acima são exceção deliberada só pro
+ * ECHO do que o usuário digitou, nunca a convenção de SAÍDA calculada)
+ * elimina a ambiguidade sem inventar uma notação nova. Nunca confundido
+ * com `1/sen(x)`: `sin`/`sen` continuam INTOCADOS, só os nomes de função
+ * `asin`/`acos`/`atan` (literalmente diferentes) entram nesta tabela.
  */
 const FUNCTION_LATEX: Record<string, string> = {
   log: "\\log",
   ln: "\\ln",
   sen: "\\operatorname{sen}",
   tg: "\\operatorname{tg}",
+  asin: "\\operatorname{arcsin}",
+  acos: "\\operatorname{arccos}",
+  atan: "\\operatorname{arctan}",
 };
 
 /**
@@ -142,6 +158,39 @@ const _TRAÇO_ALIAS_PATTERN = /\btraço\s*\(/g;
 
 /** Palavra pura ("crescente", "vertical") nunca é fórmula — fica texto. */
 const BARE_WORD = /^[A-Za-z]{3,}$/;
+
+/**
+ * Nomes ASCII das 24 letras gregas minúsculas — usado só pelo Hotfix
+ * V2.19 (`d${letra}` -> `d\${letra}`, ver `productHandler`) pra
+ * generalizar o diferencial de qualquer variável grega, nunca hardcoded
+ * a uma letra específica.
+ */
+const GREEK_LETTER_NAMES = new Set([
+  "alpha",
+  "beta",
+  "gamma",
+  "delta",
+  "epsilon",
+  "zeta",
+  "eta",
+  "theta",
+  "iota",
+  "kappa",
+  "lambda",
+  "mu",
+  "nu",
+  "xi",
+  "omicron",
+  "pi",
+  "rho",
+  "sigma",
+  "tau",
+  "upsilon",
+  "phi",
+  "chi",
+  "psi",
+  "omega",
+]);
 
 /**
  * Sprint V2.9.1 (Passo a Passo — Quadráticas) — exceção pontual ao
@@ -580,6 +629,21 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
     // do mathjs para qualquer símbolo comum, sem introduzir nada novo.
     if (name === "A") return " A";
     if (name === "B") return " B";
+    // Hotfix V2.19 (dθ + arco-seno) — um diferencial de variável GREGA
+    // (ex. "dtheta", vindo de `math_engine/steps/trig_substitution.py`,
+    // passo "Calculando dx": "dx=3*cos(theta)*dtheta") chega como UM ÚNICO
+    // identificador opaco pro mathjs — ao contrário de "theta" sozinho
+    // (que o toTex default já traduz pra "\theta" nativamente, sem
+    // exceção nenhuma nossa), "dtheta" nunca é reconhecido como "d" +
+    // símbolo grego, e cai no fallback romano cru ("\mathrm{dtheta}" ou
+    // texto liso). Generalizado pra QUALQUER letra grega (não hardcoded só
+    // pra "theta" — cobre `dphi`/`dalpha`/etc. de uma futura sprint sem
+    // precisar de uma exceção nova por letra): nunca colide com "dx"/"du"
+    // (V2.10.1/V2.14, que continuam intocados — "x"/"u" não são nomes de
+    // letra grega) nem com "delta" sozinho (sem o prefixo "d" duplicado).
+    if (name && name.startsWith("d") && name.length > 1 && GREEK_LETTER_NAMES.has(name.slice(1))) {
+      return `d\\${name.slice(1)}`;
+    }
     return undefined;
   }
 
