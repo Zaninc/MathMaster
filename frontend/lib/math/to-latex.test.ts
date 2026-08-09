@@ -639,16 +639,22 @@ describe("valueToLatex", () => {
 
   // --- Hotfix V2.19 (dθ + arco-seno) -----------------------------------
 
-  it("dtheta (diferencial de variável grega, ex. passo 'Calculando dx' da substituição trigonométrica) vira dθ, nunca texto cru", async () => {
-    const latex = normalized(await valueToLatex("dx=3*cos(theta)*dtheta"));
-    expect(latex).toContain("d\\theta");
-    expect(latex).not.toContain("dtheta");
+  it("dtheta (diferencial de variável grega, ex. passo 'Calculando dx' da substituição trigonométrica) vira dθ, nunca texto cru, e PARSEIA de verdade no KaTeX real", async () => {
+    const latex = await valueToLatex("dx=3*cos(theta)*dtheta");
+    expect(latex).not.toBeNull();
+    assertRendersSafely(latex as string, "dx=3*cos(theta)*dtheta");
+    const flat = normalized(latex);
+    expect(flat).toContain("d\\theta");
+    expect(flat).not.toContain("dtheta");
   });
 
-  it("generaliza pra QUALQUER letra grega, não só theta (ex. dphi)", async () => {
-    const latex = normalized(await valueToLatex("dx=dphi*2"));
-    expect(latex).toContain("d\\phi");
-    expect(latex).not.toContain("dphi");
+  it("generaliza pra QUALQUER letra grega, não só theta (ex. dphi), e PARSEIA de verdade no KaTeX real", async () => {
+    const latex = await valueToLatex("dx=dphi*2");
+    expect(latex).not.toBeNull();
+    assertRendersSafely(latex as string, "dx=dphi*2");
+    const flat = normalized(latex);
+    expect(flat).toContain("d\\phi");
+    expect(flat).not.toContain("dphi");
   });
 
   it("REGRESSÃO: 'du'/'dx' (Latin, V2.10.1/V2.14) continuam intocados — não são letra grega", async () => {
@@ -695,6 +701,60 @@ describe("valueToLatex", () => {
     );
     expect(latex).toContain("\\operatorname{arcsin}");
     expect(latex).not.toContain("^{-1}");
+  });
+
+  // --- Hotfix V2.19.1 (\cdot cru no passo "Calculando dx") --------------
+  // Causa-raiz: o Hotfix V2.19 devolvia "d\theta" SEM o espaço inicial que
+  // o serializer default do mathjs sempre prepende a um símbolo comum
+  // (mesma lição já documentada pra "A"/"B" — ver Sprint V2.16) — quando
+  // concatenado logo depois de "\cdot" (ex. "cos(theta)*dtheta", que não
+  // cai em `omitsMultiplicationDot`), virava "\cdotd\theta": um control
+  // WORD do LaTeX consome toda letra adjacente sem separador, então
+  // "\cdotd" era lido como UM comando desconhecido, erro de parse real do
+  // KaTeX. As duas primeiras asserções acima (dtheta/dphi) já foram
+  // reforçadas com `assertRendersSafely` (KaTeX real, `throwOnError:true`)
+  // — só checar a STRING não bastava, é exatamente como esse bug escapou
+  // da primeira versão do Hotfix V2.19. Os casos abaixo cobrem
+  // especificamente os 3 padrões reais de `trig_substitution.py`
+  // (`dx=a*cos(theta)*dtheta`, `dx=a*sec(theta)**2*dtheta`,
+  // `dx=a*sec(theta)*tan(theta)*dtheta`) mais a regressão explícita de
+  // "du"/"dx" latinos (V2.10.1/V2.14, nunca tiveram esse bug — o "\cdot"
+  // ali sempre veio seguido do serializer DEFAULT do mathjs, que já inclui
+  // o espaço sozinho).
+
+  it("REGRESSÃO: dx=3*cos(theta)*dtheta nunca mostra \\cdot cru (Caso A)", async () => {
+    const latex = await valueToLatex("dx=3*cos(theta)*dtheta");
+    expect(latex).not.toBeNull();
+    assertRendersSafely(latex as string, "dx=3*cos(theta)*dtheta");
+    expect(latex).not.toMatch(/\\cdot[a-zA-Z]/);
+  });
+
+  it("REGRESSÃO: dx=a*cos(theta)*dtheta (coeficiente simbólico) nunca mostra \\cdot cru", async () => {
+    const latex = await valueToLatex("dx=a*cos(theta)*dtheta");
+    expect(latex).not.toBeNull();
+    assertRendersSafely(latex as string, "dx=a*cos(theta)*dtheta");
+    expect(latex).not.toMatch(/\\cdot[a-zA-Z]/);
+  });
+
+  it("REGRESSÃO: du=2*x*dx (Latin, V2.10.1/V2.14) continua parseando sem \\cdot cru", async () => {
+    const latex = await valueToLatex("du=2*x*dx");
+    expect(latex).not.toBeNull();
+    assertRendersSafely(latex as string, "du=2*x*dx");
+    expect(latex).not.toMatch(/\\cdot[a-zA-Z]/);
+  });
+
+  it("REGRESSÃO: dx=a*sec(theta)**2*dtheta (Caso B da substituição trigonométrica) nunca mostra \\cdot cru", async () => {
+    const latex = await valueToLatex("dx=3*sec(theta)**2*dtheta");
+    expect(latex).not.toBeNull();
+    assertRendersSafely(latex as string, "dx=3*sec(theta)**2*dtheta");
+    expect(latex).not.toMatch(/\\cdot[a-zA-Z]/);
+  });
+
+  it("REGRESSÃO: dx=a*sec(theta)*tan(theta)*dtheta (Caso C da substituição trigonométrica) nunca mostra \\cdot cru", async () => {
+    const latex = await valueToLatex("dx=3*tan(theta)*sec(theta)*dtheta");
+    expect(latex).not.toBeNull();
+    assertRendersSafely(latex as string, "dx=3*tan(theta)*sec(theta)*dtheta");
+    expect(latex).not.toMatch(/\\cdot[a-zA-Z]/);
   });
 });
 

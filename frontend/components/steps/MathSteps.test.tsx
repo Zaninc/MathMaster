@@ -2923,6 +2923,17 @@ describe("MathSteps — compatibilidade com passos de integrais trigonométricas
  * (resultado real do motor) viram `\operatorname{arcsin}`/
  * `\operatorname{arccos}`/`\operatorname{arctan}` em vez de
  * `\sin^{-1}`/`\cos^{-1}`/`\tan^{-1}` (ambíguo com `1/sen(x)`).
+ *
+ * Hotfix V2.19.1 corrigiu um `\cdot` cru aparecendo em vermelho no passo
+ * "Calculando dx": a primeira versão de "d\theta" (Hotfix V2.19) não
+ * tinha o espaço inicial que o mathjs sempre prepende a um símbolo comum
+ * — concatenado logo depois de "\cdot" (sem passar por
+ * `omitsMultiplicationDot`), virava "\cdotd\theta", um control WORD que o
+ * LaTeX lê como UM comando desconhecido. A prova de verdade abaixo é a
+ * ausência de `.katex-error` no container (a mesma classe CSS que
+ * aparecia vermelha no navegador) — comparação de STRING com whitespace
+ * removido não distingue a versão com/sem o espaço, é exatamente como o
+ * bug escapou da primeira rodada de testes.
  */
 describe("MathSteps — compatibilidade com passos de substituição trigonométrica (Sprint V2.19)", () => {
   beforeEach(() => {
@@ -2987,6 +2998,15 @@ describe("MathSteps — compatibilidade com passos de substituição trigonomét
     expect(annotations.some((latex) => latex?.includes("dtheta"))).toBe(false);
     expect(annotations.some((latex) => latex?.includes("\\mathrm"))).toBe(false);
     expect(annotations.some((latex) => latex?.includes("^{-1}"))).toBe(false);
+    // Hotfix V2.19.1 — o "\cdotd\theta" acima é a string com o
+    // WHITESPACE já removido pelo próprio helper de comparação
+    // (`.replace(/\s/g, "")`) — não distingue a versão COM o espaço
+    // (correta) da versão SEM (o bug real, "\cdot" mesclando com "d" num
+    // comando desconhecido). A prova de verdade é `throwOnError:false`
+    // do KaTeX nunca produzir um span de erro visível — checado
+    // diretamente aqui, é exatamente essa classe CSS que aparecia em
+    // vermelho no navegador antes da correção.
+    expect(container.querySelector(".katex-error")).toBeNull();
   });
 
   it("renderiza ∫1/√(9-x²)dx simplificando até θ+C (teste ouro, sem precisar da identidade de redução de potência)", async () => {
@@ -3032,6 +3052,9 @@ describe("MathSteps — compatibilidade com passos de substituição trigonomét
     ).toBe(true);
     expect(annotations.some((latex) => latex?.includes("dtheta"))).toBe(false);
     expect(annotations.some((latex) => latex === "dx=3\\cos\\left(\\theta\\right)\\cdotd\\theta")).toBe(true);
+    // Hotfix V2.19.1 — ver comentário equivalente no teste do caso direto
+    // acima: a prova real é a ausência de um span de erro do KaTeX.
+    expect(container.querySelector(".katex-error")).toBeNull();
   });
 
   it("mostra erro amigável genérico para forma fora de escopo (√(x²+4) sem o 1/, levaria a sec³(θ)), sem quebrar a tela", async () => {

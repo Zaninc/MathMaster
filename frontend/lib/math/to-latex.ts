@@ -641,8 +641,24 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
     // precisar de uma exceção nova por letra): nunca colide com "dx"/"du"
     // (V2.10.1/V2.14, que continuam intocados — "x"/"u" não são nomes de
     // letra grega) nem com "delta" sozinho (sem o prefixo "d" duplicado).
+    //
+    // Hotfix V2.19.1 — a primeira versão devolvia "d\theta" SEM o espaço
+    // inicial que mathjs sempre prepende ao serializer default de um
+    // símbolo comum (mesma lição já documentada pro caso "A"/"B" acima):
+    // concatenado depois de "\cdot" (ex. "3*cos(theta)*dtheta", que NÃO
+    // cai em `omitsMultiplicationDot` — o fator à esquerda é a chamada de
+    // função `cos(theta)`, não um `ParenthesisNode`/`FunctionNode`
+    // trigonométrico do lado DIREITO), virava "\cdotd\theta" — um
+    // control WORD do LaTeX consome toda letra adjacente sem separador,
+    // então "\cdotd" é lido como UM comando desconhecido ("cdotd"), erro
+    // de parse real do KaTeX (mostrado em vermelho, mesma classe de bug
+    // já documentada pra "A"/"B"/V2.16 e "g"/V2.13/task_259e982f). O
+    // espaço inicial resolve na origem, pro pipeline COMPARTILHADO — não
+    // é um replace específico da V2.19: qualquer produto futuro que
+    // concatene "\cdot" com um destes símbolos gregos generalizados
+    // também sai correto, de graça.
     if (name && name.startsWith("d") && name.length > 1 && GREEK_LETTER_NAMES.has(name.slice(1))) {
-      return `d\\${name.slice(1)}`;
+      return ` d\\${name.slice(1)}`;
     }
     return undefined;
   }
