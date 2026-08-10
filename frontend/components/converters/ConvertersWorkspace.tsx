@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { PageShell } from "@/components/layout/PageShell";
-import { FadeIn } from "@/components/shared/FadeIn";
 import { MathFormula } from "@/components/shared/MathFormula";
 import { CONVERTER_CATEGORIES, type ConverterCategoryId } from "@/data/converters";
 import { convert } from "@/lib/converters/convert";
@@ -12,6 +11,42 @@ import { formatNumber } from "@/lib/utils/format";
 
 const FIELD_CLASSES =
   "rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus-visible:border-accent";
+
+// Hotfix (suavizar transição dos Conversores) — durações pedidas
+// explicitamente pelo ticket (350-450ms de entrada, saída bem mais curta
+// pra não deixar a troca "lenta"). Nenhum token `--motion-*` existente
+// cobre essa faixa (`--motion-slow` é 320ms, abaixo do pedido) — valores
+// arbitrários do Tailwind (`duration-[Xms]`) são o jeito mais direto de
+// atender o número exato sem inventar uma variável CSS nova só pra isto.
+const ENTER_MS = 400;
+const EXIT_MS = 150;
+
+type PanelPhase = "resting" | "leaving" | "swapping" | "entering";
+
+/** Classes do painel principal para cada fase da transição — sempre a
+ * MESMA declaração de `transition`/`ease-out`, só o alvo (opacity/
+ * translateY) e a duração mudam por fase. "leaving"/"swapping" usam o
+ * MESMO alvo "oculto" (opacity 0, 6px abaixo) — a troca de conteúdo
+ * acontece exatamente na fronteira entre as duas, enquanto o painel está
+ * 100% invisível, então a troca em si nunca "pisca".
+ *
+ * `translate-y-*` no Tailwind v4 anima a propriedade CSS `translate`
+ * (não `transform` — são propriedades separadas desde CSS Transforms
+ * Level 2). Listar `transform` em `transition-[...]` não tem efeito
+ * nenhum sobre o deslocamento vertical; precisa ser `translate`. */
+function panelPhaseClasses(phase: PanelPhase): string {
+  const hidden = phase === "leaving" || phase === "swapping";
+  const duration = phase === "leaving" ? "duration-[150ms]" : phase === "swapping" ? "duration-0" : "duration-[400ms]";
+  return cn(
+    "transition-[opacity,translate] ease-out",
+    duration,
+    hidden ? "translate-y-1.5 opacity-0" : "translate-y-0 opacity-100"
+  );
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 /**
  * Sprint V2.20 — workspace dos Conversores (`/ferramentas/conversores`).
@@ -30,35 +65,95 @@ const FIELD_CLASSES =
  * categoria ativa; toda a matemática específica de cada categoria vive
  * em `lib/converters/convert.ts` (puro, sem depender deste componente).
  *
- * Hotfix V2.20.2 (transição entre categorias) — o painel principal
- * (`FadeIn`, já usado pra resultado de Calculadora/Geometria/gráficos)
- * é montado com `key={categoryId}`: React desmonta e remonta só esse
- * `<div>` quando a categoria muda, reproduzindo a animação de entrada de
- * `FadeIn` (opacity 0→1 + translateY 4px→0, ~200ms, `--motion-easing`) —
- * NUNCA quando só `value`/`fromId`/`toId` mudam (nenhum dos três entra
- * na `key`), então digitar um valor, trocar De/Para ou inverter nunca
- * disparam a transição. `prefers-reduced-motion` já vem de graça do
- * atributo `data-motion-reveal` compartilhado (`globals.css`). A sidebar
- * (`role="tablist"`, fora do `FadeIn`) nunca remonta — permanece 100%
- * estável. `opacity`/`transform` nunca disparam reflow — zero layout
+ * Hotfix V2.20.2 (transição entre categorias) — introduziu uma primeira
+ * versão baseada em `FadeIn`+`key={categoryId}` (remonta o painel,
+ * reproduz só a entrada). Hotfix seguinte (suavizar transição) SUBSTITUI
+ * essa técnica: remontar trocava o conteúdo instantaneamente e só
+ * animava a entrada — a saída era um corte seco, exatamente o que o
+ * ticket pediu pra eliminar. Agora o painel é um `<div>` ESTÁVEL (nunca
+ * remonta) cujo `className` muda em 4 fases (`PanelPhase`): "resting"
+ * (visível) → "leaving" (foto opacity 1→0 + translateY 0→6px em 150ms)
+ * → "swapping" (troca o CONTEÚDO — categoria/unidades/valor — num frame
+ * só, com `duration-0`, enquanto o painel está 100% invisível, então a
+ * troca em si nunca pisca) → "entering" (opacity 0→1 + translateY
+ * 6px→0 em 400ms, dentro dos 350-450ms pedidos) → volta a "resting".
+ * `categoryId` (o que a SIDEBAR destaca) atualiza IMEDIATAMENTE no
+ * clique — só o CONTEÚDO do painel (`displayedCategoryId`, de onde vêm
+ * `category`/`fromId`/`toId`/`value`) espera a fase "swapping". Trocar
+ * só `value`/`fromId`/`toId`/inverter nunca entra nesse state machine —
+ * nenhuma das fases é tocada, nenhuma transição dispara.
+ * `prefers-reduced-motion` checado diretamente via `matchMedia` (nenhum
+ * hook existia pra isso): quando ativo, a troca é INSTANTÂNEA (pula as 4
+ * fases inteiramente), nunca um atraso artificial de 150ms sem nenhuma
+ * animação visível pra compensar. A sidebar (`role="tablist"`) nunca
+ * remonta nem é afetada por nenhuma fase — permanece 100% estável, como
+ * antes. `opacity`/`transform` nunca disparam reflow — zero layout
  * shift por construção.
  */
 export function ConvertersWorkspace() {
+  // "Selecionada" (destaca a sidebar IMEDIATAMENTE) vs "exibida" (o que o
+  // painel de fato renderiza — só alcança a selecionada na fase
+  // "swapping", ver docstring acima).
   const [categoryId, setCategoryId] = useState<ConverterCategoryId>(CONVERTER_CATEGORIES[0].id);
-  const category = CONVERTER_CATEGORIES.find((c) => c.id === categoryId) ?? CONVERTER_CATEGORIES[0];
+  const [displayedCategoryId, setDisplayedCategoryId] = useState<ConverterCategoryId>(CONVERTER_CATEGORIES[0].id);
+  const category = CONVERTER_CATEGORIES.find((c) => c.id === displayedCategoryId) ?? CONVERTER_CATEGORIES[0];
 
   const [value, setValue] = useState("1");
   const [fromId, setFromId] = useState(category.defaultFromId);
   const [toId, setToId] = useState(category.defaultToId);
 
-  function handleSelectCategory(nextId: ConverterCategoryId) {
+  const [panelPhase, setPanelPhase] = useState<PanelPhase>("resting");
+  const pendingCategoryRef = useRef<ConverterCategoryId | null>(null);
+
+  // Aplica a categoria (conteúdo do painel + valores/unidades padrão) —
+  // sempre num único ponto, chamado tanto pelo caminho instantâneo
+  // (reduced motion) quanto pela fase "swapping" da transição normal.
+  function applyDisplayedCategory(nextId: ConverterCategoryId) {
     const nextCategory = CONVERTER_CATEGORIES.find((c) => c.id === nextId);
     if (!nextCategory) return;
-    setCategoryId(nextId);
+    setDisplayedCategoryId(nextId);
     setFromId(nextCategory.defaultFromId);
     setToId(nextCategory.defaultToId);
     setValue("1");
   }
+
+  function handleSelectCategory(nextId: ConverterCategoryId) {
+    if (nextId === categoryId) return;
+    setCategoryId(nextId);
+    if (prefersReducedMotion()) {
+      applyDisplayedCategory(nextId);
+      return;
+    }
+    pendingCategoryRef.current = nextId;
+    setPanelPhase("leaving");
+  }
+
+  useEffect(() => {
+    if (panelPhase === "leaving") {
+      const id = setTimeout(() => {
+        if (pendingCategoryRef.current !== null) {
+          applyDisplayedCategory(pendingCategoryRef.current);
+          pendingCategoryRef.current = null;
+        }
+        setPanelPhase("swapping");
+      }, EXIT_MS);
+      return () => clearTimeout(id);
+    }
+    if (panelPhase === "swapping") {
+      // Precisa de um frame pintado com o painel já invisível (opacity
+      // 0, duration-0) ANTES de pedir a transição de entrada — mesma
+      // técnica que `FadeIn` já usava pro mount, aplicada aqui pra
+      // "entering" também: sem o `requestAnimationFrame`, o navegador
+      // podia colapsar "swapping" e "entering" no mesmo frame e pular a
+      // animação de entrada direto pro estado final.
+      const id = requestAnimationFrame(() => setPanelPhase("entering"));
+      return () => cancelAnimationFrame(id);
+    }
+    if (panelPhase === "entering") {
+      const id = setTimeout(() => setPanelPhase("resting"), ENTER_MS);
+      return () => clearTimeout(id);
+    }
+  }, [panelPhase]);
 
   function handleSwap() {
     setFromId(toId);
@@ -75,7 +170,7 @@ export function ConvertersWorkspace() {
   const trimmedValue = value.trim();
   const parsedValue = trimmedValue === "" ? null : Number(trimmedValue);
   const isValidInput = parsedValue !== null && Number.isFinite(parsedValue);
-  const outcome = isValidInput ? convert(categoryId, parsedValue, fromUnit, toUnit) : null;
+  const outcome = isValidInput ? convert(displayedCategoryId, parsedValue, fromUnit, toUnit) : null;
 
   return (
     <PageShell variant="full-workspace" className="flex flex-col gap-8">
@@ -112,9 +207,13 @@ export function ConvertersWorkspace() {
           ))}
         </div>
 
-        <FadeIn
-          key={categoryId}
-          className="flex flex-col gap-6 rounded-lg border border-border bg-surface p-4 sm:p-6"
+        <div
+          data-motion-reveal
+          data-panel-phase={panelPhase}
+          className={cn(
+            "flex flex-col gap-6 rounded-lg border border-border bg-surface p-4 sm:p-6",
+            panelPhaseClasses(panelPhase)
+          )}
         >
           <div className="flex flex-col gap-1">
             <h2 className="text-lg font-semibold text-text-primary">{category.label}</h2>
@@ -223,7 +322,7 @@ export function ConvertersWorkspace() {
               </div>
             </section>
           )}
-        </FadeIn>
+        </div>
       </div>
     </PageShell>
   );

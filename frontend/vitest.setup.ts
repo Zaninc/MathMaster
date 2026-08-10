@@ -21,3 +21,24 @@ if (typeof globalThis.ResizeObserver === "undefined") {
 if (typeof globalThis.IntersectionObserver === "undefined") {
   globalThis.IntersectionObserver = StubObserver as unknown as typeof IntersectionObserver;
 }
+
+/**
+ * jsdom também não implementa `window.matchMedia` — stub global que
+ * responde `matches: false` (comportamento "sem preferência", o caso
+ * comum) para qualquer query. Testes que precisam simular
+ * `prefers-reduced-motion: reduce` (ou outra query) substituem por um
+ * mock próprio via `vi.stubGlobal("matchMedia", ...)`, que tem
+ * prioridade sobre isto.
+ */
+if (typeof window !== "undefined" && typeof window.matchMedia === "undefined") {
+  window.matchMedia = ((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+}

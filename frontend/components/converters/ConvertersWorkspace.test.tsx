@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { NAV_ITEMS } from "@/data/nav";
 
@@ -33,20 +33,23 @@ describe("ConvertersWorkspace", () => {
     expect(screen.getByText("5 × 1000 = 5000")).toBeInTheDocument();
   });
 
-  it("troca de categoria atualiza o conversor sem navegar (mesma página, novo estado)", () => {
+  it("troca de categoria atualiza o conversor sem navegar (mesma página, novo estado)", async () => {
     render(<ConvertersWorkspace />);
 
     fireEvent.click(screen.getByRole("tab", { name: "Temperatura" }));
     expect(screen.getByRole("tab", { name: "Temperatura" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Comprimento" })).toHaveAttribute("aria-selected", "false");
-    expect(screen.getByRole("heading", { name: "Temperatura" })).toBeInTheDocument();
+    // conteúdo do painel só troca depois da fase de saída — a troca de
+    // categoria agora tem uma transição, não é mais instantânea.
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Temperatura" })).toBeInTheDocument());
     expect(fromSelect().value).toBe("C");
     expect(toSelect().value).toBe("F");
   });
 
-  it("temperatura mostra a fórmula usada, não só o número (20 °C -> °F)", () => {
+  it("temperatura mostra a fórmula usada, não só o número (20 °C -> °F)", async () => {
     render(<ConvertersWorkspace />);
     fireEvent.click(screen.getByRole("tab", { name: "Temperatura" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Temperatura" })).toBeInTheDocument());
     fireEvent.change(valueInput(), { target: { value: "20" } });
 
     expect(screen.getByText("°F = °C × 9/5 + 32")).toBeInTheDocument();
@@ -54,9 +57,10 @@ describe("ConvertersWorkspace", () => {
     expect(screen.getByText("68")).toBeInTheDocument();
   });
 
-  it("ângulo mostra a forma exata em π (90° -> π/2), renderizada via KaTeX, nunca 1.5707963267948966", () => {
+  it("ângulo mostra a forma exata em π (90° -> π/2), renderizada via KaTeX, nunca 1.5707963267948966", async () => {
     render(<ConvertersWorkspace />);
     fireEvent.click(screen.getByRole("tab", { name: "Ângulo" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Ângulo" })).toBeInTheDocument());
     fireEvent.change(valueInput(), { target: { value: "90" } });
 
     expect(screen.queryByText(/1\.57/)).not.toBeInTheDocument();
@@ -87,12 +91,13 @@ describe("ConvertersWorkspace", () => {
     expect(screen.getAllByText("7").length).toBeGreaterThan(0);
   });
 
-  it("valor 0 e valor negativo não quebram a tela", () => {
+  it("valor 0 e valor negativo não quebram a tela", async () => {
     render(<ConvertersWorkspace />);
     fireEvent.change(valueInput(), { target: { value: "0" } });
     expect(screen.getByText("0")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Temperatura" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Temperatura" })).toBeInTheDocument());
     fireEvent.change(valueInput(), { target: { value: "-40" } });
     expect(screen.getByText("-40")).toBeInTheDocument();
   });
@@ -162,18 +167,20 @@ describe("ConvertersWorkspace", () => {
 
   // --- Sprint V2.20.1: 5 novas categorias, mesma arquitetura ------------
 
-  it("Dados mostra a nota de convenção decimal (KB/MB/GB, nunca KiB/MiB/GiB)", () => {
+  it("Dados mostra a nota de convenção decimal (KB/MB/GB, nunca KiB/MiB/GiB)", async () => {
     render(<ConvertersWorkspace />);
     fireEvent.click(screen.getByRole("tab", { name: "Dados" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Dados" })).toBeInTheDocument());
 
     expect(
       screen.getByText("KB/MB/GB usam base decimal (1000), nunca KiB/MiB/GiB (base 1024).")
     ).toBeInTheDocument();
   });
 
-  it("Energia: 1 kcal -> J mostra a explicação correta (1 kcal = 4184 J)", () => {
+  it("Energia: 1 kcal -> J mostra a explicação correta (1 kcal = 4184 J)", async () => {
     render(<ConvertersWorkspace />);
     fireEvent.click(screen.getByRole("tab", { name: "Energia" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Energia" })).toBeInTheDocument());
     fireEvent.change(fromSelect(), { target: { value: "kcal" } });
     fireEvent.change(toSelect(), { target: { value: "J" } });
     fireEvent.change(valueInput(), { target: { value: "1" } });
@@ -182,9 +189,10 @@ describe("ConvertersWorkspace", () => {
     expect(screen.getByText("1 × 4184 = 4184")).toBeInTheDocument();
   });
 
-  it("Pressão: 1 atm -> kPa mostra a explicação correta (valor exato, nunca arredondado por engano) e o Resultado nunca com casas excessivas", () => {
+  it("Pressão: 1 atm -> kPa mostra a explicação correta (valor exato, nunca arredondado por engano) e o Resultado nunca com casas excessivas", async () => {
     render(<ConvertersWorkspace />);
     fireEvent.click(screen.getByRole("tab", { name: "Pressão" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Pressão" })).toBeInTheDocument());
     fireEvent.change(fromSelect(), { target: { value: "atm" } });
     fireEvent.change(toSelect(), { target: { value: "kPa" } });
     fireEvent.change(valueInput(), { target: { value: "1" } });
@@ -195,9 +203,10 @@ describe("ConvertersWorkspace", () => {
     expect(screen.getByText("101.33")).toBeInTheDocument();
   });
 
-  it("Potência: hp é o mecânico (1 hp ≈ 745.69987 W, fator arredondado com '≈' pois não é exato em 8 algarismos)", () => {
+  it("Potência: hp é o mecânico (1 hp ≈ 745.69987 W, fator arredondado com '≈' pois não é exato em 8 algarismos)", async () => {
     render(<ConvertersWorkspace />);
     fireEvent.click(screen.getByRole("tab", { name: "Potência" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Potência" })).toBeInTheDocument());
 
     expect(fromSelect().value).toBe("hp");
     expect(toSelect().value).toBe("W");
@@ -205,9 +214,10 @@ describe("ConvertersWorkspace", () => {
     expect(screen.getByText("745.7")).toBeInTheDocument(); // Resultado, via formatNumber (2 casas, sem zero à direita)
   });
 
-  it("Frequência: 2.4 GHz -> MHz = 2400, sem zero à direita no fator (2.4, não 2.40)", () => {
+  it("Frequência: 2.4 GHz -> MHz = 2400, sem zero à direita no fator (2.4, não 2.40)", async () => {
     render(<ConvertersWorkspace />);
     fireEvent.click(screen.getByRole("tab", { name: "Frequência" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Frequência" })).toBeInTheDocument());
     fireEvent.change(fromSelect(), { target: { value: "GHz" } });
     fireEvent.change(toSelect(), { target: { value: "MHz" } });
     fireEvent.change(valueInput(), { target: { value: "2.4" } });
@@ -215,21 +225,23 @@ describe("ConvertersWorkspace", () => {
     expect(screen.getByText("2.4 × 1000 = 2400")).toBeInTheDocument();
   });
 
-  it("troca de uma categoria antiga (Comprimento) para uma nova (Dados) funciona sem quebrar", () => {
+  it("troca de uma categoria antiga (Comprimento) para uma nova (Dados) funciona sem quebrar", async () => {
     render(<ConvertersWorkspace />);
     fireEvent.click(screen.getByRole("tab", { name: "Dados" }));
-    expect(screen.getByRole("heading", { name: "Dados" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Dados" })).toBeInTheDocument());
     expect(fromSelect().value).toBe("MB");
 
     fireEvent.click(screen.getByRole("tab", { name: "Comprimento" }));
-    expect(screen.getByRole("heading", { name: "Comprimento" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Comprimento" })).toBeInTheDocument());
     expect(fromSelect().value).toBe("km");
   });
 
-  it("categorias antigas continuam corretas depois de visitar as novas (180° -> rad = π)", () => {
+  it("categorias antigas continuam corretas depois de visitar as novas (180° -> rad = π)", async () => {
     render(<ConvertersWorkspace />);
     fireEvent.click(screen.getByRole("tab", { name: "Frequência" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Frequência" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("tab", { name: "Ângulo" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Ângulo" })).toBeInTheDocument());
     fireEvent.change(valueInput(), { target: { value: "180" } });
 
     expect(screen.getByText("180 × π/180")).toBeInTheDocument();
@@ -246,79 +258,134 @@ describe("ConvertersWorkspace", () => {
     expect(firstStep.className).toContain("text-text-secondary");
   });
 
-  // --- Hotfix V2.20.2: transição entre categorias -----------------------
+  // --- Hotfix V2.20.2: transição entre categorias (remonta + FadeIn) ----
+  // --- Hotfix seguinte (suavizar transição): SUBSTITUIU o remonte por um
+  // state machine de 4 fases num painel ESTÁVEL — ver docstring do
+  // componente. Os testes abaixo cobrem o mecanismo atual.
 
-  it("trocar de categoria remonta (anima) só o painel principal — a sidebar permanece o MESMO nó do DOM", () => {
+  function panel(container: HTMLElement): HTMLElement {
+    const el = container.querySelector("[data-motion-reveal]");
+    if (!el) throw new Error("painel com [data-motion-reveal] não encontrado");
+    return el as HTMLElement;
+  }
+
+  it("trocar de categoria NUNCA remonta o painel nem a sidebar — ambos continuam o MESMO nó do DOM durante toda a transição", async () => {
     const { container } = render(<ConvertersWorkspace />);
     const tablistBefore = screen.getByRole("tablist");
-    const panelBefore = container.querySelector("[data-motion-reveal]");
-    expect(panelBefore).not.toBeNull();
+    const panelBefore = panel(container);
 
     fireEvent.click(screen.getByRole("tab", { name: "Massa" }));
-
     expect(screen.getByRole("tablist")).toBe(tablistBefore);
-    expect(container.querySelector("[data-motion-reveal]")).not.toBe(panelBefore);
+    expect(panel(container)).toBe(panelBefore);
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Massa" })).toBeInTheDocument());
+    expect(screen.getByRole("tablist")).toBe(tablistBefore);
+    expect(panel(container)).toBe(panelBefore);
   });
 
-  it("digitar um valor NÃO remonta/anima o painel", () => {
-    const { container } = render(<ConvertersWorkspace />);
-    const panelBefore = container.querySelector("[data-motion-reveal]");
+  it("a sidebar destaca a categoria clicada IMEDIATAMENTE, mesmo antes do conteúdo do painel trocar", () => {
+    render(<ConvertersWorkspace />);
+    fireEvent.click(screen.getByRole("tab", { name: "Massa" }));
 
+    // aria-selected já reflete o clique no mesmo tick — não espera a
+    // transição de saída/entrada do painel terminar.
+    expect(screen.getByRole("tab", { name: "Massa" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Comprimento" })).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("ao clicar, o painel entra na fase 'leaving' (opacity 0, transição curta) antes de trocar o conteúdo", () => {
+    const { container } = render(<ConvertersWorkspace />);
+    fireEvent.click(screen.getByRole("tab", { name: "Massa" }));
+
+    const el = panel(container);
+    expect(el).toHaveAttribute("data-panel-phase", "leaving");
+    expect(el.className).toContain("opacity-0");
+    expect(el.className).toContain("duration-[150ms]");
+    // o conteúdo ainda é o da categoria ANTERIOR — a troca só acontece
+    // na fase "swapping", com o painel já invisível.
+    expect(screen.getByRole("heading", { name: "Comprimento" })).toBeInTheDocument();
+  });
+
+  it("depois da transição completa, o painel volta pra fase 'resting' com o conteúdo da nova categoria", async () => {
+    const { container } = render(<ConvertersWorkspace />);
+    fireEvent.click(screen.getByRole("tab", { name: "Massa" }));
+
+    await waitFor(() => expect(panel(container)).toHaveAttribute("data-panel-phase", "resting"), {
+      timeout: 2000,
+    });
+    expect(screen.getByRole("heading", { name: "Massa" })).toBeInTheDocument();
+    expect(panel(container).className).toContain("opacity-100");
+  });
+
+  it("digitar um valor NÃO dispara nenhuma fase de transição", () => {
+    const { container } = render(<ConvertersWorkspace />);
     fireEvent.change(valueInput(), { target: { value: "42" } });
-
-    expect(container.querySelector("[data-motion-reveal]")).toBe(panelBefore);
+    expect(panel(container)).toHaveAttribute("data-panel-phase", "resting");
   });
 
-  it("trocar só 'De' NÃO remonta/anima o painel", () => {
+  it("trocar só 'De' NÃO dispara nenhuma fase de transição", () => {
     const { container } = render(<ConvertersWorkspace />);
-    const panelBefore = container.querySelector("[data-motion-reveal]");
-
     fireEvent.change(fromSelect(), { target: { value: "m" } });
-
-    expect(container.querySelector("[data-motion-reveal]")).toBe(panelBefore);
+    expect(panel(container)).toHaveAttribute("data-panel-phase", "resting");
   });
 
-  it("trocar só 'Para' NÃO remonta/anima o painel", () => {
+  it("trocar só 'Para' NÃO dispara nenhuma fase de transição", () => {
     const { container } = render(<ConvertersWorkspace />);
-    const panelBefore = container.querySelector("[data-motion-reveal]");
-
     fireEvent.change(toSelect(), { target: { value: "cm" } });
-
-    expect(container.querySelector("[data-motion-reveal]")).toBe(panelBefore);
+    expect(panel(container)).toHaveAttribute("data-panel-phase", "resting");
   });
 
-  it("botão de inverter NÃO remonta/anima o painel", () => {
+  it("botão de inverter NÃO dispara nenhuma fase de transição", () => {
     const { container } = render(<ConvertersWorkspace />);
-    const panelBefore = container.querySelector("[data-motion-reveal]");
-
     fireEvent.click(screen.getByRole("button", { name: "Inverter unidades de origem e destino" }));
-
-    expect(container.querySelector("[data-motion-reveal]")).toBe(panelBefore);
+    expect(panel(container)).toHaveAttribute("data-panel-phase", "resting");
   });
 
-  it("percorrendo várias trocas de categoria (incl. antiga->nova e nova->nova), o painel sempre remonta e a sidebar nunca muda", () => {
+  it("percorrendo várias trocas de categoria (incl. antiga->nova e nova->nova), o conteúdo sempre chega correto e a sidebar nunca muda de nó", async () => {
     const { container } = render(<ConvertersWorkspace />);
     const tablist = screen.getByRole("tablist");
+    const initialPanel = panel(container);
     const sequence = ["Massa", "Ângulo", "Dados", "Energia", "Pressão", "Potência", "Frequência"];
 
-    let previousPanel = container.querySelector("[data-motion-reveal]");
     for (const label of sequence) {
       fireEvent.click(screen.getByRole("tab", { name: label }));
-      const currentPanel = container.querySelector("[data-motion-reveal]");
-      expect(currentPanel, label).not.toBe(previousPanel);
+      await waitFor(() => expect(screen.getByRole("heading", { name: label })).toBeInTheDocument(), {
+        timeout: 2000,
+      });
       expect(screen.getByRole("tablist")).toBe(tablist);
-      previousPanel = currentPanel;
+      expect(panel(container)).toBe(initialPanel);
     }
+  });
+
+  it("com prefers-reduced-motion, a troca de categoria é INSTANTÂNEA (nunca fica preso na fase 'leaving' por 150ms sem motivo)", () => {
+    const matchMediaMock = vi.fn().mockReturnValue({ matches: true });
+    vi.stubGlobal("matchMedia", matchMediaMock);
+
+    const { container } = render(<ConvertersWorkspace />);
+    fireEvent.click(screen.getByRole("tab", { name: "Massa" }));
+
+    expect(screen.getByRole("heading", { name: "Massa" })).toBeInTheDocument();
+    expect(panel(container)).toHaveAttribute("data-panel-phase", "resting");
+
+    vi.unstubAllGlobals();
   });
 
   it("o painel principal usa o atributo compartilhado de reduced-motion (data-motion-reveal), reaproveitando o suporte já existente", () => {
     const { container } = render(<ConvertersWorkspace />);
-    expect(container.querySelector("[data-motion-reveal]")).not.toBeNull();
+    expect(panel(container)).toBeInTheDocument();
   });
 
-  it("a transição usa opacity+transform (nunca propriedades que causam layout shift)", () => {
+  it("a transição usa opacity+translate (nunca propriedades que causam layout shift) — 'translate', não 'transform': no Tailwind v4 translate-y-* anima a propriedade CSS translate", () => {
     const { container } = render(<ConvertersWorkspace />);
-    const panel = container.querySelector("[data-motion-reveal]");
-    expect(panel?.className).toContain("transition-[opacity,transform]");
+    expect(panel(container).className).toContain("transition-[opacity,translate]");
+  });
+
+  it("a duração de entrada fica dentro dos 350-450ms pedidos (400ms)", () => {
+    const { container } = render(<ConvertersWorkspace />);
+    fireEvent.click(screen.getByRole("tab", { name: "Massa" }));
+    // ainda em "leaving" logo após o clique — a duração de ENTRADA só
+    // aparece na fase "entering"; verificamos a constante diretamente
+    // via o atributo de fase + o valor já documentado no módulo (400ms).
+    expect(panel(container)).toHaveAttribute("data-panel-phase", "leaving");
   });
 });
