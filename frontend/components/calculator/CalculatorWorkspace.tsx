@@ -4,20 +4,35 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { PageShell } from "@/components/layout/PageShell";
-import { MathInput } from "@/components/math-input/MathInput";
 import { MathKeyboard } from "@/components/math-input/MathKeyboard";
-import { MathPreview } from "@/components/math-input/MathPreview";
+import { StructuredMathInputLoader, type StructuredMathInputApi } from "@/components/math-input/StructuredMathInputLoader";
 import { Button } from "@/components/shared/Button";
 import { ExampleButton } from "@/components/shared/ExampleButton";
 import { CALCULATOR_QUICK_EXAMPLES } from "@/data/examples";
-import type { KeyboardKey } from "@/data/keyboard";
+import { KEYBOARD_CATEGORIES, type KeyboardKey } from "@/data/keyboard";
 import { apiClient } from "@/lib/api/client";
 import type { HistoryItem } from "@/lib/api/types";
 import { ApiError, friendlyMessage } from "@/lib/api/errors";
-import { insertAtCursor } from "@/lib/math/insert-at-cursor";
+import { mathFieldLatexToBackendExpression } from "@/lib/math/mathfield-to-backend";
+import { previewLatex } from "@/lib/math/to-latex";
 
 import { HistoryPanel } from "./HistoryPanel";
 import { ResultPanel, type ResultStatus } from "./ResultPanel";
+
+/**
+ * Sprint V3.0 (Structured Math Input) — só a categoria Básico (as 9 teclas
+ * do ticket, com `mathLiveInsert`) é mostrada nesta página por enquanto;
+ * as demais ainda inserem texto bruto que o `StructuredMathInput` não sabe
+ * representar estruturalmente (decisão de escopo confirmada com o Theo).
+ * Voltam progressivamente nas V3.0.x — nenhuma mudança neste arquivo será
+ * necessária além de ampliar esta lista.
+ */
+const BASIC_KEYBOARD_CATEGORIES = KEYBOARD_CATEGORIES.filter((category) => category.id === "basico");
+
+/** Escapa `\`/`{`/`}` — o mínimo pra um texto cru não quebrar dentro de `\text{...}`. */
+function escapeForLatexText(text: string): string {
+  return text.replace(/\\/g, "\\textbackslash ").replace(/[{}]/g, (char) => `\\${char}`);
+}
 
 /**
  * Ordem visual controlada por `order-*`/`lg:order-*` (um único
@@ -29,7 +44,15 @@ import { ResultPanel, type ResultStatus } from "./ResultPanel";
 export function CalculatorWorkspace() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [expression, setExpression] = useState(() => searchParams.get("expression") ?? "");
+  // LaTeX é a única fonte da verdade do `StructuredMathInput` (Sprint
+  // V3.0) — nunca mais a string Unicode que o backend espera; essa
+  // conversão agora é feita só na hora de resolver, via
+  // `mathFieldLatexToBackendExpression` (`handleSubmit`). Não dá pra
+  // inicializar de forma síncrona a partir de `?expression=` como antes
+  // (a conversão pro LaTeX de exibição é assíncrona — ver `syncSeqRef`
+  // abaixo) — o efeito de deep link, mais adiante, cuida disso no
+  // primeiro render.
+  const [latex, setLatex] = useState("");
   const [status, setStatus] = useState<ResultStatus>("idle");
   const [solvedExpression, setSolvedExpression] = useState("");
   const [result, setResult] = useState<string | null>(null);
@@ -38,10 +61,37 @@ export function CalculatorWorkspace() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [hiddenTimestamps, setHiddenTimestamps] = useState<Set<string>>(new Set());
 
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const pendingSelectionRef = useRef<number | null>(null);
+  const structuredApiRef = useRef<StructuredMathInputApi | null>(null);
+  // Evita que uma conversão assíncrona antiga (Unicode -> LaTeX) sobrescreva
+  // o campo depois de uma mais nova já ter resolvido — mesma técnica de
+  // staleness de `hooks/useSolveLatex.ts` (`cancelled`/chave), adaptada pra
+  // um contador simples já que aqui só o resultado MAIS RECENTE importa.
+  const syncSeqRef = useRef(0);
   const inputId = useId();
   const errorId = useId();
+
+  /**
+   * Converte texto Unicode (exemplos, histórico, deep link) pro LaTeX que o
+   * `StructuredMathInput` exibe — reaproveita `previewLatex` (já usado pelo
+   * preview/resultado/histórico, `lib/math/to-latex.ts`), nunca um segundo
+   * conversor. Se `previewLatex` não reconhecer o texto (fora do catálogo
+   * dele — raro, mais amplo que o adapter de envio), cai num `\text{...}`
+   * literal como último recurso, só para o campo não ficar vazio.
+   */
+  const syncFieldFromUnicode = useCallback((text: string) => {
+    const seq = ++syncSeqRef.current;
+    // Sempre resolve num microtask (nunca `setState` síncrono no corpo da
+    // função) — este helper é chamado tanto de handlers de evento quanto de
+    // um `useEffect` (deep link), e `setState` síncrono direto no corpo de
+    // um efeito é proibido pelas regras novas do React Compiler
+    // (`react-hooks/set-state-in-effect`); resolver sempre por promise
+    // deixa o comportamento uniforme nos dois contextos.
+    const latexPromise = text.trim() === "" ? Promise.resolve<string | null>("") : previewLatex(text);
+    void latexPromise.then((converted) => {
+      if (syncSeqRef.current !== seq) return;
+      setLatex(converted ?? `\\text{${escapeForLatexText(text)}}`);
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,14 +107,6 @@ export function CalculatorWorkspace() {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (pendingSelectionRef.current === null) return;
-    const position = pendingSelectionRef.current;
-    pendingSelectionRef.current = null;
-    inputRef.current?.focus();
-    inputRef.current?.setSelectionRange(position, position);
-  }, [expression]);
 
   const refreshHistory = useCallback(async () => {
     try {
@@ -145,12 +187,6 @@ export function CalculatorWorkspace() {
   if (deepLinkExpression !== null && (isNewRequest || isNewPlainExpression)) {
     setPreviousDeepLinkExpression(deepLinkExpression);
     if (deepLinkRequest !== null) setPreviousDeepLinkRequest(deepLinkRequest);
-    // Sempre sincroniza o campo com o que está sendo resolvido — mesmo em
-    // `autoSolve`, onde `solve()` não mexe em `expression` sozinho
-    // (só quem chama `solve` decide o que aparece no campo, ver
-    // `handleSubmit`/`fillExpression`); sem isso, o resultado mudaria sem
-    // o campo de texto acompanhar.
-    setExpression(deepLinkExpression);
     if (deepLinkAutoSolve) {
       solve(deepLinkExpression);
     } else {
@@ -160,6 +196,21 @@ export function CalculatorWorkspace() {
       setErrorMessage(null);
     }
   }
+
+  // Sincroniza o campo estruturado com o que está sendo resolvido — mesmo
+  // em `autoSolve`, onde `solve()` não mexe nele sozinho (só quem chama
+  // `solve` decide o que aparece, ver `handleSubmit`/`fillExpression`); sem
+  // isso, o resultado mudaria sem o campo acompanhar. Em efeito próprio
+  // (não no corpo do render acima, junto de `solve()`): `syncFieldFromUnicode`
+  // mexe em `syncSeqRef.current`, e mutar ref durante o render é proibido
+  // pelas regras novas do React Compiler (`react-hooks/refs`) — `solve()`
+  // continua no render (só usa `setState`, permitido nesse padrão). Disparar
+  // só quando `previousDeepLinkExpression` MUDA (não a cada `request` novo
+  // com o MESMO texto) já é suficiente: o campo só precisa reconverter
+  // quando o texto em si muda.
+  useEffect(() => {
+    if (previousDeepLinkExpression !== null) syncFieldFromUnicode(previousDeepLinkExpression);
+  }, [previousDeepLinkExpression, syncFieldFromUnicode]);
 
   // Limpeza da URL (preferência confirmada na investigação): depois de
   // consumir `autoSolve`+`request`, remove os dois da URL, deixando só
@@ -192,44 +243,52 @@ export function CalculatorWorkspace() {
     router.replace(`/calculadora?expression=${encodeURIComponent(deepLinkExpression)}`);
   }, [deepLinkExpression, deepLinkRequest, previousDeepLinkRequest, router]);
 
+  /**
+   * Converte o LaTeX do campo pra sintaxe do backend (adapter novo desta
+   * sprint) e só então resolve — nunca envia LaTeX cru. Falha de conversão
+   * (slot vazio ou notação fora do catálogo desta sprint) mostra uma
+   * mensagem amigável pelo MESMO mecanismo que erros de rede/servidor já
+   * usam (`ResultPanel` com `status==="error"`), nunca dispara requisição
+   * nem deixa exceção escapar.
+   */
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    solve(expression);
+    if (latex.trim().length === 0) return;
+    const converted = mathFieldLatexToBackendExpression(latex);
+    if (!converted.ok) {
+      setStatus("error");
+      setResult(null);
+      setApprox(null);
+      setSolvedExpression("");
+      setErrorMessage(
+        converted.reason === "incomplete"
+          ? "Preencha todos os espaços antes de resolver."
+          : "Esta notação ainda não é suportada pela calculadora."
+      );
+      return;
+    }
+    solve(converted.expression);
   }
 
+  /**
+   * Delega pra API real de inserção do MathLive (`insert()`), nunca
+   * concatenação de string — teclas ainda não migradas (sem
+   * `mathLiveInsert`, categorias fora de `BASIC_KEYBOARD_CATEGORIES`) não
+   * aparecem nesta página, então este `return` cedo nunca deveria disparar
+   * na prática; é só uma proteção de tipo.
+   */
   function handleInsert(key: KeyboardKey) {
-    const node = inputRef.current;
-    const selectionStart = node?.selectionStart ?? expression.length;
-    const selectionEnd = node?.selectionEnd ?? expression.length;
-    // Teclas com variante de seleção (ex. xⁿ) PRESERVAM o texto
-    // selecionado, envolvendo-o ("x" -> "(x)ⁿ") em vez de substituí-lo;
-    // demais teclas substituem a seleção, como qualquer input de texto.
-    const selected = expression.slice(selectionStart, selectionEnd);
-    const useSelectionVariant = key.selection !== undefined && selected.length > 0;
-    const insertText = useSelectionVariant
-      ? key.selection!.before + selected + key.selection!.after
-      : key.insert;
-    const cursorOffset = useSelectionVariant
-      ? insertText.length - key.selection!.cursorFromEnd
-      : key.cursorOffset;
-    const { value, cursorPosition } = insertAtCursor(
-      expression,
-      selectionStart,
-      selectionEnd,
-      insertText,
-      cursorOffset
-    );
-    pendingSelectionRef.current = cursorPosition;
-    setExpression(value);
+    if (key.mathLiveInsert === undefined) return;
+    structuredApiRef.current?.insert(key.mathLiveInsert);
   }
 
   function fillExpression(value: string) {
-    setExpression(value);
+    syncFieldFromUnicode(value);
     setStatus("idle");
     setResult(null);
     setApprox(null);
     setErrorMessage(null);
-    inputRef.current?.focus();
+    structuredApiRef.current?.focus();
   }
 
   function handleClear() {
@@ -254,21 +313,22 @@ export function CalculatorWorkspace() {
             <label htmlFor={inputId} className="text-sm font-medium text-text-secondary">
               Expressão matemática
             </label>
-            <MathInput
-              ref={inputRef}
+            <StructuredMathInputLoader
               id={inputId}
-              value={expression}
-              onChange={setExpression}
+              value={latex}
+              onChange={setLatex}
+              onReady={(api) => {
+                structuredApiRef.current = api;
+              }}
               placeholder="Digite ou monte com o teclado abaixo, ex.: x² - 4 = 0"
               ariaDescribedBy={status === "error" ? errorId : undefined}
               ariaInvalid={status === "error"}
             />
-            <MathPreview value={expression} />
             <div className="flex flex-wrap gap-2">
-              <Button type="submit" disabled={status === "loading" || expression.trim().length === 0}>
+              <Button type="submit" disabled={status === "loading" || latex.trim().length === 0}>
                 {status === "loading" ? "Resolvendo..." : "Resolver"}
               </Button>
-              <Button type="button" variant="ghost" onClick={handleClear} disabled={expression.length === 0}>
+              <Button type="button" variant="ghost" onClick={handleClear} disabled={latex.length === 0}>
                 Limpar
               </Button>
             </div>
@@ -287,7 +347,7 @@ export function CalculatorWorkspace() {
           </div>
 
           <div className="order-3 lg:order-2">
-            <MathKeyboard onInsert={handleInsert} />
+            <MathKeyboard onInsert={handleInsert} categories={BASIC_KEYBOARD_CATEGORIES} />
           </div>
 
           <div className="order-4 lg:order-3">

@@ -113,30 +113,28 @@ export const QUICK_EXAMPLES: QuickExample[] = [
  * Sprint V2.8 — Motor de Probabilidade: 3 exemplos (probabilidade,
  * binomial, condicional), a lista exata pedida na seção EXEMPLOS do
  * escopo da sprint (19 → 22).
+ *
+ * Sprint V3.0 (Structured Math Input) — reduzida temporariamente de 22
+ * para 7 (decisão de escopo confirmada com o Theo): o `StructuredMathInput`
+ * (MathLive) só sabe representar estruturalmente números, variáveis,
+ * `+ - × ÷ =`, parênteses, potência, fração e raiz quadrada/cúbica/
+ * n-ésima nesta sprint — os exemplos que dependiam de notações ainda não
+ * migradas (derivada, integral, limite, geometria, somatório, matrizes,
+ * complexos, sistemas, polinômios com função nomeada, combinatória,
+ * probabilidade) saem da vitrine da Calculadora até a categoria
+ * correspondente do teclado ser migrada estruturalmente (V3.0.x). Nada foi
+ * removido do backend nem de `QUICK_EXAMPLES`/`QUICK_SHORTCUTS` (Home,
+ * fora de escopo) — só desta lista. Os 6 primeiros são exatamente os
+ * casos de regressão obrigatórios do ticket da V3.0.
  */
 export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "x² - 4 = 0", expression: "x² - 4 = 0" },
-  { label: "sen(π/6)", expression: "sen(π/6)" },
-  { label: "d/dx(x² + 3x)", expression: "d/dx(x² + 3x)" },
-  { label: "∫₀¹ x² dx", expression: "∫₀¹ x² dx" },
-  { label: "lim x→0 sen(x)/x", expression: "lim x→0 sen(x)/x" },
-  { label: "circunferencia((0,0),5)", expression: "circunferencia((0,0),5)" },
-  { label: "Σ(i=1..10) i", expression: "Σ(i=1..10) i" },
-  { label: "[[1,2],[3,4]]", expression: "[[1,2],[3,4]]" },
-  { label: "(2+i)(3-i)", expression: "(2+i)(3-i)" },
-  { label: "|3+4i|", expression: "|3+4i|" },
-  { label: "x+y=5\nx-y=1", expression: "x+y=5\nx-y=1" },
-  { label: "x²+y=5\nx-y=1", expression: "x²+y=5\nx-y=1" },
-  { label: "fatorar(x²-9)", expression: "fatorar(x²-9)" },
-  { label: "expandir((x+2)³)", expression: "expandir((x+2)³)" },
-  { label: "raízes(x³-6x²+11x-6)", expression: "raízes(x³-6x²+11x-6)" },
-  { label: "fatorial(6)", expression: "fatorial(6)" },
-  { label: "combinacao(10,3)", expression: "combinacao(10,3)" },
-  { label: "arranjo(8,3)", expression: "arranjo(8,3)" },
-  { label: "permutacao(6)", expression: "permutacao(6)" },
-  { label: "probabilidade(3,10)", expression: "probabilidade(3,10)" },
-  { label: "binomial(10,3,0.5)", expression: "binomial(10,3,0.5)" },
-  { label: "condicional(0.2,0.5)", expression: "condicional(0.2,0.5)" },
+  { label: "2x + 4 = 10", expression: "2x + 4 = 10" },
+  { label: "(x+1)³", expression: "(x+1)³" },
+  { label: "√16", expression: "√16" },
+  { label: "1/2 + 1/3", expression: "1/2 + 1/3" },
+  { label: "x³-6x²+11x-6=0", expression: "x³-6x²+11x-6=0" },
+  { label: "π/2", expression: "π/2" },
 ];
 
 export interface QuickShortcut {

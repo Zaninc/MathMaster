@@ -403,4 +403,37 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(latexByInsert.get("condicional(,)")).toBe("P(A \\mid B)");
     expect(latexByInsert.get("binomial(,,)")).toBe("\\binom{n}{k}p^{k}(1-p)^{n-k}");
   });
+
+  // --- Sprint V3.0 (Structured Math Input) --------------------------------
+
+  it("as 9 teclas básicas do ticket têm mathLiveInsert com slots \\placeholder{} nos templates", () => {
+    const basico = KEYBOARD_CATEGORIES.find((category) => category.id === "basico");
+    const byLabel = new Map(basico?.keys.map((key) => [key.label, key]));
+
+    expect(byLabel.get("( )")?.mathLiveInsert).toBe("\\left(\\placeholder{}\\right)");
+    expect(byLabel.get("x²")?.mathLiveInsert).toBe("^{2}");
+    expect(byLabel.get("x³")?.mathLiveInsert).toBe("^{3}");
+    expect(byLabel.get("xⁿ")?.mathLiveInsert).toBe("^{\\placeholder{}}");
+    expect(byLabel.get("a/b")?.mathLiveInsert).toBe("\\frac{\\placeholder{}}{\\placeholder{}}");
+    expect(byLabel.get("√")?.mathLiveInsert).toBe("\\sqrt{\\placeholder{}}");
+    expect(byLabel.get("ⁿ√")?.mathLiveInsert).toBe("\\sqrt[\\placeholder{}]{\\placeholder{}}");
+    expect(byLabel.get("=")?.mathLiveInsert).toBe("=");
+    expect(byLabel.get("π")?.mathLiveInsert).toBe("\\pi");
+  });
+
+  it("categoria Básico tem a nova tecla de raiz n-ésima (ⁿ√), inexistente no teclado legado", () => {
+    const basico = KEYBOARD_CATEGORIES.find((category) => category.id === "basico");
+    const key = basico?.keys.find((candidate) => candidate.label === "ⁿ√");
+    expect(key).toBeDefined();
+    expect(key!.ariaLabel).toBeDefined();
+  });
+
+  it("teclas fora da categoria Básico ainda não têm mathLiveInsert (fora de escopo desta sprint)", () => {
+    for (const category of KEYBOARD_CATEGORIES) {
+      if (category.id === "basico") continue;
+      for (const key of category.keys) {
+        expect(key.mathLiveInsert, `${category.id}/${key.label}`).toBeUndefined();
+      }
+    }
+  });
 });

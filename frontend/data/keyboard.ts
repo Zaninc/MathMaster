@@ -27,6 +27,16 @@ export interface KeyboardKey {
    * capacidade continua disponível para uma tecla futura que precise.
    */
   selection?: { before: string; after: string; cursorFromEnd: number };
+  /**
+   * Sprint V3.0 (Structured Math Input) — comando LaTeX inserido via a API
+   * real do `StructuredMathInput`/MathLive (`insert()`) quando o campo
+   * estruturado está ativo, em vez de `insert`/`cursorOffset`/`selection`
+   * (que continuam servindo o `<textarea>` legado, mantido intocado).
+   * Slots editáveis usam `\placeholder{}` — o MathLive posiciona o cursor
+   * no primeiro automaticamente. Só as teclas migradas nesta sprint (a
+   * categoria `basico`) têm este campo; as demais ficam para V3.0.x.
+   */
+  mathLiveInsert?: string;
 }
 
 export interface KeyboardCategory {
@@ -51,9 +61,29 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
     id: "basico",
     label: "Básico",
     keys: [
-      { label: "( )", insert: "()", cursorOffset: 1, ariaLabel: "Inserir parênteses" },
-      { label: "x²", insert: "²", cursorOffset: 1, ariaLabel: "Inserir expoente 2", latex: "x^2" },
-      { label: "x³", insert: "³", cursorOffset: 1, ariaLabel: "Inserir expoente 3", latex: "x^3" },
+      {
+        label: "( )",
+        insert: "()",
+        cursorOffset: 1,
+        ariaLabel: "Inserir parênteses",
+        mathLiveInsert: "\\left(\\placeholder{}\\right)",
+      },
+      {
+        label: "x²",
+        insert: "²",
+        cursorOffset: 1,
+        ariaLabel: "Inserir expoente 2",
+        latex: "x^2",
+        mathLiveInsert: "^{2}",
+      },
+      {
+        label: "x³",
+        insert: "³",
+        cursorOffset: 1,
+        ariaLabel: "Inserir expoente 3",
+        latex: "x^3",
+        mathLiveInsert: "^{3}",
+      },
       {
         // Mesmo padrão VISUAL de x²/x³: insere só o expoente na posição do
         // cursor, sem parênteses automáticos e sem envolver seleção — o
@@ -61,21 +91,80 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
         // teclado físico) diretamente, igual a "²"/"³". Só na fronteira de
         // envio (`normalizeForBackend`) "ⁿ" vira "**n"; internamente
         // continua sendo tratado como potência normalmente.
+        //
+        // No campo estruturado (`mathLiveInsert`), "n" simbólico vira um
+        // slot de expoente REAL e editável (`^{\placeholder{}}`) — o
+        // "x^□" genérico do ticket — em vez de um glifo fixo; estritamente
+        // mais capaz que o "ⁿ" do textarea legado (que só é editável se o
+        // usuário apagar e digitar outro número por cima).
         label: "xⁿ",
         insert: "ⁿ",
         cursorOffset: 1,
         ariaLabel: "Inserir expoente n",
         latex: "x^n",
+        mathLiveInsert: "^{\\placeholder{}}",
       },
-      { label: "a/b", insert: "()/()", cursorOffset: 1, ariaLabel: "Inserir fração", latex: "\\dfrac{a}{b}" },
+      {
+        label: "a/b",
+        insert: "()/()",
+        cursorOffset: 1,
+        ariaLabel: "Inserir fração",
+        latex: "\\dfrac{a}{b}",
+        mathLiveInsert: "\\frac{\\placeholder{}}{\\placeholder{}}",
+      },
       // Raízes em Unicode visual — o usuário enxerga no campo o mesmo
       // símbolo do botão. O backend aceita √()/∛() NATIVAMENTE (Sprint
       // Parser dele; validado em 2026-07-18: √(9)->3, ∛(8)->2), então
       // não há normalização no envio — reescrever aqui duplicaria o
       // parser do backend.
-      { label: "√", insert: "√()", cursorOffset: 2, ariaLabel: "Inserir raiz quadrada", latex: "\\sqrt{x}" },
-      { label: "∛", insert: "∛()", cursorOffset: 2, ariaLabel: "Inserir raiz cúbica", latex: "\\sqrt[3]{x}" },
-      { label: "=", insert: "=", cursorOffset: 1, ariaLabel: "Inserir igual" },
+      {
+        label: "√",
+        insert: "√()",
+        cursorOffset: 2,
+        ariaLabel: "Inserir raiz quadrada",
+        latex: "\\sqrt{x}",
+        mathLiveInsert: "\\sqrt{\\placeholder{}}",
+      },
+      {
+        label: "∛",
+        insert: "∛()",
+        cursorOffset: 2,
+        ariaLabel: "Inserir raiz cúbica",
+        latex: "\\sqrt[3]{x}",
+        mathLiveInsert: "\\sqrt[3]{\\placeholder{}}",
+      },
+      {
+        // Nova nesta sprint — não existia no teclado do `<textarea>` legado
+        // (que só tinha √/∛ fixos). Índice E radicando são slots
+        // independentes; o MathLive posiciona o cursor no índice primeiro
+        // (primeiro `\placeholder{}` da string, lido da esquerda pra
+        // direita), pronto para o usuário digitar "4", "5" etc.
+        label: "ⁿ√",
+        // `insert`/`cursorOffset` (fallback do `<textarea>` legado) não tem
+        // representação Unicode nativa pra raiz n-ésima genérica (só √/∛
+        // são glifos aceitos pelo backend) — abre parênteses vazios como
+        // ponto de partida razoável; na prática esta tecla só é exibida na
+        // Calculadora, que usa exclusivamente `mathLiveInsert` agora.
+        insert: "()",
+        cursorOffset: 1,
+        ariaLabel: "Inserir raiz n-ésima",
+        latex: "\\sqrt[n]{x}",
+        mathLiveInsert: "\\sqrt[\\placeholder{}]{\\placeholder{}}",
+      },
+      { label: "=", insert: "=", cursorOffset: 1, ariaLabel: "Inserir igual", mathLiveInsert: "=" },
+      {
+        // π já existe nas categorias Trigonometria/Símbolos (fora de
+        // escopo nesta sprint, ocultas na Calculadora — ver
+        // `MathKeyboard.tsx`); duplicada aqui porque o ticket pede π como
+        // uma das 9 teclas básicas migradas, e o teclado desta página
+        // mostra só a categoria `basico` por enquanto.
+        label: "π",
+        insert: "π",
+        cursorOffset: 1,
+        ariaLabel: "Inserir pi",
+        latex: "\\pi",
+        mathLiveInsert: "\\pi",
+      },
     ],
   },
   {

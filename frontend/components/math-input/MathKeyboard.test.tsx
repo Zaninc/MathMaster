@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { KEYBOARD_CATEGORIES } from "@/data/keyboard";
+
 import { MathKeyboard } from "./MathKeyboard";
 
 describe("MathKeyboard", () => {
@@ -99,5 +101,21 @@ describe("MathKeyboard", () => {
     expect(onInsert).toHaveBeenCalledWith(
       expect.objectContaining({ insert: "x+y=5\nx-y=1", cursorOffset: "x+y=5\nx-y=1".length })
     );
+  });
+
+  // --- Sprint V3.0 (Structured Math Input) --------------------------------
+
+  it("prop `categories` restringe as abas mostradas (Calculadora passa só Básico nesta sprint)", () => {
+    const basico = KEYBOARD_CATEGORIES.filter((category) => category.id === "basico");
+    render(<MathKeyboard onInsert={vi.fn()} categories={basico} />);
+
+    expect(screen.getAllByRole("tab")).toHaveLength(1);
+    expect(screen.getByRole("tab", { name: "Básico" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Álgebra" })).not.toBeInTheDocument();
+  });
+
+  it("sem a prop `categories`, mostra todas (comportamento de antes, compatibilidade)", () => {
+    render(<MathKeyboard onInsert={vi.fn()} />);
+    expect(screen.getAllByRole("tab").length).toBe(KEYBOARD_CATEGORIES.length);
   });
 });

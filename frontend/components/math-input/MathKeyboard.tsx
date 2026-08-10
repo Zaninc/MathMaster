@@ -3,7 +3,7 @@
 import { KeyboardEvent, useState } from "react";
 
 import { MathFormula } from "@/components/shared/MathFormula";
-import { KEYBOARD_CATEGORIES, type KeyboardKey } from "@/data/keyboard";
+import { KEYBOARD_CATEGORIES, type KeyboardCategory, type KeyboardKey } from "@/data/keyboard";
 import { cn } from "@/lib/utils/cn";
 
 interface MathKeyboardProps {
@@ -13,6 +13,17 @@ interface MathKeyboardProps {
    * apresenta e delega, nunca transforma texto.
    */
   onInsert: (key: KeyboardKey) => void;
+  /**
+   * Sprint V3.0 (Structured Math Input) — subconjunto de categorias a
+   * mostrar; default `KEYBOARD_CATEGORIES` (todas, comportamento de
+   * antes). A Calculadora passa só a categoria `basico` nesta sprint: as
+   * demais (Álgebra, Funções, Símbolos...) ainda não têm `mathLiveInsert`
+   * migrado — mostrar seus botões inseriria texto bruto no campo
+   * estruturado, arriscando ficar visualmente estranho (ver decisão de
+   * escopo confirmada no plano). Voltam nas V3.0.x, categoria por
+   * categoria, sem precisar mudar este componente de novo.
+   */
+  categories?: KeyboardCategory[];
 }
 
 /**
@@ -20,16 +31,16 @@ interface MathKeyboardProps {
  * `aria-label` de cada tecla descreve a ação, não só repete o glifo bruto
  * (ex. "∫" sozinho não é autoexplicativo para leitor de tela).
  */
-export function MathKeyboard({ onInsert }: MathKeyboardProps) {
+export function MathKeyboard({ onInsert, categories = KEYBOARD_CATEGORIES }: MathKeyboardProps) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const activeCategory = KEYBOARD_CATEGORIES[activeIndex];
+  const activeCategory = categories[activeIndex];
 
   function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let nextIndex: number | null = null;
     if (event.key === "ArrowRight") {
-      nextIndex = (index + 1) % KEYBOARD_CATEGORIES.length;
+      nextIndex = (index + 1) % categories.length;
     } else if (event.key === "ArrowLeft") {
-      nextIndex = (index - 1 + KEYBOARD_CATEGORIES.length) % KEYBOARD_CATEGORIES.length;
+      nextIndex = (index - 1 + categories.length) % categories.length;
     }
     if (nextIndex === null) return;
     event.preventDefault();
@@ -44,7 +55,7 @@ export function MathKeyboard({ onInsert }: MathKeyboardProps) {
         aria-label="Categorias do teclado matemático"
         className="flex overflow-x-auto border-b border-border"
       >
-        {KEYBOARD_CATEGORIES.map((category, index) => (
+        {categories.map((category, index) => (
           <button
             key={category.id}
             id={`keyboard-tab-${index}`}

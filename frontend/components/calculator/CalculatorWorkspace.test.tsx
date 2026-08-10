@@ -16,10 +16,66 @@ vi.mock("@/lib/api/client", () => ({
   apiClient: { solve: vi.fn(), getHistory: vi.fn() },
 }));
 
+/**
+ * `mathlive` real resolve, sob Vitest/Node, pra sua build "SSR-safe"
+ * (inerte por design — ver `StructuredMathInput.test.tsx`). Mesmo mock
+ * mínimo reaproveitado aqui: só a superfície que `StructuredMathInput`
+ * realmente usa.
+ */
+vi.mock("mathlive", () => {
+  class MockMathfieldElement extends HTMLElement {
+    private _value = "";
+    mathVirtualKeyboardPolicy = "auto";
+    smartFence = false;
+    smartSuperscript = false;
+
+    get value() {
+      return this._value;
+    }
+
+    set value(v: string) {
+      this._value = v;
+    }
+
+    insert(latex: string) {
+      this._value += latex;
+      this.dispatchEvent(new Event("input"));
+      return true;
+    }
+  }
+  if (!customElements.get("math-field")) {
+    customElements.define("math-field", MockMathfieldElement);
+  }
+  return {};
+});
+
 import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
+import { previewLatex } from "@/lib/math/to-latex";
 
 import { CalculatorWorkspace } from "./CalculatorWorkspace";
+
+/**
+ * `StructuredMathInputLoader` é `next/dynamic(..., {ssr:false})` — o
+ * `<math-field>` real só existe depois que o import dinâmico resolve
+ * (mostra "Carregando editor..." antes disso). Todo teste que interage
+ * com o campo precisa esperar por ele primeiro.
+ */
+async function getField(container: HTMLElement): Promise<HTMLElement & { value: string }> {
+  await waitFor(() => expect(container.querySelector("math-field")).not.toBeNull());
+  return container.querySelector("math-field") as HTMLElement & { value: string };
+}
+
+/**
+ * Simula "o usuário deixou o campo com este LaTeX" — dispara `input` como
+ * o campo real faria. `fireEvent` (não `field.dispatchEvent` cru) garante
+ * que o `setState` disparado por `handleInput` seja processado (`act()`)
+ * antes do próximo comando do teste.
+ */
+function setFieldLatex(field: HTMLElement & { value: string }, latex: string) {
+  field.value = latex;
+  fireEvent(field, new Event("input", { bubbles: true }));
+}
 
 describe("CalculatorWorkspace", () => {
   afterEach(() => {
@@ -34,11 +90,13 @@ describe("CalculatorWorkspace", () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     vi.mocked(apiClient.solve).mockResolvedValue({ expression: "2+2", result: "4", approx: null });
 
-    render(<CalculatorWorkspace />);
+    const { container } = render(<CalculatorWorkspace />);
+    const field = await getField(container);
+    setFieldLatex(field, "2+2");
 
-    fireEvent.change(screen.getByLabelText("Expressão matemática"), { target: { value: "2+2" } });
     fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
 
+    await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith("2+2"));
     // findAllByText: o resultado aparece primeiro como texto puro e é
     // promovido a KaTeX (que duplica o "4" em MathML + HTML visual) — a
     // asserção precisa valer nas duas fases.
@@ -51,175 +109,160 @@ describe("CalculatorWorkspace", () => {
       new ApiError("invalid_expression", "Não foi possível interpretar.")
     );
 
-    render(<CalculatorWorkspace />);
+    const { container } = render(<CalculatorWorkspace />);
+    const field = await getField(container);
+    setFieldLatex(field, "x");
 
-    fireEvent.change(screen.getByLabelText("Expressão matemática"), { target: { value: "@@@" } });
     fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
 
     expect(await screen.findByText("Não foi possível interpretar.")).toBeInTheDocument();
   });
 
-  it("insere uma tecla do teclado matemático no campo", () => {
+  // --- Sprint V3.0 (Structured Math Input) --------------------------------
+
+  it("notação LaTeX fora do catálogo desta sprint mostra mensagem amigável, nunca chama o backend", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+
+    const { container } = render(<CalculatorWorkspace />);
+    const field = await getField(container);
+    setFieldLatex(field, "\\int_0^1 x^2\\,dx");
+
+    fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+    expect(await screen.findByText("Esta notação ainda não é suportada pela calculadora.")).toBeInTheDocument();
+    expect(apiClient.solve).not.toHaveBeenCalled();
+  });
+
+  it("slot de template não preenchido (\\placeholder{} vazio) mostra mensagem amigável distinta, nunca chama o backend", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+
+    const { container } = render(<CalculatorWorkspace />);
+    const field = await getField(container);
+    setFieldLatex(field, "\\frac{1}{\\placeholder{}}");
+
+    fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+    expect(await screen.findByText("Preencha todos os espaços antes de resolver.")).toBeInTheDocument();
+    expect(apiClient.solve).not.toHaveBeenCalled();
+  });
+
+  it("teclado mostra só a categoria Básico nesta página (Álgebra/Funções/Símbolos ficam fora até serem migradas)", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     render(<CalculatorWorkspace />);
 
-    fireEvent.click(screen.getByRole("tab", { name: "Trigonometria" }));
-    fireEvent.click(screen.getByRole("button", { name: "Inserir seno" }));
-
-    expect(screen.getByLabelText("Expressão matemática")).toHaveValue("sen()");
+    expect(screen.getAllByRole("tab")).toHaveLength(1);
+    expect(screen.getByRole("tab", { name: "Básico" })).toBeInTheDocument();
   });
 
-  it("fechamento da Sprint de Matrizes: det/inversa/transposta (aba Álgebra) inserem no campo multilinha com cursor entre os parênteses", () => {
-    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
-    render(<CalculatorWorkspace />);
-    const input = screen.getByLabelText<HTMLTextAreaElement>("Expressão matemática");
-
-    fireEvent.click(screen.getByRole("tab", { name: "Álgebra" }));
-    fireEvent.click(screen.getByRole("button", { name: "Inserir determinante" }));
-    expect(input).toHaveValue("det()");
-    expect(input.selectionStart).toBe(4);
-
-    fireEvent.change(input, { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: "Inserir inversa" }));
-    expect(input).toHaveValue("inv()");
-    expect(input.selectionStart).toBe(4);
-
-    fireEvent.change(input, { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: "Inserir transposta" }));
-    expect(input).toHaveValue("transpose()");
-    expect(input.selectionStart).toBe(10);
-  });
-
-  it("Sprint V2.4 (Sistemas Lineares): tecla 'Sistema linear' insere o exemplo multilinha no campo, com cursor no fim", () => {
-    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
-    render(<CalculatorWorkspace />);
-    const input = screen.getByLabelText<HTMLTextAreaElement>("Expressão matemática");
-
-    fireEvent.click(screen.getByRole("tab", { name: "Álgebra" }));
-    fireEvent.click(screen.getByRole("button", { name: "Inserir sistema linear de exemplo" }));
-
-    expect(input).toHaveValue("x+y=5\nx-y=1");
-    expect(input.selectionStart).toBe("x+y=5\nx-y=1".length);
-  });
-
-  it("√ insere o glifo visual √() com cursor no parêntese; completado, preview deriva do MESMO texto", async () => {
+  it("as 9 teclas básicas inserem estruturas via a API real do MathLive (nunca concatenação de string)", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     const { container } = render(<CalculatorWorkspace />);
-    const input = screen.getByLabelText<HTMLInputElement>("Expressão matemática");
+    const field = await getField(container);
+
+    fireEvent.click(screen.getByRole("button", { name: "Inserir expoente 2" }));
+    expect(field.value).toBe("^{2}");
+  });
+
+  it("tecla de fração insere \\frac{}{} estruturado", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    const { container } = render(<CalculatorWorkspace />);
+    const field = await getField(container);
+
+    fireEvent.click(screen.getByRole("button", { name: "Inserir fração" }));
+    expect(field.value).toBe("\\frac{\\placeholder{}}{\\placeholder{}}");
+  });
+
+  it("tecla de raiz quadrada insere \\sqrt{} estruturado", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    const { container } = render(<CalculatorWorkspace />);
+    const field = await getField(container);
 
     fireEvent.click(screen.getByRole("button", { name: "Inserir raiz quadrada" }));
-    expect(input).toHaveValue("√()");
-    expect(input.selectionStart).toBe(2);
-
-    // "digita 9" na posição do cursor
-    fireEvent.change(input, { target: { value: "√(9)" } });
-    expect(input).toHaveValue("√(9)");
-
-    await waitFor(
-      () => {
-        const preview = container.querySelector("p[data-latex-source]");
-        expect(preview?.getAttribute("data-latex-source")).toBe("√(9)");
-      },
-      { timeout: 2000 }
-    );
-    expect(
-      Array.from(container.querySelectorAll("annotation")).some((node) =>
-        node.textContent?.includes("\\sqrt{9}")
-      )
-    ).toBe(true);
+    expect(field.value).toBe("\\sqrt{\\placeholder{}}");
   });
 
-  it("∛ insere o glifo visual ∛(); completado, preview deriva exatamente de ∛(8)", async () => {
+  it("tecla de raiz n-ésima (nova nesta sprint) insere \\sqrt[]{}  com índice e radicando como slots independentes", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     const { container } = render(<CalculatorWorkspace />);
-    const input = screen.getByLabelText<HTMLInputElement>("Expressão matemática");
+    const field = await getField(container);
 
-    fireEvent.click(screen.getByRole("button", { name: "Inserir raiz cúbica" }));
-    expect(input).toHaveValue("∛()");
-    expect(input.selectionStart).toBe(2);
-
-    fireEvent.change(input, { target: { value: "∛(8)" } });
-    await waitFor(
-      () => {
-        const preview = container.querySelector("p[data-latex-source]");
-        expect(preview?.getAttribute("data-latex-source")).toBe("∛(8)");
-      },
-      { timeout: 2000 }
-    );
-    expect(
-      Array.from(container.querySelectorAll("annotation")).some((node) =>
-        node.textContent?.includes("\\sqrt[3]{8}")
-      )
-    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Inserir raiz n-ésima" }));
+    expect(field.value).toBe("\\sqrt[\\placeholder{}]{\\placeholder{}}");
   });
 
-  it("xⁿ insere apenas o glifo sobrescrito ⁿ na posição do cursor, sem parênteses automáticos (mesmo padrão de x²/x³)", () => {
-    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
-    render(<CalculatorWorkspace />);
-    const input = screen.getByLabelText<HTMLInputElement>("Expressão matemática");
-
-    fireEvent.click(screen.getByRole("button", { name: "Inserir expoente n" }));
-    expect(input).toHaveValue("ⁿ");
-    expect(input.selectionStart).toBe(1);
-  });
-
-  it("xⁿ com seleção substitui o texto selecionado normalmente, sem envolver em parênteses", () => {
-    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
-    render(<CalculatorWorkspace />);
-    const input = screen.getByLabelText<HTMLInputElement>("Expressão matemática");
-
-    fireEvent.change(input, { target: { value: "x" } });
-    input.setSelectionRange(0, 1);
-    fireEvent.click(screen.getByRole("button", { name: "Inserir expoente n" }));
-
-    expect(input).toHaveValue("ⁿ");
-    expect(input.selectionStart).toBe(1);
-  });
-
-  it("eˣ insere o template visual eˣ() com cursor no parêntese; preview mostra e elevado", async () => {
+  it("tecla π insere \\pi", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     const { container } = render(<CalculatorWorkspace />);
-    const input = screen.getByLabelText<HTMLInputElement>("Expressão matemática");
+    const field = await getField(container);
 
-    fireEvent.click(screen.getByRole("tab", { name: "Funções" }));
-    fireEvent.click(screen.getByRole("button", { name: "Inserir exponencial de base e" }));
-    expect(input).toHaveValue("eˣ()");
-    expect(input.selectionStart).toBe(3);
-
-    fireEvent.change(input, { target: { value: "eˣ(2)" } });
-    await waitFor(
-      () => {
-        const preview = container.querySelector("p[data-latex-source]");
-        expect(preview?.getAttribute("data-latex-source")).toBe("eˣ(2)");
-      },
-      { timeout: 2000 }
-    );
-    expect(
-      Array.from(container.querySelectorAll("annotation")).some((node) =>
-        node.textContent?.includes("e^{2}")
-      )
-    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Inserir pi" }));
+    expect(field.value).toBe("\\pi");
   });
 
-  it("ida e volta pelo histórico preserva a expressão exata (Unicode visual incluído)", async () => {
+  it("tecla de parênteses insere \\left(\\right) com slot dentro", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    const { container } = render(<CalculatorWorkspace />);
+    const field = await getField(container);
+
+    fireEvent.click(screen.getByRole("button", { name: "Inserir parênteses" }));
+    expect(field.value).toBe("\\left(\\placeholder{}\\right)");
+  });
+
+  it("Limpar esvazia o campo estruturado", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    const { container } = render(<CalculatorWorkspace />);
+    const field = await getField(container);
+    setFieldLatex(field, "x^2");
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /^limpar$/i })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: /^limpar$/i }));
+
+    await waitFor(() => expect(field.value).toBe(""));
+  });
+
+  it("ida e volta pelo histórico preenche o campo com o LaTeX equivalente à expressão", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([
-      { expression: "√(9)", result: "3", approx: null, timestamp: "2026-01-01T00:00:00Z" },
+      { expression: "x²-4=0", result: "x=2 ou x=-2", approx: null, timestamp: "2026-01-01T00:00:00Z" },
     ]);
-    render(<CalculatorWorkspace />);
+    const { container } = render(<CalculatorWorkspace />);
+    const field = await getField(container);
 
-    const historyButton = await screen.findByRole("button", { name: /reutilizar expressão: √\(9\)/i });
+    const historyButton = await screen.findByRole("button", { name: /reutilizar expressão: x²-4=0/i });
     fireEvent.click(historyButton);
 
-    expect(screen.getByLabelText("Expressão matemática")).toHaveValue("√(9)");
+    const expectedLatex = await previewLatex("x²-4=0");
+    await waitFor(() => expect(field.value).toBe(expectedLatex));
   });
 
-  it("pré-preenche a partir da query string sem resolver automaticamente", () => {
+  it("clicar num exemplo preenche o campo com o LaTeX equivalente", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    const { container } = render(<CalculatorWorkspace />);
+    const field = await getField(container);
+
+    fireEvent.click(screen.getByRole("button", { name: "Preencher exemplo: (x+1)³" }));
+
+    const expectedLatex = await previewLatex("(x+1)³");
+    await waitFor(() => expect(field.value).toBe(expectedLatex));
+  });
+
+  it("todos os exemplos reduzidos da V3.0 aparecem como botões", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    render(<CalculatorWorkspace />);
+
+    for (const label of ["x² - 4 = 0", "2x + 4 = 10", "(x+1)³", "√16", "1/2 + 1/3", "x³-6x²+11x-6=0", "π/2"]) {
+      expect(screen.getByRole("button", { name: `Preencher exemplo: ${label}` })).toBeInTheDocument();
+    }
+  });
+
+  it("pré-preenche a partir da query string sem resolver automaticamente", async () => {
     searchParamsMock.mockReturnValue(new URLSearchParams("expression=x%C2%B2-4%3D0"));
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
 
-    render(<CalculatorWorkspace />);
+    const { container } = render(<CalculatorWorkspace />);
+    const field = await getField(container);
 
-    expect(screen.getByLabelText("Expressão matemática")).toHaveValue("x²-4=0");
+    const expectedLatex = await previewLatex("x²-4=0");
+    await waitFor(() => expect(field.value).toBe(expectedLatex));
     expect(apiClient.solve).not.toHaveBeenCalled();
   });
 
@@ -235,19 +278,20 @@ describe("CalculatorWorkspace", () => {
    * App Router faria de verdade).
    */
   describe("navegação intra-página via query string (ex. 'Ver propriedades')", () => {
-    it("uma query string NOVA (após o mount) atualiza o campo, mesmo sem desmontar o componente", () => {
+    it("uma query string NOVA (após o mount) atualiza o campo, mesmo sem desmontar o componente", async () => {
       searchParamsMock.mockReturnValue(new URLSearchParams("expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)"));
       vi.mocked(apiClient.getHistory).mockResolvedValue([]);
 
-      const { rerender } = render(<CalculatorWorkspace />);
-      expect(screen.getByLabelText("Expressão matemática")).toHaveValue("det([[1,2],[3,4]])");
+      const { container, rerender } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      await waitFor(async () => expect(field.value).toBe(await previewLatex("det([[1,2],[3,4]])")));
 
       searchParamsMock.mockReturnValue(
         new URLSearchParams("expression=transpose(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)")
       );
       rerender(<CalculatorWorkspace />);
 
-      expect(screen.getByLabelText("Expressão matemática")).toHaveValue("transpose([[1,2],[3,4]])");
+      await waitFor(async () => expect(field.value).toBe(await previewLatex("transpose([[1,2],[3,4]])")));
     });
 
     it("query string com autoSolve=1 resolve automaticamente ao chegar (ex. 'Ver propriedades')", async () => {
@@ -267,21 +311,22 @@ describe("CalculatorWorkspace", () => {
       );
       rerender(<CalculatorWorkspace />);
 
-      expect(screen.getByLabelText("Expressão matemática")).toHaveValue("det([[1,2],[3,4]])");
       await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith("det([[1,2],[3,4]])"));
       expect((await screen.findAllByText("-2")).length).toBeGreaterThan(0);
     });
 
-    it("sem autoSolve, uma query string nova só pré-preenche — não resolve sozinha", () => {
+    it("sem autoSolve, uma query string nova só pré-preenche — não resolve sozinha", async () => {
       searchParamsMock.mockReturnValue(new URLSearchParams());
       vi.mocked(apiClient.getHistory).mockResolvedValue([]);
 
-      const { rerender } = render(<CalculatorWorkspace />);
+      const { container, rerender } = render(<CalculatorWorkspace />);
+      await getField(container);
 
       searchParamsMock.mockReturnValue(new URLSearchParams("expression=det(%5B%5B1%2C2%5D%2C%5B3%2C4%5D%5D)"));
       rerender(<CalculatorWorkspace />);
 
-      expect(screen.getByLabelText("Expressão matemática")).toHaveValue("det([[1,2],[3,4]])");
+      const field = await getField(container);
+      await waitFor(async () => expect(field.value).toBe(await previewLatex("det([[1,2],[3,4]])")));
       expect(apiClient.solve).not.toHaveBeenCalled();
     });
 
@@ -314,7 +359,7 @@ describe("CalculatorWorkspace", () => {
    * expressão idêntica.
    */
   describe("identificador de solicitação (request) — cada ação é nova, mesmo com expressão idêntica", () => {
-    it("3. um segundo clique (request NOVO) resolve de novo, mesmo com a mesma expressão", async () => {
+    it("um segundo clique (request NOVO) resolve de novo, mesmo com a mesma expressão", async () => {
       vi.mocked(apiClient.getHistory).mockResolvedValue([]);
       vi.mocked(apiClient.solve).mockResolvedValue({ expression: "det(...)", result: "-2", approx: null });
 
@@ -336,7 +381,7 @@ describe("CalculatorWorkspace", () => {
       await waitFor(() => expect(apiClient.solve).toHaveBeenCalledTimes(2));
     });
 
-    it("5. cada ação (request distinto) gera exatamente uma chamada ao /solve — nunca mais, nunca menos", async () => {
+    it("cada ação (request distinto) gera exatamente uma chamada ao /solve — nunca mais, nunca menos", async () => {
       vi.mocked(apiClient.getHistory).mockResolvedValue([]);
       vi.mocked(apiClient.solve).mockResolvedValue({ expression: "det(...)", result: "-2", approx: null });
 
@@ -354,7 +399,7 @@ describe("CalculatorWorkspace", () => {
       await waitFor(() => expect(apiClient.solve).toHaveBeenCalledTimes(3));
     });
 
-    it("6. depois de resolver, a URL é limpa via router.replace (request/autoSolve removidos) e isso não causa loop", async () => {
+    it("depois de resolver, a URL é limpa via router.replace (request/autoSolve removidos) e isso não causa loop", async () => {
       vi.mocked(apiClient.getHistory).mockResolvedValue([]);
       vi.mocked(apiClient.solve).mockResolvedValue({ expression: "det(...)", result: "-2", approx: null });
 
@@ -381,7 +426,7 @@ describe("CalculatorWorkspace", () => {
       expect(routerReplaceMock).toHaveBeenCalledTimes(1);
     });
 
-    it("8. request novo com expressão DIFERENTE continua funcionando normalmente", async () => {
+    it("request novo com expressão DIFERENTE continua funcionando normalmente", async () => {
       vi.mocked(apiClient.getHistory).mockResolvedValue([]);
       vi.mocked(apiClient.solve).mockImplementation(async (value: string) => ({
         expression: value,
@@ -406,7 +451,7 @@ describe("CalculatorWorkspace", () => {
       expect(apiClient.solve).toHaveBeenCalledTimes(2);
     });
 
-    it("9. erro na primeira execução não impede uma tentativa posterior (request novo)", async () => {
+    it("erro na primeira execução não impede uma tentativa posterior (request novo)", async () => {
       vi.mocked(apiClient.getHistory).mockResolvedValue([]);
       vi.mocked(apiClient.solve)
         .mockRejectedValueOnce(new ApiError("invalid_expression", "Falha de rede."))
@@ -429,7 +474,7 @@ describe("CalculatorWorkspace", () => {
       expect(apiClient.solve).toHaveBeenCalledTimes(2);
     });
 
-    it("10. React StrictMode não duplica a chamada pra um único request", async () => {
+    it("React StrictMode não duplica a chamada pra um único request", async () => {
       vi.mocked(apiClient.getHistory).mockResolvedValue([]);
       vi.mocked(apiClient.solve).mockResolvedValue({ expression: "det(...)", result: "-2", approx: null });
       searchParamsMock.mockReturnValue(
@@ -451,56 +496,14 @@ describe("CalculatorWorkspace", () => {
       { expression: "2+2", result: "4", approx: null, timestamp: "2026-01-01T00:00:00Z" },
     ]);
 
-    render(<CalculatorWorkspace />);
+    const { container } = render(<CalculatorWorkspace />);
+    const field = await getField(container);
 
     const historyButton = await screen.findByRole("button", { name: /reutilizar expressão: 2\+2/i });
     fireEvent.click(historyButton);
 
-    expect(screen.getByLabelText("Expressão matemática")).toHaveValue("2+2");
-  });
-
-  it("preenche o campo com a expressão exata de um exemplo, mesmo exibido via KaTeX", async () => {
-    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
-    render(<CalculatorWorkspace />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Preencher exemplo: d/dx(x² + 3x)" }));
-
-    expect(screen.getByLabelText("Expressão matemática")).toHaveValue("d/dx(x² + 3x)");
-  });
-
-  it("Sprint V2.4 (Sistemas Lineares): exemplo 'x+y=5\\nx-y=1' preenche o campo multilinha com o valor exato", async () => {
-    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
-    render(<CalculatorWorkspace />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Preencher exemplo: x+y=5\nx-y=1" }));
-
-    expect(screen.getByLabelText("Expressão matemática")).toHaveValue("x+y=5\nx-y=1");
-  });
-
-  it("Sprint V2.5 (Sistemas Polinomiais Não Lineares): exemplo 'x²+y=5\\nx-y=1' preenche o campo multilinha com o valor exato", async () => {
-    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
-    render(<CalculatorWorkspace />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Preencher exemplo: x²+y=5\nx-y=1" }));
-
-    expect(screen.getByLabelText("Expressão matemática")).toHaveValue("x²+y=5\nx-y=1");
-  });
-
-  it("Sprint V2.2.1: o campo (agora um textarea) preserva um valor multi-linha de variáveis locais de matriz", async () => {
-    // Sprint V2.2.2 removeu os exemplos com variáveis locais (A=..., B=...)
-    // da lista de "Exemplos" (decisão de UX) — a sintaxe continua 100%
-    // suportada pelo motor e pelo campo em si, só deixou de ter um botão
-    // de exemplo dedicado. Preenchimento simulado diretamente (mesmo
-    // caminho que colar/digitar exerceria) em vez de clicar um exemplo.
-    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
-    render(<CalculatorWorkspace />);
-
-    const field = screen.getByLabelText("Expressão matemática");
-    expect(field.tagName).toBe("TEXTAREA");
-
-    fireEvent.change(field, { target: { value: "A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA*B" } });
-
-    expect(field).toHaveValue("A=[[1,2],[3,4]]\nB=[[5,6],[7,8]]\nA*B");
+    const expectedLatex = await previewLatex("2+2");
+    await waitFor(() => expect(field.value).toBe(expectedLatex));
   });
 
   it("oculta um item do histórico localmente ao clicar em Ocultar", async () => {
