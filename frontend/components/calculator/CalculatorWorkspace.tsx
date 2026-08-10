@@ -27,13 +27,22 @@ import { ResultPanel, type ResultStatus } from "./ResultPanel";
  *
  * Sprint V3.0.1 (Structured Calculus Input) — Cálculo (derivada, integral
  * indefinida/definida, limite, somatório, todas com `mathLiveInsert`)
- * volta a aparecer, ao lado de Básico. As demais (Álgebra/Funções/
- * Trigonometria/Geometria/Combinatória/Probabilidade/Símbolos) continuam
- * ocultas — voltam progressivamente nas próximas V3.0.x, sem precisar
- * mudar este arquivo de novo (só ampliar esta lista).
+ * volta a aparecer, ao lado de Básico.
+ *
+ * Sprint V3.0.2 (Structured Algebra Input) — Álgebra volta a aparecer,
+ * mas só o subconjunto migrado (x, y, sistemas 2x2/3x3, matrizes 2x2/3x3,
+ * determinante 2x2/3x3, inversa, transposta — todos com `mathLiveInsert`);
+ * as teclas de polinômio (fatorar/expandir/simplificar/grau/raízes/
+ * coeficientes/divisão) ficam fora do escopo desta sprint e continuam sem
+ * `mathLiveInsert` — por isso `structuredOnly` (abaixo, no `<MathKeyboard>`)
+ * as esconde automaticamente, sem precisar de uma segunda lista de
+ * categorias filtradas por dentro. Funções/Trigonometria/Geometria/
+ * Combinatória/Probabilidade/Símbolos continuam ocultas — voltam
+ * progressivamente nas próximas V3.0.x, sem precisar mudar este arquivo de
+ * novo (só ampliar esta lista).
  */
 const ENABLED_KEYBOARD_CATEGORIES = KEYBOARD_CATEGORIES.filter(
-  (category) => category.id === "basico" || category.id === "calculo"
+  (category) => category.id === "basico" || category.id === "calculo" || category.id === "algebra"
 );
 
 /** Escapa `\`/`{`/`}` — o mínimo pra um texto cru não quebrar dentro de `\text{...}`. */
@@ -354,7 +363,7 @@ export function CalculatorWorkspace() {
           </div>
 
           <div className="order-3 lg:order-2">
-            <MathKeyboard onInsert={handleInsert} categories={ENABLED_KEYBOARD_CATEGORIES} />
+            <MathKeyboard onInsert={handleInsert} categories={ENABLED_KEYBOARD_CATEGORIES} structuredOnly />
           </div>
 
           <div className="order-4 lg:order-3">

@@ -125,10 +125,10 @@ describe("CalculatorWorkspace", () => {
 
     const { container } = render(<CalculatorWorkspace />);
     const field = await getField(container);
-    // Matriz — integral/limite/derivada/somatório passaram a ser
-    // suportados na Sprint V3.0.1 (Structured Calculus Input); matriz
-    // continua fora do catálogo.
-    setFieldLatex(field, "\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}");
+    // Logaritmo — integral/limite/derivada/somatório (V3.0.1) e sistema/
+    // matriz/determinante (V3.0.2) passaram a ser suportados; log/ln
+    // (categoria Funções) continuam fora do catálogo.
+    setFieldLatex(field, "\\log(x)");
 
     fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
 
@@ -220,15 +220,26 @@ describe("CalculatorWorkspace", () => {
     });
   });
 
-  it("teclado mostra Básico e Cálculo nesta página (Álgebra/Funções/Símbolos ficam fora até serem migradas)", async () => {
+  it("teclado mostra Básico, Cálculo e Álgebra nesta página (Funções/Trigonometria/Geometria/Combinatória/Probabilidade/Símbolos ficam fora até serem migradas)", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     render(<CalculatorWorkspace />);
 
-    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
     expect(screen.getByRole("tab", { name: "Básico" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Cálculo" })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Álgebra" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Álgebra" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Funções" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Símbolos" })).not.toBeInTheDocument();
+  });
+
+  it("aba Álgebra (structuredOnly) esconde as teclas de polinômio fora de escopo (sem mathLiveInsert)", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    render(<CalculatorWorkspace />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Álgebra" }));
+    expect(screen.queryByRole("button", { name: "Inserir fatoração de polinômio" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Inserir menor ou igual" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Inserir matriz 2x2" })).toBeInTheDocument();
   });
 
   it("as 9 teclas básicas inserem estruturas via a API real do MathLive (nunca concatenação de string)", async () => {
@@ -438,6 +449,174 @@ describe("CalculatorWorkspace", () => {
     });
   });
 
+  // --- Sprint V3.0.2 (Structured Algebra Input) ----------------------------
+
+  describe("Sprint V3.0.2 — categoria Álgebra: teclado + solve ponta-a-ponta", () => {
+    function switchToAlgebra() {
+      fireEvent.click(screen.getByRole("tab", { name: "Álgebra" }));
+    }
+
+    it("tecla Matriz 2×2 insere \\begin{bmatrix} estruturado, nunca string simulando matriz", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToAlgebra();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir matriz 2x2" }));
+      expect(field.value).toBe(
+        "\\begin{bmatrix}\\placeholder{}&\\placeholder{}\\\\\\placeholder{}&\\placeholder{}\\end{bmatrix}"
+      );
+    });
+
+    it("tecla Sistema 3×3 insere \\begin{cases} estruturado com 3 slots", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToAlgebra();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir sistema linear 3x3" }));
+      expect(field.value).toBe(
+        "\\begin{cases}\\placeholder{}\\\\\\placeholder{}\\\\\\placeholder{}\\end{cases}"
+      );
+    });
+
+    it("tecla Determinante 2×2 insere \\begin{vmatrix} (representação visual de barras)", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToAlgebra();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir determinante 2x2" }));
+      expect(field.value).toBe(
+        "\\begin{vmatrix}\\placeholder{}&\\placeholder{}\\\\\\placeholder{}&\\placeholder{}\\end{vmatrix}"
+      );
+    });
+
+    it("tecla A⁻¹ insere \\operatorname{inv}(placeholder)", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToAlgebra();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir inversa" }));
+      expect(field.value).toBe("\\operatorname{inv}\\left(\\placeholder{}\\right)");
+    });
+
+    it("tecla Aᵀ insere \\operatorname{transpose}(placeholder)", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToAlgebra();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir transposta" }));
+      expect(field.value).toBe("\\operatorname{transpose}\\left(\\placeholder{}\\right)");
+    });
+
+    it.each([
+      ["sistema 2x2", "\\begin{cases}x+y=5\\\\x-y=1\\end{cases}", "x+y=5;x-y=1"],
+      [
+        "sistema 3x3",
+        "\\begin{cases}x+y+z=6\\\\2x-y+z=3\\\\x+2y-z=2\\end{cases}",
+        "x+y+z=6;2x-y+z=3;x+2y-z=2",
+      ],
+      ["matriz 2x2", "\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}", "[[1,2],[3,4]]"],
+      [
+        "matriz 3x3",
+        "\\begin{bmatrix}1&2&3\\\\4&5&6\\\\7&8&9\\end{bmatrix}",
+        "[[1,2,3],[4,5,6],[7,8,9]]",
+      ],
+      ["determinante 2x2 (barras)", "\\begin{vmatrix}1&2\\\\3&4\\end{vmatrix}", "det([[1,2],[3,4]])"],
+      [
+        "determinante 3x3 (barras)",
+        "\\begin{vmatrix}1&2&3\\\\0&1&4\\\\5&6&0\\end{vmatrix}",
+        "det([[1,2,3],[0,1,4],[5,6,0]])",
+      ],
+      [
+        "soma de matrizes",
+        "\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}+\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}",
+        "[[1,2],[3,4]]+[[5,6],[7,8]]",
+      ],
+      [
+        "multiplicação de matrizes",
+        "\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}\\times\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}",
+        "[[1,2],[3,4]]*[[5,6],[7,8]]",
+      ],
+      ["escalar × matriz (2A)", "2\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}", "2*[[1,2],[3,4]]"],
+      [
+        "inversa",
+        "\\operatorname{inv}\\left(\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}\\right)",
+        "inv([[1,2],[3,4]])",
+      ],
+      [
+        "transposta",
+        "\\operatorname{transpose}\\left(\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}\\right)",
+        "transpose([[1,2],[3,4]])",
+      ],
+      [
+        "célula com potência/fração/raiz/π",
+        "\\begin{bmatrix}x^2&\\frac{1}{2}\\\\\\sqrt{2}&\\pi\\end{bmatrix}",
+        "[[x²,1/2],[√(2),π]]",
+      ],
+    ])("%s digitado/estruturado no campo -> Resolver chama o backend com a sintaxe canônica correta", async (_label, latex, backendExpression) => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({ expression: backendExpression, result: "resultado", approx: null });
+
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      setFieldLatex(field, latex);
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith(backendExpression));
+    });
+
+    it.each([
+      ["matriz 2x2 com célula vazia", "\\begin{bmatrix}1&\\placeholder{}\\\\3&4\\end{bmatrix}"],
+      [
+        "matriz 3x3 com célula vazia",
+        "\\begin{bmatrix}1&2&3\\\\4&\\placeholder{}&6\\\\7&8&9\\end{bmatrix}",
+      ],
+      ["sistema com equação vazia", "\\begin{cases}x+y=5\\\\\\placeholder{}\\end{cases}"],
+      ["sistema com um lado vazio", "\\begin{cases}x+y=5\\\\x-y=\\placeholder{}\\end{cases}"],
+      ["determinante 2x2 com célula vazia", "\\begin{vmatrix}1&\\placeholder{}\\\\3&4\\end{vmatrix}"],
+      [
+        "determinante 3x3 com célula vazia",
+        "\\begin{vmatrix}1&2&3\\\\0&\\placeholder{}&4\\\\5&6&0\\end{vmatrix}",
+      ],
+    ])("%s (slot vazio) mostra mensagem amigável, nunca chama o backend, nunca 500", async (_label, latex) => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      setFieldLatex(field, latex);
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      expect(await screen.findByText("Preencha todos os espaços antes de resolver.")).toBeInTheDocument();
+      expect(apiClient.solve).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["Sistema 2×2", "x+y=5; x-y=1"],
+      ["Sistema 3×3", "x+y+z=6; 2x-y+z=3; x+2y-z=2"],
+      ["[[1,2],[3,4]]", "[[1,2],[3,4]]"],
+      ["det([[1,2],[3,4]])", "det([[1,2],[3,4]])"],
+    ])("clicar no exemplo '%s' preenche o campo com o LaTeX equivalente (via previewLatex real) e carrega VISUALMENTE (nunca texto cru)", async (label, unicodeExpression) => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+
+      fireEvent.click(screen.getByRole("button", { name: `Preencher exemplo: ${label}` }));
+
+      const expectedLatex = await previewLatex(unicodeExpression);
+      await waitFor(() => expect(field.value).toBe(expectedLatex));
+      // Nunca a sintaxe literal crua do backend ("[[1,2],[3,4]]") — sempre
+      // um ambiente LaTeX real (a matriz/sistema/determinante desenhados
+      // como células/linhas de verdade pelo MathField).
+      expect(field.value).toMatch(/\\begin\{(bmatrix|cases|vmatrix)\}|\\det/);
+    });
+  });
+
   it("Limpar esvazia o campo estruturado", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     const { container } = render(<CalculatorWorkspace />);
@@ -475,7 +654,7 @@ describe("CalculatorWorkspace", () => {
     await waitFor(() => expect(field.value).toBe(expectedLatex));
   });
 
-  it("todos os exemplos (V3.0 + Cálculo da V3.0.1) aparecem como botões", async () => {
+  it("todos os exemplos (V3.0 + Cálculo da V3.0.1 + Álgebra da V3.0.2) aparecem como botões", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     render(<CalculatorWorkspace />);
 
@@ -492,6 +671,10 @@ describe("CalculatorWorkspace", () => {
       "∫₀¹ x² dx",
       "lim x→0 sin(x)/x",
       "Σ i=1..10 i",
+      "Sistema 2×2",
+      "Sistema 3×3",
+      "[[1,2],[3,4]]",
+      "det([[1,2],[3,4]])",
     ]) {
       expect(screen.getByRole("button", { name: `Preencher exemplo: ${label}` })).toBeInTheDocument();
     }

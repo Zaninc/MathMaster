@@ -92,11 +92,12 @@ describe("mathFieldLatexToBackendExpression", () => {
     expect(mathFieldLatexToBackendExpression("\\sqrt{}")).toEqual({ ok: false, reason: "incomplete" });
   });
 
-  it("comando LaTeX fora do catálogo (ex. matriz) devolve reason=unsupported, nunca lança", () => {
+  it("comando LaTeX fora do catálogo (ex. logaritmo) devolve reason=unsupported, nunca lança", () => {
     // Integral/somatório SAÍRAM do catálogo "fora de escopo" na Sprint
-    // V3.0.1 (Structured Calculus Input) — ver describe dedicado abaixo.
-    // Matrizes continuam fora do catálogo (V3.0.2+).
-    expect(mathFieldLatexToBackendExpression("\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}")).toEqual({
+    // V3.0.1 (Structured Calculus Input); sistema/matriz/determinante
+    // SAÍRAM do catálogo "fora de escopo" na Sprint V3.0.2 — ver describes
+    // dedicados abaixo. log/ln (categoria Funções) continuam fora.
+    expect(mathFieldLatexToBackendExpression("\\log(x)")).toEqual({
       ok: false,
       reason: "unsupported",
     });
@@ -371,6 +372,174 @@ describe("mathFieldLatexToBackendExpression", () => {
       ["π/2", "\\frac{\\pi}{2}"],
     ])("%s continua aceito", (expected, latex) => {
       expect(expr(latex)).toBe(expected);
+    });
+  });
+
+  // --- Sprint V3.0.2 (Structured Algebra Input) ----------------------------
+  //
+  // Sistemas (`\begin{cases}`), matrizes (`\begin{bmatrix|pmatrix|matrix}`),
+  // determinante (`\begin{vmatrix}` — barras — e `\det(...)` — a notação
+  // que `previewLatex` já produz, reconhecida pra exemplos rápidos) e
+  // `\operatorname{inv|transpose}(...)`. Cada linha/célula reaproveita o
+  // MESMO `parseSubExpression` (todos os casos com potência/fração/raiz/π
+  // abaixo provam isso — nenhum parser de matriz/sistema separado). Todos
+  // confirmados contra o backend real rodando (ver relatório da sprint).
+  describe("Sprint V3.0.2 — Sistemas lineares (\\begin{cases}...\\end{cases})", () => {
+    it("sistema 2x2 -> eq1;eq2", () => {
+      expect(expr("\\begin{cases}x+y=5\\\\x-y=1\\end{cases}")).toBe("x+y=5;x-y=1");
+    });
+
+    it("sistema 2x2 não-linear (x² na primeira equação) -> eq1;eq2, sem alterar nada", () => {
+      expect(expr("\\begin{cases}x^2+y=5\\\\x-y=1\\end{cases}")).toBe("x²+y=5;x-y=1");
+    });
+
+    it("sistema 3x3 -> eq1;eq2;eq3", () => {
+      expect(expr("\\begin{cases}x+y+z=6\\\\2x-y+z=3\\\\x+2y-z=2\\end{cases}")).toBe("x+y+z=6;2x-y+z=3;x+2y-z=2");
+    });
+
+    it("sistema com potência/fração numa equação — mesmo parser de sempre, de graça", () => {
+      expect(expr("\\begin{cases}x^2+y=5\\\\x-\\frac{y}{2}=1\\end{cases}")).toBe("x²+y=5;x-y/2=1");
+    });
+
+    it("regressão (forma real do mathjs, previewLatex): sistema 2x2/3x3 com espaços/til continuam aceitos", () => {
+      expect(expr("\\begin{cases} x+ y = 5\\\\ x- y = 1\\end{cases}")).toBe("x+y=5;x-y=1");
+      expect(expr("\\begin{cases} x+ y+ z = 6\\\\2~ x- y+ z = 3\\\\ x+2~ y- z = 2\\end{cases}")).toBe(
+        "x+y+z=6;2x-y+z=3;x+2y-z=2"
+      );
+    });
+
+    it("sistema com equação vazia (slot vazio) -> incomplete, nunca envia request malformada", () => {
+      expect(mathFieldLatexToBackendExpression("\\begin{cases}x+y=5\\\\\\placeholder{}\\end{cases}")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+
+    it("sistema com um LADO da equação vazio -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\begin{cases}x+y=5\\\\x-y=\\placeholder{}\\end{cases}")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+  });
+
+  describe("Sprint V3.0.2 — Matrizes (\\begin{bmatrix}...\\end{bmatrix})", () => {
+    it("matriz 2x2 -> [[c,c],[c,c]] (sintaxe literal de matrix/parsing.py)", () => {
+      expect(expr("\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}")).toBe("[[1,2],[3,4]]");
+    });
+
+    it("matriz 3x3", () => {
+      expect(expr("\\begin{bmatrix}1&2&3\\\\4&5&6\\\\7&8&9\\end{bmatrix}")).toBe("[[1,2,3],[4,5,6],[7,8,9]]");
+    });
+
+    it("pmatrix/matrix (ambientes alternativos do MathLive) geram a mesma sintaxe literal", () => {
+      expect(expr("\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}")).toBe("[[1,2],[3,4]]");
+      expect(expr("\\begin{matrix}1&2\\\\3&4\\end{matrix}")).toBe("[[1,2],[3,4]]");
+    });
+
+    it("célula simbólica (variável, não só número) -> passa como expressão, nunca hardcodada", () => {
+      expect(expr("\\begin{bmatrix}x&2\\\\3&x+1\\end{bmatrix}")).toBe("[[x,2],[3,x+1]]");
+    });
+
+    it("célula com potência/fração/raiz/π — prova que reaproveita o parser recursivo inteiro, não um parser de célula à parte", () => {
+      expect(expr("\\begin{bmatrix}x^2&\\frac{1}{2}\\\\\\sqrt{2}&\\pi\\end{bmatrix}")).toBe(
+        "[[x²,1/2],[√(2),π]]"
+      );
+    });
+
+    it("matriz com célula vazia (2x2 ou 3x3) -> incomplete, nunca envia request malformada", () => {
+      expect(mathFieldLatexToBackendExpression("\\begin{bmatrix}1&\\placeholder{}\\\\3&4\\end{bmatrix}")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+      expect(
+        mathFieldLatexToBackendExpression(
+          "\\begin{bmatrix}1&2&3\\\\4&\\placeholder{}&6\\\\7&8&9\\end{bmatrix}"
+        )
+      ).toEqual({ ok: false, reason: "incomplete" });
+    });
+  });
+
+  describe("Sprint V3.0.2 — Determinante (\\begin{vmatrix}...\\end{vmatrix} e \\det(...))", () => {
+    it("determinante 2x2 (barras, representação visual do ticket) -> det([[c,c],[c,c]])", () => {
+      expect(expr("\\begin{vmatrix}1&2\\\\3&4\\end{vmatrix}")).toBe("det([[1,2],[3,4]])");
+    });
+
+    it("determinante 3x3", () => {
+      expect(expr("\\begin{vmatrix}1&2&3\\\\0&1&4\\\\5&6&0\\end{vmatrix}")).toBe("det([[1,2,3],[0,1,4],[5,6,0]])");
+    });
+
+    it("\\det(...) — notação que previewLatex já produz para det(...) digitado/histórico — mesma função, nunca uma segunda", () => {
+      expect(expr("\\det\\left(\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}\\right)")).toBe("det([[1,2],[3,4]])");
+    });
+
+    it("determinante 2x2/3x3 com célula vazia -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\begin{vmatrix}1&\\placeholder{}\\\\3&4\\end{vmatrix}")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+      expect(
+        mathFieldLatexToBackendExpression(
+          "\\begin{vmatrix}1&2&3\\\\0&\\placeholder{}&4\\\\5&6&0\\end{vmatrix}"
+        )
+      ).toEqual({ ok: false, reason: "incomplete" });
+    });
+  });
+
+  describe("Sprint V3.0.2 — Operações matriciais (+, -, *, ^, escalar, inv, transpose)", () => {
+    it("soma de matrizes -> A+B", () => {
+      expect(expr("\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}+\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}")).toBe(
+        "[[1,2],[3,4]]+[[5,6],[7,8]]"
+      );
+    });
+
+    it("subtração de matrizes -> A-B", () => {
+      expect(expr("\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}-\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}")).toBe(
+        "[[5,6],[7,8]]-[[1,2],[3,4]]"
+      );
+    });
+
+    it("multiplicação de matrizes -> A*B", () => {
+      expect(expr("\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}\\times\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}")).toBe(
+        "[[1,2],[3,4]]*[[5,6],[7,8]]"
+      );
+    });
+
+    it("potência de matriz -> A^2 (NUNCA o atalho de sobrescrito Unicode — matrix/parsing.py só reconhece '^' literal, e normalize_all já reescreveria '²' para '**2' antes de chegar lá, que o motor de matrizes rejeita)", () => {
+      expect(expr("\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}^2")).toBe("[[1,2],[3,4]]^2");
+    });
+
+    it("escalar × matriz EXPLÍCITO (\\times) -> 2*A", () => {
+      expect(expr("2\\times\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}")).toBe("2*[[1,2],[3,4]]");
+    });
+
+    it("escalar × matriz IMPLÍCITO (sem operador, ex. tecla '2A') -> ainda emite '*' explícito — matrix/parsing.py exige, diferente do resto da multiplicação implícita", () => {
+      expect(expr("2\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}")).toBe("2*[[1,2],[3,4]]");
+    });
+
+    it("inversa -> inv(A)", () => {
+      expect(expr("\\operatorname{inv}\\left(\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}\\right)")).toBe(
+        "inv([[1,2],[3,4]])"
+      );
+    });
+
+    it("transposta -> transpose(A)", () => {
+      expect(expr("\\operatorname{transpose}\\left(\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}\\right)")).toBe(
+        "transpose([[1,2],[3,4]])"
+      );
+    });
+  });
+
+  describe("Sprint V3.0.2 — integração real: previewLatex(texto) -> adapter aceita, pros exemplos rápidos de Álgebra", () => {
+    it.each([
+      ["[[1,2],[3,4]]", "[[1,2],[3,4]]"],
+      ["det([[1,2],[3,4]])", "det([[1,2],[3,4]])"],
+      ["x+y=5; x-y=1", "x+y=5;x-y=1"],
+      ["x+y+z=6; 2x-y+z=3; x+2y-z=2", "x+y+z=6;2x-y+z=3;x+2y-z=2"],
+    ])("%s -> previewLatex -> adapter -> %s", async (text, expected) => {
+      const latex = await previewLatex(text);
+      expect(latex, text).not.toBeNull();
+      expect(expr(latex!)).toBe(expected);
     });
   });
 });

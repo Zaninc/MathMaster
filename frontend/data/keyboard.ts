@@ -171,33 +171,85 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
     id: "algebra",
     label: "Álgebra",
     keys: [
-      { label: "x", insert: "x", cursorOffset: 1 },
-      { label: "y", insert: "y", cursorOffset: 1 },
+      { label: "x", insert: "x", cursorOffset: 1, mathLiveInsert: "x" },
+      { label: "y", insert: "y", cursorOffset: 1, mathLiveInsert: "y" },
       { label: "≤", insert: "≤", cursorOffset: 1, ariaLabel: "Inserir menor ou igual" },
       { label: "≥", insert: "≥", cursorOffset: 1, ariaLabel: "Inserir maior ou igual" },
       { label: "≠", insert: "≠", cursorOffset: 1, ariaLabel: "Inserir diferente" },
+      // Sprint V3.0.2 (Structured Algebra Input) — sistema/matriz/
+      // determinante ganham `mathLiveInsert` como um AMBIENTE LaTeX real
+      // (`\begin{cases}`/`\begin{bmatrix}`/`\begin{vmatrix}`, com
+      // `\placeholder{}` em cada slot editável) em vez de um exemplo
+      // numérico fixo ou um template de string — o MathLive desenha
+      // células/linhas de verdade e o usuário navega/edita cada uma
+      // (potência, fração, raiz, π... tudo aceito, via
+      // `mathfield-to-backend.ts:buildMatrixLiteral`, que reaproveita o
+      // parser recursivo inteiro). `insert`/`cursorOffset`/`latex`
+      // (fallback do `<textarea>` legado) continuam com o texto/exemplo
+      // Unicode de sempre — os dois caminhos convergem pra MESMA sintaxe
+      // final do backend, só a representação de entrada muda.
       {
-        // Sprint V2.2 (Motor de Matrizes) — insere o template de uma matriz
-        // 2x2 vazia; cursorOffset=2 posiciona o cursor logo depois de "[[",
-        // no primeiro elemento (mesma lógica de "a/b": cursor dentro do
-        // primeiro slot vazio, nunca depois do template inteiro).
-        label: "[[ ]]",
+        // Sprint V2.4 (Sistemas Lineares), relabel nesta sprint (era
+        // "Sistema linear", único tamanho existente).
+        label: "Sistema 2×2",
+        insert: "x+y=5\nx-y=1",
+        cursorOffset: "x+y=5\nx-y=1".length,
+        ariaLabel: "Inserir sistema linear 2x2",
+        latex: "\\begin{cases}x+y=5\\\\x-y=1\\end{cases}",
+        mathLiveInsert: "\\begin{cases}\\placeholder{}\\\\\\placeholder{}\\end{cases}",
+      },
+      {
+        label: "Sistema 3×3",
+        insert: "x+y+z=6\n2x-y+z=3\nx+2y-z=2",
+        cursorOffset: "x+y+z=6\n2x-y+z=3\nx+2y-z=2".length,
+        ariaLabel: "Inserir sistema linear 3x3",
+        latex: "\\begin{cases}x+y+z=6\\\\2x-y+z=3\\\\x+2y-z=2\\end{cases}",
+        mathLiveInsert: "\\begin{cases}\\placeholder{}\\\\\\placeholder{}\\\\\\placeholder{}\\end{cases}",
+      },
+      {
+        // Sprint V2.2 (Motor de Matrizes), relabel nesta sprint (era
+        // "[[ ]]"); cursorOffset=2 posiciona o cursor logo depois de "[[",
+        // no primeiro elemento (caminho legado, mesma lógica de "a/b").
+        label: "Matriz 2×2",
         insert: "[[,],[,]]",
         cursorOffset: 2,
         ariaLabel: "Inserir matriz 2x2",
         latex: "\\begin{bmatrix}\\square&\\square\\\\\\square&\\square\\end{bmatrix}",
+        mathLiveInsert: "\\begin{bmatrix}\\placeholder{}&\\placeholder{}\\\\\\placeholder{}&\\placeholder{}\\end{bmatrix}",
       },
-      // Fechamento da Sprint de Matrizes — det/inv/transpose já existiam no
-      // backend e na Calculadora (Explorar), só faltavam no teclado. Label
-      // visual usa a notação elegante (\det(A), A^{-1}, A^{T}), mas o texto
-      // inserido é sempre a sintaxe de função que o parser aceita
-      // (det()/inv()/transpose()) — "^-1"/"^T" NÃO são sintaxe suportada.
       {
-        label: "det(A)",
-        insert: "det()",
-        cursorOffset: 4,
-        ariaLabel: "Inserir determinante",
-        latex: "\\det(A)",
+        label: "Matriz 3×3",
+        insert: "[[,,],[,,],[,,]]",
+        cursorOffset: 2,
+        ariaLabel: "Inserir matriz 3x3",
+        latex: "\\begin{bmatrix}\\square&\\square&\\square\\\\\\square&\\square&\\square\\\\\\square&\\square&\\square\\end{bmatrix}",
+        mathLiveInsert:
+          "\\begin{bmatrix}\\placeholder{}&\\placeholder{}&\\placeholder{}\\\\\\placeholder{}&\\placeholder{}&\\placeholder{}\\\\\\placeholder{}&\\placeholder{}&\\placeholder{}\\end{bmatrix}",
+      },
+      {
+        // Fechamento da Sprint de Matrizes — relabel nesta sprint (era
+        // "det(A)"); representação visual de barras (`\begin{vmatrix}`)
+        // pedida pelo ticket em vez de `det([[...]])` cru — o adapter
+        // converte pra `det(...)`, a MESMA função que o backend já
+        // suporta, nunca uma segunda. Texto inserido no caminho legado
+        // continua a sintaxe de função (`det()`) — "^-1"/barras cruas NÃO
+        // são sintaxe suportada ali.
+        label: "Determinante 2×2",
+        insert: "det([[,],[,]])",
+        cursorOffset: "det([[".length,
+        ariaLabel: "Inserir determinante 2x2",
+        latex: "\\begin{vmatrix}\\square&\\square\\\\\\square&\\square\\end{vmatrix}",
+        mathLiveInsert: "\\begin{vmatrix}\\placeholder{}&\\placeholder{}\\\\\\placeholder{}&\\placeholder{}\\end{vmatrix}",
+      },
+      {
+        label: "Determinante 3×3",
+        insert: "det([[,,],[,,],[,,]])",
+        cursorOffset: "det([[".length,
+        ariaLabel: "Inserir determinante 3x3",
+        latex:
+          "\\begin{vmatrix}\\square&\\square&\\square\\\\\\square&\\square&\\square\\\\\\square&\\square&\\square\\end{vmatrix}",
+        mathLiveInsert:
+          "\\begin{vmatrix}\\placeholder{}&\\placeholder{}&\\placeholder{}\\\\\\placeholder{}&\\placeholder{}&\\placeholder{}\\\\\\placeholder{}&\\placeholder{}&\\placeholder{}\\end{vmatrix}",
       },
       {
         label: "A⁻¹",
@@ -205,6 +257,7 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
         cursorOffset: 4,
         ariaLabel: "Inserir inversa",
         latex: "A^{-1}",
+        mathLiveInsert: "\\operatorname{inv}\\left(\\placeholder{}\\right)",
       },
       {
         label: "Aᵀ",
@@ -212,21 +265,7 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
         cursorOffset: 10,
         ariaLabel: "Inserir transposta",
         latex: "A^{T}",
-      },
-      {
-        // Sprint V2.4 (Sistemas Lineares) — o backend já suporta sistemas
-        // multi-linha nativamente (`equations/dispatcher.py` detecta "\n"/
-        // ";" como separador de equação); o textarea multilinha da
-        // Calculadora já lida com "\n" sem nenhuma mudança — só faltava a
-        // tecla. Mesmo padrão da tecla Σ (Símbolos): insere um EXEMPLO
-        // completo e válido (não um template vazio com parênteses),
-        // cursorOffset no fim do texto para o usuário seguir editando os
-        // números a partir dali.
-        label: "Sistema linear",
-        insert: "x+y=5\nx-y=1",
-        cursorOffset: "x+y=5\nx-y=1".length,
-        ariaLabel: "Inserir sistema linear de exemplo",
-        latex: "\\begin{cases}x+y=5\\\\x-y=1\\end{cases}",
+        mathLiveInsert: "\\operatorname{transpose}\\left(\\placeholder{}\\right)",
       },
       // Sprint V2.6 (Motor de Polinômios Avançados) — mesmo padrão de
       // det(A)/A⁻¹/Aᵀ acima: o rótulo/LaTeX mostra um placeholder ("x", ou

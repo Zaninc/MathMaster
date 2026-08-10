@@ -24,6 +24,20 @@ interface MathKeyboardProps {
    * categoria, sem precisar mudar este componente de novo.
    */
   categories?: KeyboardCategory[];
+  /**
+   * Sprint V3.0.2 (Structured Algebra Input) — quando `true`, filtra as
+   * teclas de CADA categoria mostrada às que já têm `mathLiveInsert`
+   * migrado, escondendo o resto (ex. na categoria `algebra`, as teclas de
+   * polinômio — fatorar/expandir/simplificar/grau/raízes/coeficientes/
+   * divisão — ficam fora do escopo desta sprint e continuam sem
+   * `mathLiveInsert`). Complementa `categories` (que filtra CATEGORIAS
+   * inteiras): junto, os dois permitem reativar uma categoria existente
+   * mostrando só um subconjunto de teclas dela, sem duplicar/renomear a
+   * categoria. Default `false` preserva o comportamento anterior (todas as
+   * teclas da categoria mostrada, mesmo sem `mathLiveInsert` — usado pelo
+   * `<textarea>` legado, que não depende deste campo).
+   */
+  structuredOnly?: boolean;
 }
 
 /**
@@ -31,9 +45,12 @@ interface MathKeyboardProps {
  * `aria-label` de cada tecla descreve a ação, não só repete o glifo bruto
  * (ex. "∫" sozinho não é autoexplicativo para leitor de tela).
  */
-export function MathKeyboard({ onInsert, categories = KEYBOARD_CATEGORIES }: MathKeyboardProps) {
+export function MathKeyboard({ onInsert, categories = KEYBOARD_CATEGORIES, structuredOnly = false }: MathKeyboardProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const activeCategory = categories[activeIndex];
+  const visibleKeys = structuredOnly
+    ? activeCategory.keys.filter((key) => key.mathLiveInsert !== undefined)
+    : activeCategory.keys;
 
   function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let nextIndex: number | null = null;
@@ -83,7 +100,7 @@ export function MathKeyboard({ onInsert, categories = KEYBOARD_CATEGORIES }: Mat
         aria-labelledby={`keyboard-tab-${activeIndex}`}
         className="grid grid-cols-4 gap-2 p-3 sm:grid-cols-6"
       >
-        {activeCategory.keys.map((key) => (
+        {visibleKeys.map((key) => (
           <button
             key={key.label}
             type="button"

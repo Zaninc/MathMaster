@@ -116,9 +116,9 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(key!.ariaLabel).toBeDefined();
   });
 
-  it("tecla de matriz (Álgebra) insere o template 2x2 com cursor no primeiro elemento", () => {
+  it("tecla de matriz 2x2 (Álgebra, relabel na V3.0.2: 'Matriz 2×2') insere o template com cursor no primeiro elemento", () => {
     const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
-    const key = algebra?.keys.find((candidate) => candidate.label === "[[ ]]");
+    const key = algebra?.keys.find((candidate) => candidate.label === "Matriz 2×2");
     expect(key).toBeDefined();
     expect(key!.insert).toBe("[[,],[,]]");
     expect(key!.cursorOffset).toBe(2);
@@ -128,24 +128,51 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(key!.insert[key!.cursorOffset]).toBe(",");
     expect(key!.latex).toContain("\\begin{bmatrix}");
     expect(key!.ariaLabel).toBeDefined();
+    expect(key!.mathLiveInsert).toContain("\\begin{bmatrix}");
   });
 
-  it("teclas de operações matriciais (Álgebra) aparecem na ordem [[ ]] -> det -> inversa -> transposta", () => {
+  // Sprint V3.0.2 (Structured Algebra Input) — ordem atualizada: sistemas
+  // (2x2/3x3) e matrizes (2x2/3x3) vêm ANTES de determinante/inversa/
+  // transposta agora (agrupamento por "o que o usuário monta primeiro" —
+  // sistema/matriz são os blocos de construção, determinante/inv/transpose
+  // operam sobre eles).
+  it("teclas de operações matriciais (Álgebra) aparecem na ordem Matriz 2×2 -> Matriz 3×3 -> Determinante 2×2 -> Determinante 3×3 -> A⁻¹ -> Aᵀ", () => {
     const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
     const labels = algebra?.keys.map((key) => key.label) ?? [];
-    const matrixLabels = labels.filter((label) => ["[[ ]]", "det(A)", "A⁻¹", "Aᵀ"].includes(label));
-    expect(matrixLabels).toEqual(["[[ ]]", "det(A)", "A⁻¹", "Aᵀ"]);
+    const matrixLabels = labels.filter((label) =>
+      ["Matriz 2×2", "Matriz 3×3", "Determinante 2×2", "Determinante 3×3", "A⁻¹", "Aᵀ"].includes(label)
+    );
+    expect(matrixLabels).toEqual(["Matriz 2×2", "Matriz 3×3", "Determinante 2×2", "Determinante 3×3", "A⁻¹", "Aᵀ"]);
   });
 
-  it("tecla det (Álgebra) insere det() com cursor entre os parênteses e label KaTeX \\det(A)", () => {
+  it("tecla Determinante 2×2 (Álgebra, relabel na V3.0.2, era 'det(A)') insere o template de matriz com cursor no primeiro elemento e label KaTeX de barras", () => {
     const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
-    const key = algebra?.keys.find((candidate) => candidate.label === "det(A)");
+    const key = algebra?.keys.find((candidate) => candidate.label === "Determinante 2×2");
     expect(key).toBeDefined();
-    expect(key!.insert).toBe("det()");
-    expect(key!.insert[key!.cursorOffset - 1]).toBe("(");
-    expect(key!.insert[key!.cursorOffset]).toBe(")");
-    expect(key!.latex).toBe("\\det(A)");
+    expect(key!.insert).toBe("det([[,],[,]])");
+    expect(key!.insert.slice(0, key!.cursorOffset)).toBe("det([[");
+    expect(key!.insert[key!.cursorOffset]).toBe(",");
+    expect(key!.latex).toContain("\\begin{vmatrix}");
     expect(key!.ariaLabel).toBeDefined();
+    expect(key!.mathLiveInsert).toContain("\\begin{vmatrix}");
+  });
+
+  it("tecla Determinante 3×3 (Álgebra, nova na V3.0.2) insere o template 3x3 com barras visuais", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    const key = algebra?.keys.find((candidate) => candidate.label === "Determinante 3×3");
+    expect(key).toBeDefined();
+    expect(key!.insert).toBe("det([[,,],[,,],[,,]])");
+    expect(key!.latex).toContain("\\begin{vmatrix}");
+    expect(key!.mathLiveInsert).toContain("\\begin{vmatrix}");
+  });
+
+  it("tecla Matriz 3×3 (Álgebra, nova na V3.0.2) insere o template 3x3", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    const key = algebra?.keys.find((candidate) => candidate.label === "Matriz 3×3");
+    expect(key).toBeDefined();
+    expect(key!.insert).toBe("[[,,],[,,],[,,]]");
+    expect(key!.latex).toContain("\\begin{bmatrix}");
+    expect(key!.mathLiveInsert).toContain("\\begin{bmatrix}");
   });
 
   it("tecla inversa (Álgebra) insere inv() com cursor entre os parênteses e label KaTeX A^{-1}", () => {
@@ -178,22 +205,35 @@ describe("KEYBOARD_CATEGORIES", () => {
     }
   });
 
-  it("tecla de sistema linear (Álgebra) vem depois de det/inversa/transposta e insere um exemplo completo com cursor no fim", () => {
+  it("teclas Sistema 2×2/3×3 (Álgebra, relabel na V3.0.2, era 'Sistema linear') vêm ANTES de Matriz/Determinante e inserem um exemplo completo com cursor no fim (fallback legado)", () => {
     const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
     const labels = algebra?.keys.map((key) => key.label) ?? [];
     const relevantLabels = labels.filter((label) =>
-      ["det(A)", "A⁻¹", "Aᵀ", "Sistema linear"].includes(label)
+      ["Sistema 2×2", "Sistema 3×3", "Matriz 2×2", "Determinante 2×2", "A⁻¹", "Aᵀ"].includes(label)
     );
-    expect(relevantLabels).toEqual(["det(A)", "A⁻¹", "Aᵀ", "Sistema linear"]);
+    expect(relevantLabels).toEqual(["Sistema 2×2", "Sistema 3×3", "Matriz 2×2", "Determinante 2×2", "A⁻¹", "Aᵀ"]);
 
-    const key = algebra?.keys.find((candidate) => candidate.label === "Sistema linear");
-    expect(key).toBeDefined();
+    const key2x2 = algebra?.keys.find((candidate) => candidate.label === "Sistema 2×2");
+    expect(key2x2).toBeDefined();
     // Mesma sintaxe multilinha que o backend já aceita nativamente
     // (`equations/dispatcher.py`: "\n"/";" separam equações de um sistema).
-    expect(key!.insert).toBe("x+y=5\nx-y=1");
-    expect(key!.cursorOffset).toBe(key!.insert.length);
-    expect(key!.latex).toBe("\\begin{cases}x+y=5\\\\x-y=1\\end{cases}");
-    expect(key!.ariaLabel).toBeDefined();
+    expect(key2x2!.insert).toBe("x+y=5\nx-y=1");
+    expect(key2x2!.cursorOffset).toBe(key2x2!.insert.length);
+    expect(key2x2!.latex).toBe("\\begin{cases}x+y=5\\\\x-y=1\\end{cases}");
+    expect(key2x2!.ariaLabel).toBeDefined();
+    expect(key2x2!.mathLiveInsert).toContain("\\begin{cases}");
+
+    const key3x3 = algebra?.keys.find((candidate) => candidate.label === "Sistema 3×3");
+    expect(key3x3).toBeDefined();
+    expect(key3x3!.cursorOffset).toBe(key3x3!.insert.length);
+    expect(key3x3!.latex).toContain("\\begin{cases}");
+    expect(key3x3!.mathLiveInsert).toContain("\\begin{cases}");
+  });
+
+  it("x/y (Álgebra) ganharam mathLiveInsert nesta sprint (literal, sem placeholder)", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    expect(algebra?.keys.find((key) => key.label === "x")?.mathLiveInsert).toBe("x");
+    expect(algebra?.keys.find((key) => key.label === "y")?.mathLiveInsert).toBe("y");
   });
 
   it("tecla i (Símbolos) insere a unidade imaginária minúscula", () => {
@@ -248,12 +288,12 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(divisaoKey?.insert).toBe("divisao(,)");
   });
 
-  it("teclas de polinômios (Álgebra) vêm depois de Sistema linear", () => {
+  it("teclas de polinômios (Álgebra) vêm depois de Aᵀ (última tecla migrada na V3.0.2)", () => {
     const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
     const labels = algebra?.keys.map((key) => key.label) ?? [];
     const relevantLabels = labels.filter((label) =>
       [
-        "Sistema linear",
+        "Aᵀ",
         "fatorar(x)",
         "expandir(x)",
         "simplificar(x)",
@@ -264,7 +304,7 @@ describe("KEYBOARD_CATEGORIES", () => {
       ].includes(label)
     );
     expect(relevantLabels).toEqual([
-      "Sistema linear",
+      "Aᵀ",
       "fatorar(x)",
       "expandir(x)",
       "simplificar(x)",
@@ -428,12 +468,64 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(key!.ariaLabel).toBeDefined();
   });
 
-  it("teclas fora de Básico/Cálculo ainda não têm mathLiveInsert (fora de escopo até serem migradas)", () => {
+  it("teclas fora de Básico/Cálculo/Álgebra ainda não têm mathLiveInsert (fora de escopo até serem migradas)", () => {
     for (const category of KEYBOARD_CATEGORIES) {
-      if (category.id === "basico" || category.id === "calculo") continue;
+      if (category.id === "basico" || category.id === "calculo" || category.id === "algebra") continue;
       for (const key of category.keys) {
         expect(key.mathLiveInsert, `${category.id}/${key.label}`).toBeUndefined();
       }
+    }
+  });
+
+  // --- Sprint V3.0.2 (Structured Algebra Input) ----------------------------
+
+  it("dentro de Álgebra, só as 10 teclas migradas (x, y, sistemas 2x2/3x3, matrizes 2x2/3x3, determinantes 2x2/3x3, inv, transpose) têm mathLiveInsert — polinômios e ≤/≥/≠ continuam fora de escopo", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    const migrated = new Set([
+      "x",
+      "y",
+      "Sistema 2×2",
+      "Sistema 3×3",
+      "Matriz 2×2",
+      "Matriz 3×3",
+      "Determinante 2×2",
+      "Determinante 3×3",
+      "A⁻¹",
+      "Aᵀ",
+    ]);
+    const withMathLiveInsert = new Set(
+      (algebra?.keys ?? []).filter((key) => key.mathLiveInsert !== undefined).map((key) => key.label)
+    );
+    expect(withMathLiveInsert).toEqual(migrated);
+  });
+
+  it("as teclas de matriz/sistema/determinante de Álgebra usam ambientes LaTeX reais com \\placeholder{} em todo slot editável — nunca string simulando matriz", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    const byLabel = new Map(algebra?.keys.map((key) => [key.label, key]));
+
+    expect(byLabel.get("Sistema 2×2")?.mathLiveInsert).toBe(
+      "\\begin{cases}\\placeholder{}\\\\\\placeholder{}\\end{cases}"
+    );
+    expect(byLabel.get("Sistema 3×3")?.mathLiveInsert).toBe(
+      "\\begin{cases}\\placeholder{}\\\\\\placeholder{}\\\\\\placeholder{}\\end{cases}"
+    );
+    expect(byLabel.get("Matriz 2×2")?.mathLiveInsert).toBe(
+      "\\begin{bmatrix}\\placeholder{}&\\placeholder{}\\\\\\placeholder{}&\\placeholder{}\\end{bmatrix}"
+    );
+    expect(byLabel.get("Matriz 3×3")?.mathLiveInsert).toBe(
+      "\\begin{bmatrix}\\placeholder{}&\\placeholder{}&\\placeholder{}\\\\\\placeholder{}&\\placeholder{}&\\placeholder{}\\\\\\placeholder{}&\\placeholder{}&\\placeholder{}\\end{bmatrix}"
+    );
+    expect(byLabel.get("Determinante 2×2")?.mathLiveInsert).toBe(
+      "\\begin{vmatrix}\\placeholder{}&\\placeholder{}\\\\\\placeholder{}&\\placeholder{}\\end{vmatrix}"
+    );
+    expect(byLabel.get("Determinante 3×3")?.mathLiveInsert).toBe(
+      "\\begin{vmatrix}\\placeholder{}&\\placeholder{}&\\placeholder{}\\\\\\placeholder{}&\\placeholder{}&\\placeholder{}\\\\\\placeholder{}&\\placeholder{}&\\placeholder{}\\end{vmatrix}"
+    );
+    expect(byLabel.get("A⁻¹")?.mathLiveInsert).toBe("\\operatorname{inv}\\left(\\placeholder{}\\right)");
+    expect(byLabel.get("Aᵀ")?.mathLiveInsert).toBe("\\operatorname{transpose}\\left(\\placeholder{}\\right)");
+
+    for (const label of ["Sistema 2×2", "Sistema 3×3", "Matriz 2×2", "Matriz 3×3", "Determinante 2×2", "Determinante 3×3"]) {
+      expect(byLabel.get(label)?.mathLiveInsert, label).not.toContain("[[");
     }
   });
 

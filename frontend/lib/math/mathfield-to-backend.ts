@@ -29,6 +29,21 @@
  * a forma natural exige que a estrutura ocupe a expressão INTEIRA e usa
  * regex mais frágil (limites com subscrito Unicode só aceitam inteiro,
  * por exemplo) — a canônica não tem essas restrições.
+ *
+ * Sprint V3.0.2 (Structured Algebra Input) — sistemas lineares
+ * (`\begin{cases}...\end{cases}` → `"eq1;eq2"`, mesmo separador `;` que
+ * `equations/dispatcher.py:_SPLIT_PATTERN` já aceita), matrizes
+ * (`\begin{bmatrix|pmatrix|matrix}...\end{...}` → `"[[c,c],[c,c]]"`,
+ * sintaxe literal exata de `matrix/parsing.py`), determinante
+ * (`\begin{vmatrix}...\end{vmatrix}` → `"det([[c,c],[c,c]])"` — a
+ * representação visual de barras do ticket, não uma segunda função),
+ * `\det(...)` (a notação que `previewLatex` já produz para `det(...)`
+ * digitado/histórico — mesma função, reconhecida só para os exemplos
+ * rápidos carregarem e resolverem sem edição manual) e
+ * `\operatorname{inv|transpose}(...)`. Cada CÉLULA/linha passa pelo MESMO
+ * `parseSubExpression` (portanto pelo parser recursivo inteiro — potência,
+ * fração, raiz, π — de graça) — nunca um parser de matriz/sistema
+ * separado.
  */
 
 export type MathfieldConversion =
@@ -198,6 +213,47 @@ class LatexParser {
     return last;
   }
 
+  /**
+   * Sprint V3.0.2 — lê o corpo CRU (sem converter ainda) de um ambiente
+   * `\begin{name}...\end{name}` já sabendo que `\begin{name}` acabou de
+   * ser consumido pelo cursor. Não faz bracket-counting de `\begin`/`\end`
+   * aninhados (matriz/sistema dentro de célula de matriz não é um caso
+   * suportado nesta sprint) — procura a PRIMEIRA ocorrência do fechamento
+   * correspondente, mesma disciplina fail-closed de sempre: se não achar,
+   * vira `Unsupported`, nunca adivinha.
+   */
+  private readEnvironmentBody(name: string): string {
+    const endToken = `\\end{${name}}`;
+    const endIdx = this.src.indexOf(endToken, this.pos);
+    if (endIdx === -1) throw new Unsupported(`ambiente ${name} sem fechamento`);
+    const body = this.src.slice(this.pos, endIdx);
+    this.pos = endIdx + endToken.length;
+    return body;
+  }
+
+  /** Linhas cruas de um ambiente, separadas por `\\` (comando de quebra de linha do LaTeX). */
+  private readRawRows(name: string): string[] {
+    return this.readEnvironmentBody(name).split("\\\\");
+  }
+
+  /**
+   * Sprint V3.0.2 — monta a sintaxe literal de matriz do backend
+   * (`matrix/parsing.py`: `[[c,c],[c,c]]`) a partir das linhas cruas de um
+   * ambiente `bmatrix`/`pmatrix`/`matrix`/`vmatrix` — cada CÉLULA passa
+   * por `parseSubExpression` (o parser recursivo inteiro: potência,
+   * fração, raiz, π, variável...), nunca um parser de célula à parte.
+   * `\placeholder{}` vazio numa célula propaga `Incomplete` normalmente
+   * (sem tratamento especial aqui) — mesmo mecanismo de sempre.
+   */
+  private buildMatrixLiteral(rawRows: string[]): string {
+    const rows = rawRows.map((row) => row.split("&").map((cell) => this.parseSubExpression(cell)));
+    const columnCount = rows[0]?.length ?? 0;
+    if (rows.length === 0 || columnCount === 0 || rows.some((row) => row.length !== columnCount)) {
+      throw new Unsupported("matriz malformada (linhas/colunas inconsistentes)");
+    }
+    return `[${rows.map((cells) => `[${cells.join(",")}]`).join(",")}]`;
+  }
+
   parseEquation(): string {
     const lhs = this.parseExpression();
     this.skipSpace();
@@ -246,14 +302,28 @@ class LatexParser {
       // Multiplicação implícita: outro fator começa direto (número,
       // variável, `(`, `{...}` — mathjs envolve variáveis/bases em chaves
       // transparentes, ex. "6~{x}^{2}" para "6x²" — `\frac`, `\sqrt`,
-      // `\pi`, ou uma função mínima `\sin`/`\cos`/`\tan` — Sprint V3.0.1,
-      // necessário pra "x² sin(x)") sem operador entre eles.
+      // `\pi`, uma função mínima `\sin`/`\cos`/`\tan` — Sprint V3.0.1,
+      // necessário pra "x² sin(x)" — ou um ambiente de matriz — Sprint
+      // V3.0.2, necessário pra "2A") sem operador entre eles.
+      //
+      // Matriz é uma EXCEÇÃO: diferente do parser geral (que aceita
+      // `2x` sem "*" via `implicit_multiplication_application`),
+      // `matrix/parsing.py:_parse_term` do backend só reconhece "*"
+      // EXPLÍCITO — confirmado contra o backend real: "2[[1,2],[3,4]]"
+      // (sem "*") é REJEITADO, "2*[[1,2],[3,4]]" funciona. Por isso
+      // matriz sempre entra com "*" explícito aqui, mesmo quando o
+      // usuário digitou/inseriu sem operador — as outras formas
+      // continuam concatenando sem operador, como sempre.
       const next = this.peek();
+      const matrixEnvironment = ["\\begin{bmatrix}", "\\begin{pmatrix}", "\\begin{matrix}", "\\begin{vmatrix}"].find(
+        (token) => this.src.startsWith(token, this.pos)
+      );
       const startsFactor =
+        matrixEnvironment !== undefined ||
         /[0-9a-zA-Z({]/.test(next) ||
         ["\\frac", "\\sqrt", "\\pi", "\\sin", "\\cos", "\\tan"].some((token) => this.src.startsWith(token, this.pos));
       if (!startsFactor) break;
-      result += this.parseFactor();
+      result += matrixEnvironment !== undefined ? `*${this.parseFactor()}` : this.parseFactor();
     }
     return result;
   }
@@ -269,6 +339,18 @@ class LatexParser {
   }
 
   private applyPower(base: string, exponent: string): string {
+    // Sprint V3.0.2 — matriz é OUTRA exceção ao atalho de sobrescrito
+    // Unicode (igual à multiplicação implícita em `parseTerm()`): o
+    // `normalize_all` do backend reescreve "²"/"³"/... pra "**2"/"**3"
+    // ANTES de rotear pro motor de matrizes, mas
+    // `matrix/parsing.py:_parse_power` só reconhece "^" LITERAL, nunca
+    // "**" — confirmado contra o backend real: "[[1,2],[3,4]]^2" funciona,
+    // "[[1,2],[3,4]]²" é REJEITADO ("Não foi possível interpretar a
+    // expressão de matriz"). Por isso matriz sempre usa "^" explícito
+    // aqui, mesmo com expoente de um dígito só.
+    if (/^\[\[.*\]\]$/.test(base)) {
+      return `${base}^${exponent}`;
+    }
     if (/^[0-9]$/.test(exponent)) {
       return `${base}${SUPERSCRIPT_DIGITS[exponent]}`;
     }
@@ -381,6 +463,49 @@ class LatexParser {
       ["\\sin", "sin"],
       ["\\cos", "cos"],
       ["\\tan", "tan"],
+    ] as const) {
+      if (this.consume(command)) {
+        const arg = this.parseParenthesizedOrAtom();
+        return `${name}(${arg})`;
+      }
+    }
+
+    // --- Sprint V3.0.2 (Structured Algebra Input) --------------------------
+
+    if (this.consume("\\begin{cases}")) {
+      // Sistema linear — cada linha é uma equação INTEIRA (nunca dividida
+      // por "&"), unida por ";" — o mesmo separador que
+      // `equations/dispatcher.py:_SPLIT_PATTERN` já aceita. Cada linha
+      // passa por `parseSubExpression` (o mesmo `parseEquation()` de
+      // sempre), nunca um "parser de equação de sistema" à parte.
+      const rows = this.readRawRows("cases").map((row) => this.parseSubExpression(row));
+      return rows.join(";");
+    }
+
+    for (const env of ["bmatrix", "pmatrix", "matrix"] as const) {
+      if (this.consume(`\\begin{${env}}`)) {
+        return this.buildMatrixLiteral(this.readRawRows(env));
+      }
+    }
+
+    if (this.consume("\\begin{vmatrix}")) {
+      // Representação visual de determinante (barras, pedida pelo ticket)
+      // — nunca uma segunda função: envolve a MESMA sintaxe literal de
+      // matriz em `det(...)`, a função que o backend já suporta.
+      return `det(${this.buildMatrixLiteral(this.readRawRows("vmatrix"))})`;
+    }
+
+    for (const [command, name] of [
+      // "\det(...)" — a notação que o PRÓPRIO `to-latex.ts` (`previewLatex`,
+      // via o serializer nativo do mathjs) já produz para `det(...)`
+      // digitado/histórico; reconhecida aqui para os exemplos rápidos
+      // "carregarem visualmente" (`\det\left(\begin{bmatrix}...\end{bmatrix}
+      // \right)`) e continuarem resolvíveis sem edição manual — mesma
+      // função do backend que `\begin{vmatrix}...\end{vmatrix}` já cobre
+      // (a representação de barras pedida pelo ticket), nunca uma segunda.
+      ["\\det", "det"],
+      ["\\operatorname{inv}", "inv"],
+      ["\\operatorname{transpose}", "transpose"],
     ] as const) {
       if (this.consume(command)) {
         const arg = this.parseParenthesizedOrAtom();

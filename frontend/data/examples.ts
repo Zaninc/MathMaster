@@ -135,6 +135,18 @@ export const QUICK_EXAMPLES: QuickExample[] = [
  * explicitamente pelo ticket, "sen" fica para quando a categoria
  * Trigonometria for migrada) — todos os 5 confirmados contra
  * `previewLatex` real + o adapter + o backend real rodando.
+ *
+ * Sprint V3.0.2 (Structured Algebra Input) — 4 exemplos de Álgebra
+ * acrescentados (12 → 16): sistema 2x2, sistema 3x3, matriz 2x2,
+ * determinante (a lista sugerida pelo ticket). "det(...)" (não
+ * "determinante(...)"): confirmado que `previewLatex` renderiza a chamada
+ * canônica em inglês como `\det\left(...\right)` (notação própria do
+ * mathjs), que o adapter passou a reconhecer nesta sprint especificamente
+ * para isto; matriz/sistema já rendiam `\begin{bmatrix}`/`\begin{cases}`
+ * de graça (mesmos ambientes que o teclado usa). Os 4 confirmados contra
+ * `previewLatex` real + o adapter + o backend real rodando — inversa/
+ * transposta ficaram de fora da vitrine (o ticket só pediu sistema/
+ * matriz/determinante), embora as teclas A⁻¹/Aᵀ continuem funcionando.
  */
 export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "x² - 4 = 0", expression: "x² - 4 = 0" },
@@ -149,6 +161,10 @@ export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "∫₀¹ x² dx", expression: "∫₀¹ x² dx" },
   { label: "lim x→0 sin(x)/x", expression: "lim x→0 sin(x)/x" },
   { label: "Σ i=1..10 i", expression: "Σ(i=1..10) i" },
+  { label: "Sistema 2×2", expression: "x+y=5; x-y=1" },
+  { label: "Sistema 3×3", expression: "x+y+z=6; 2x-y+z=3; x+2y-z=2" },
+  { label: "[[1,2],[3,4]]", expression: "[[1,2],[3,4]]" },
+  { label: "det([[1,2],[3,4]])", expression: "det([[1,2],[3,4]])" },
 ];
 
 export interface QuickShortcut {
