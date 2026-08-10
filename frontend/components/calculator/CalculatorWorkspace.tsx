@@ -21,13 +21,20 @@ import { ResultPanel, type ResultStatus } from "./ResultPanel";
 
 /**
  * Sprint V3.0 (Structured Math Input) — só a categoria Básico (as 9 teclas
- * do ticket, com `mathLiveInsert`) é mostrada nesta página por enquanto;
- * as demais ainda inserem texto bruto que o `StructuredMathInput` não sabe
+ * do ticket, com `mathLiveInsert`) era mostrada nesta página; as demais
+ * ainda inseriam texto bruto que o `StructuredMathInput` não sabia
  * representar estruturalmente (decisão de escopo confirmada com o Theo).
- * Voltam progressivamente nas V3.0.x — nenhuma mudança neste arquivo será
- * necessária além de ampliar esta lista.
+ *
+ * Sprint V3.0.1 (Structured Calculus Input) — Cálculo (derivada, integral
+ * indefinida/definida, limite, somatório, todas com `mathLiveInsert`)
+ * volta a aparecer, ao lado de Básico. As demais (Álgebra/Funções/
+ * Trigonometria/Geometria/Combinatória/Probabilidade/Símbolos) continuam
+ * ocultas — voltam progressivamente nas próximas V3.0.x, sem precisar
+ * mudar este arquivo de novo (só ampliar esta lista).
  */
-const BASIC_KEYBOARD_CATEGORIES = KEYBOARD_CATEGORIES.filter((category) => category.id === "basico");
+const ENABLED_KEYBOARD_CATEGORIES = KEYBOARD_CATEGORIES.filter(
+  (category) => category.id === "basico" || category.id === "calculo"
+);
 
 /** Escapa `\`/`{`/`}` — o mínimo pra um texto cru não quebrar dentro de `\text{...}`. */
 function escapeForLatexText(text: string): string {
@@ -273,7 +280,7 @@ export function CalculatorWorkspace() {
   /**
    * Delega pra API real de inserção do MathLive (`insert()`), nunca
    * concatenação de string — teclas ainda não migradas (sem
-   * `mathLiveInsert`, categorias fora de `BASIC_KEYBOARD_CATEGORIES`) não
+   * `mathLiveInsert`, categorias fora de `ENABLED_KEYBOARD_CATEGORIES`) não
    * aparecem nesta página, então este `return` cedo nunca deveria disparar
    * na prática; é só uma proteção de tipo.
    */
@@ -347,7 +354,7 @@ export function CalculatorWorkspace() {
           </div>
 
           <div className="order-3 lg:order-2">
-            <MathKeyboard onInsert={handleInsert} categories={BASIC_KEYBOARD_CATEGORIES} />
+            <MathKeyboard onInsert={handleInsert} categories={ENABLED_KEYBOARD_CATEGORIES} />
           </div>
 
           <div className="order-4 lg:order-3">

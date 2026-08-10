@@ -116,16 +116,25 @@ export const QUICK_EXAMPLES: QuickExample[] = [
  *
  * Sprint V3.0 (Structured Math Input) — reduzida temporariamente de 22
  * para 7 (decisão de escopo confirmada com o Theo): o `StructuredMathInput`
- * (MathLive) só sabe representar estruturalmente números, variáveis,
+ * (MathLive) só sabia representar estruturalmente números, variáveis,
  * `+ - × ÷ =`, parênteses, potência, fração e raiz quadrada/cúbica/
  * n-ésima nesta sprint — os exemplos que dependiam de notações ainda não
  * migradas (derivada, integral, limite, geometria, somatório, matrizes,
  * complexos, sistemas, polinômios com função nomeada, combinatória,
- * probabilidade) saem da vitrine da Calculadora até a categoria
- * correspondente do teclado ser migrada estruturalmente (V3.0.x). Nada foi
+ * probabilidade) saíram da vitrine da Calculadora até a categoria
+ * correspondente do teclado ser migrada estruturalmente. Nada foi
  * removido do backend nem de `QUICK_EXAMPLES`/`QUICK_SHORTCUTS` (Home,
  * fora de escopo) — só desta lista. Os 6 primeiros são exatamente os
  * casos de regressão obrigatórios do ticket da V3.0.
+ *
+ * Sprint V3.0.1 (Structured Calculus Input) — 5 exemplos de Cálculo
+ * acrescentados (7 → 12), a lista mínima sugerida pelo próprio ticket.
+ * "sin(x)" em inglês, não "sen(x)": confirmado que `previewLatex`
+ * converte "sen(...)" para `\operatorname{sen}(...)`, que o adapter ainda
+ * não reconhece (só `\sin`/`\cos`/`\tan` — suporte mínimo pedido
+ * explicitamente pelo ticket, "sen" fica para quando a categoria
+ * Trigonometria for migrada) — todos os 5 confirmados contra
+ * `previewLatex` real + o adapter + o backend real rodando.
  */
 export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "x² - 4 = 0", expression: "x² - 4 = 0" },
@@ -135,6 +144,11 @@ export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "1/2 + 1/3", expression: "1/2 + 1/3" },
   { label: "x³-6x²+11x-6=0", expression: "x³-6x²+11x-6=0" },
   { label: "π/2", expression: "π/2" },
+  { label: "d/dx(x² + 3x)", expression: "d/dx(x² + 3x)" },
+  { label: "∫ x² dx", expression: "∫ x² dx" },
+  { label: "∫₀¹ x² dx", expression: "∫₀¹ x² dx" },
+  { label: "lim x→0 sin(x)/x", expression: "lim x→0 sin(x)/x" },
+  { label: "Σ i=1..10 i", expression: "Σ(i=1..10) i" },
 ];
 
 export interface QuickShortcut {

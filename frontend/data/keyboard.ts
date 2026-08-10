@@ -335,13 +335,81 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
     ],
   },
   {
+    // Sprint V3.0.1 (Structured Calculus Input) — as 4 primeiras teclas
+    // ganharam `mathLiveInsert` (estruturas reais do MathLive, com
+    // `\placeholder{}` nos slots editáveis) e a categoria volta a
+    // aparecer na Calculadora, ao lado de Básico. A variável ("x" em
+    // "d/dx"/"lim") é texto literal, não um `\placeholder` — clicável e
+    // editável diretamente (o adapter reconhece qualquer letra ali, ex.
+    // "d/dy"), mas não ganha destaque de Tab: o fluxo mais comum (clicar
+    // a tecla e já digitar a EXPRESSÃO) fica com o cursor pronto na
+    // primeira tentativa, sem precisar Tab através da variável primeiro
+    // (ver relatório da sprint — decisão de UX documentada). "∫ₐᵇ dx"
+    // (integral definida) e "Σ" (somatório) são NOVAS nesta categoria —
+    // "Σ" já existia isolada em Símbolos (categoria ainda oculta),
+    // duplicada aqui com slots estruturados de verdade, mesmo padrão do
+    // "π" duplicado em Básico na V3.0.
     id: "calculo",
     label: "Cálculo",
     keys: [
-      { label: "d/dx", insert: "d/dx()", cursorOffset: 5, ariaLabel: "Inserir derivada", latex: "\\dfrac{d}{dx}" },
-      { label: "∫ dx", insert: "∫() dx", cursorOffset: 2, ariaLabel: "Inserir integral indefinida", latex: "\\int dx" },
-      { label: "lim", insert: "lim x→0 ", cursorOffset: 8, ariaLabel: "Inserir limite", latex: "\\lim" },
-      { label: "∞", insert: "∞", cursorOffset: 1, ariaLabel: "Inserir infinito", latex: "\\infty" },
+      {
+        label: "d/dx",
+        insert: "d/dx()",
+        cursorOffset: 5,
+        ariaLabel: "Inserir derivada",
+        latex: "\\dfrac{d}{dx}",
+        mathLiveInsert: "\\frac{d}{dx}\\left(\\placeholder{}\\right)",
+      },
+      {
+        label: "∫ dx",
+        insert: "∫() dx",
+        cursorOffset: 2,
+        ariaLabel: "Inserir integral indefinida",
+        latex: "\\int dx",
+        mathLiveInsert: "\\int \\placeholder{}\\,dx",
+      },
+      {
+        // Nova nesta sprint — não existia no teclado legado (só a
+        // indefinida). Ordem dos slots: inferior -> superior -> integrando
+        // (pedida explicitamente pelo ticket) — cai naturalmente da ordem
+        // dos `\placeholder{}` no LaTeX, o MathLive navega nessa ordem
+        // sozinho via Tab/seleção do primeiro slot.
+        label: "∫ₐᵇ dx",
+        insert: "∫() dx",
+        cursorOffset: 2,
+        ariaLabel: "Inserir integral definida",
+        latex: "\\int_a^b dx",
+        mathLiveInsert: "\\int_{\\placeholder{}}^{\\placeholder{}}\\placeholder{}\\,dx",
+      },
+      {
+        label: "lim",
+        insert: "lim x→0 ",
+        cursorOffset: 8,
+        ariaLabel: "Inserir limite",
+        latex: "\\lim",
+        mathLiveInsert: "\\lim_{x\\to\\placeholder{}}\\placeholder{}",
+      },
+      {
+        // Nova nesta sprint (categoria Cálculo) — a versão de Símbolos
+        // (categoria ainda oculta) continua intocada. Índice É um
+        // `\placeholder` pré-preenchido com "i" (diferente da variável de
+        // derivada/limite): trocar o índice (ex. para "k") é um caso de
+        // uso real e testado (`Σ k=1..5 k`), então vale o Tab dedicado.
+        label: "Σ",
+        insert: "Σ(i=1..10) i",
+        cursorOffset: "Σ(i=1..10) i".length,
+        ariaLabel: "Inserir somatório",
+        latex: "\\sum_{i=1}^{n}",
+        mathLiveInsert: "\\sum_{\\placeholder{i}=\\placeholder{}}^{\\placeholder{}}\\placeholder{}",
+      },
+      {
+        label: "∞",
+        insert: "∞",
+        cursorOffset: 1,
+        ariaLabel: "Inserir infinito",
+        latex: "\\infty",
+        mathLiveInsert: "\\infty",
+      },
     ],
   },
   {

@@ -8,14 +8,27 @@
  * `normalizeForBackend`, chamado DEPOIS deste adapter — nunca duplicado
  * aqui.
  *
- * Catálogo fechado, do tamanho exato do escopo da V3.0 (números,
- * variáveis, `+ - × ÷ =`, parênteses, potência, fração, raiz
- * quadrada/cúbica/n-ésima, π). Fail-closed: qualquer comando LaTeX fora
- * deste catálogo devolve `{ok:false}` em vez de adivinhar — o chamador
- * mostra uma mensagem amigável, nunca envia sintaxe potencialmente
- * quebrada ao backend. Integrais, derivadas, limites, somatórios,
- * matrizes, sistemas, combinatória e probabilidade ficam para V3.0.x
- * (fora do catálogo por construção, não por uma lista de exclusão).
+ * Catálogo fechado (números, variáveis, `+ - × ÷ =`, parênteses, potência,
+ * fração, raiz quadrada/cúbica/n-ésima, π — Sprint V3.0; derivada, integral
+ * indefinida/definida, limite, somatório, ∞ e sin/cos/tan mínimo — Sprint
+ * V3.0.1). Fail-closed: qualquer comando LaTeX fora deste catálogo devolve
+ * `{ok:false}` em vez de adivinhar — o chamador mostra uma mensagem
+ * amigável, nunca envia sintaxe potencialmente quebrada ao backend.
+ * Matrizes, sistemas, combinatória e probabilidade ficam para V3.0.x
+ * seguintes (fora do catálogo por construção, não por uma lista de
+ * exclusão).
+ *
+ * Sprint V3.0.1 (Structured Calculus Input) — as 5 operações de cálculo
+ * emitem a sintaxe TÉCNICA CANÔNICA do backend diretamente (`derivada(expr,
+ * var)`, `integral(expr, var[, inf, sup])`, `limite(expr, var, ponto)`,
+ * `Σ(var=inf..sup) expr`) em vez da "notação natural" (`d/dx(...)`,
+ * `∫...dx`, `lim x→p ...`) que `calculus/natural_notation.py` também
+ * aceita — confirmado por `test_calculus_natural_notation.py` que a forma
+ * canônica passa PELA MESMA função sem qualquer reescrita (idempotente),
+ * então não há vantagem em emitir a forma natural e uma desvantagem real:
+ * a forma natural exige que a estrutura ocupe a expressão INTEIRA e usa
+ * regex mais frágil (limites com subscrito Unicode só aceitam inteiro,
+ * por exemplo) — a canônica não tem essas restrições.
  */
 
 export type MathfieldConversion =
@@ -115,6 +128,76 @@ class LatexParser {
     return depth === 0;
   }
 
+  /**
+   * Sprint V3.0.1 — lê o PRÓXIMO átomo, mas sem re-envolver em parênteses
+   * quando ele já vem entre `(...)`/`\left(...\right)` — usado pelo
+   * argumento de derivada (`\frac{d}{dx}(expr)`, onde `(expr)` sempre
+   * segue a fração) e por funções mínimas (`\sin`/`\cos`/`\tan`).
+   * `parseAtom()` sozinho devolveria `(expr)` com parênteses de novo (a
+   * marca de que "isto já era uma expressão agrupada"); aqui devolvemos só
+   * o conteúdo, para `derivada(expr, x)`/`sin(expr)` não ficarem com
+   * parênteses duplicados.
+   */
+  private parseParenthesizedOrAtom(): string {
+    this.skipSpace();
+    if (this.consume("(")) {
+      const inner = this.parseExpression();
+      this.expect(")");
+      return inner;
+    }
+    return this.parseAtom();
+  }
+
+  /**
+   * Sprint V3.0.1 — captura o restante do escopo ATUAL como texto CRU (sem
+   * converter ainda), parando no fim da string ou num fechamento `)`/`}`
+   * que pertence a um grupo MAIS EXTERNO (nunca aberto por este método) —
+   * usado pelo corpo de limite/integral/somatório, que não têm delimitador
+   * próprio (diferente da fração/raiz, que sempre fecham com `}`/`]`
+   * conhecido). Move o cursor para o ponto de parada.
+   */
+  private captureRestOfScope(): string {
+    let depth = 0;
+    let end = this.src.length;
+    for (let i = this.pos; i < this.src.length; i++) {
+      const ch = this.src[i];
+      if (ch === "(" || ch === "{") depth++;
+      else if (ch === ")" || ch === "}") {
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+        depth--;
+      }
+    }
+    const raw = this.src.slice(this.pos, end);
+    this.pos = end;
+    return raw;
+  }
+
+  /** Converte um fragmento de LaTeX capturado à parte (ex. corpo de integral/limite) como uma sub-expressão isolada e completa. */
+  private parseSubExpression(raw: string): string {
+    return new LatexParser(raw.trim()).parseEquation();
+  }
+
+  /**
+   * Sprint V3.0.1 — encontra a ÚLTIMA ocorrência de um diferencial
+   * (`d` seguido de exatamente uma letra, ex. "dx"/"dy", nunca "dog") no
+   * texto cru do corpo de uma integral — a última porque o diferencial é
+   * sempre o marcador final (`\int expr\,dx`), e "última" (não "primeira")
+   * evita falso-positivo se o integrando tiver coincidentemente um "d"
+   * solto antes do de verdade.
+   */
+  private findTrailingDifferential(text: string): { index: number; variable: string } | null {
+    let last: { index: number; variable: string } | null = null;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === "d" && /[a-zA-Z]/.test(text[i + 1] ?? "") && !/[a-zA-Z]/.test(text[i + 2] ?? "")) {
+        last = { index: i, variable: text[i + 1] };
+      }
+    }
+    return last;
+  }
+
   parseEquation(): string {
     const lhs = this.parseExpression();
     this.skipSpace();
@@ -163,10 +246,12 @@ class LatexParser {
       // Multiplicação implícita: outro fator começa direto (número,
       // variável, `(`, `{...}` — mathjs envolve variáveis/bases em chaves
       // transparentes, ex. "6~{x}^{2}" para "6x²" — `\frac`, `\sqrt`,
-      // `\pi`) sem operador entre eles.
+      // `\pi`, ou uma função mínima `\sin`/`\cos`/`\tan` — Sprint V3.0.1,
+      // necessário pra "x² sin(x)") sem operador entre eles.
       const next = this.peek();
       const startsFactor =
-        /[0-9a-zA-Z({]/.test(next) || this.src.startsWith("\\frac", this.pos) || this.src.startsWith("\\sqrt", this.pos) || this.src.startsWith("\\pi", this.pos);
+        /[0-9a-zA-Z({]/.test(next) ||
+        ["\\frac", "\\sqrt", "\\pi", "\\sin", "\\cos", "\\tan"].some((token) => this.src.startsWith(token, this.pos));
       if (!startsFactor) break;
       result += this.parseFactor();
     }
@@ -212,7 +297,95 @@ class LatexParser {
     if (this.consume("\\frac")) {
       const numerator = this.readGroup();
       const denominator = this.readGroup();
+      // Sprint V3.0.1 — `\frac{d}{dx}(expr)` é o template de DERIVADA
+      // (`d/dx` do teclado), não uma fração de verdade: numerador
+      // convertido é exatamente "d" e denominador é "d" + UMA letra
+      // (a variável — nunca fixo em "x", detecta qualquer letra, então
+      // `d/dy(...)`/`d/dz(...)` etc. funcionam de graça, sem hardcode).
+      // O argumento entre parênteses SEMPRE vem logo depois na fonte
+      // (parte fixa do template `\left(\placeholder{}\right)`).
+      const derivativeMatch = numerator === "d" ? /^d([a-zA-Z])$/.exec(denominator) : null;
+      if (derivativeMatch) {
+        const variable = derivativeMatch[1];
+        const expr = this.parseParenthesizedOrAtom();
+        return `derivada(${expr}, ${variable})`;
+      }
       return `${this.wrap(numerator)}/${this.wrap(denominator)}`;
+    }
+
+    // --- Sprint V3.0.1 (Structured Calculus Input) ------------------------
+
+    if (this.consume("\\int")) {
+      let lower: string | null = null;
+      let upper: string | null = null;
+      if (this.consume("_")) {
+        lower = this.peek() === "{" ? this.readGroup() : this.parseAtom();
+        this.expect("^");
+        upper = this.peek() === "{" ? this.readGroup() : this.parseAtom();
+      }
+      const raw = this.captureRestOfScope();
+      const differential = this.findTrailingDifferential(raw);
+      if (!differential) throw new Unsupported("integral sem diferencial (dx) reconhecível");
+      const body = this.parseSubExpression(raw.slice(0, differential.index));
+      const variable = differential.variable;
+      if (lower !== null && upper !== null) {
+        return `integral(${body}, ${variable}, ${lower}, ${upper})`;
+      }
+      return `integral(${body}, ${variable})`;
+    }
+
+    if (this.consume("\\lim")) {
+      this.expect("_");
+      this.expect("{");
+      this.skipSpace();
+      const variableChar = this.src[this.pos];
+      if (variableChar === undefined || !/[a-zA-Z]/.test(variableChar)) {
+        throw new Unsupported("limite sem variável reconhecível");
+      }
+      this.pos++;
+      if (!this.consume("\\to")) throw new Unsupported("limite sem seta (\\to) reconhecível");
+      const point = this.parseExpression();
+      this.expect("}");
+      const bodyRaw = this.captureRestOfScope();
+      const body = this.parseSubExpression(bodyRaw);
+      return `limite(${body}, ${variableChar}, ${point})`;
+    }
+
+    if (this.consume("\\sum")) {
+      this.expect("_");
+      this.expect("{");
+      const variable = this.parseExpression();
+      this.expect("=");
+      const lower = this.parseExpression();
+      this.expect("}");
+      this.expect("^");
+      const upper = this.peek() === "{" ? this.readGroup() : this.parseAtom();
+      const bodyRaw = this.captureRestOfScope();
+      const body = this.parseSubExpression(bodyRaw);
+      // O somatório do backend (`Σ(var=inf..sup) expr`) só aceita limites
+      // INTEIROS literais (`summation/parsing.py:_parse_bound`) — nunca
+      // expressão/fração/variável. Validado aqui em vez de deixar o
+      // backend rejeitar com um erro menos amigável.
+      if (!/^-?[0-9]+$/.test(lower) || !/^-?[0-9]+$/.test(upper)) {
+        throw new Unsupported("limites do somatório precisam ser números inteiros");
+      }
+      if (!/^[a-zA-Z_]\w*$/.test(variable)) {
+        throw new Unsupported("índice do somatório inválido");
+      }
+      return `Σ(${variable}=${lower}..${upper}) ${body}`;
+    }
+
+    if (this.consume("\\infty")) return "∞";
+
+    for (const [command, name] of [
+      ["\\sin", "sin"],
+      ["\\cos", "cos"],
+      ["\\tan", "tan"],
+    ] as const) {
+      if (this.consume(command)) {
+        const arg = this.parseParenthesizedOrAtom();
+        return `${name}(${arg})`;
+      }
     }
 
     if (this.consume("\\sqrt")) {

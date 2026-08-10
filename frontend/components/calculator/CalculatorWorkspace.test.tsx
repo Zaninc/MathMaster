@@ -125,7 +125,10 @@ describe("CalculatorWorkspace", () => {
 
     const { container } = render(<CalculatorWorkspace />);
     const field = await getField(container);
-    setFieldLatex(field, "\\int_0^1 x^2\\,dx");
+    // Matriz — integral/limite/derivada/somatório passaram a ser
+    // suportados na Sprint V3.0.1 (Structured Calculus Input); matriz
+    // continua fora do catálogo.
+    setFieldLatex(field, "\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}");
 
     fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
 
@@ -217,12 +220,15 @@ describe("CalculatorWorkspace", () => {
     });
   });
 
-  it("teclado mostra só a categoria Básico nesta página (Álgebra/Funções/Símbolos ficam fora até serem migradas)", async () => {
+  it("teclado mostra Básico e Cálculo nesta página (Álgebra/Funções/Símbolos ficam fora até serem migradas)", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     render(<CalculatorWorkspace />);
 
-    expect(screen.getAllByRole("tab")).toHaveLength(1);
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
     expect(screen.getByRole("tab", { name: "Básico" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Cálculo" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Álgebra" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Símbolos" })).not.toBeInTheDocument();
   });
 
   it("as 9 teclas básicas inserem estruturas via a API real do MathLive (nunca concatenação de string)", async () => {
@@ -279,6 +285,159 @@ describe("CalculatorWorkspace", () => {
     expect(field.value).toBe("\\left(\\placeholder{}\\right)");
   });
 
+  // --- Sprint V3.0.1 (Structured Calculus Input) --------------------------
+
+  describe("Sprint V3.0.1 — categoria Cálculo: teclado + solve ponta-a-ponta", () => {
+    // `MathKeyboard` só renderiza o painel da aba ATIVA (Básico por
+    // padrão) — todo teste que clica numa tecla de Cálculo precisa trocar
+    // de aba primeiro (mesma UX real: usuário clica "Cálculo" antes de
+    // ver essas teclas).
+    function switchToCalculo() {
+      fireEvent.click(screen.getByRole("tab", { name: "Cálculo" }));
+    }
+
+    it("tecla d/dx insere \\frac{d}{dx}(placeholder) estruturado", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToCalculo();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir derivada" }));
+      expect(field.value).toBe("\\frac{d}{dx}\\left(\\placeholder{}\\right)");
+    });
+
+    it("tecla ∫ dx insere integral indefinida estruturada", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToCalculo();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir integral indefinida" }));
+      expect(field.value).toBe("\\int \\placeholder{}\\,dx");
+    });
+
+    it("tecla ∫ₐᵇ dx (nova) insere integral definida com 3 slots independentes", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToCalculo();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir integral definida" }));
+      expect(field.value).toBe("\\int_{\\placeholder{}}^{\\placeholder{}}\\placeholder{}\\,dx");
+    });
+
+    it("tecla lim insere limite estruturado", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToCalculo();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir limite" }));
+      expect(field.value).toBe("\\lim_{x\\to\\placeholder{}}\\placeholder{}");
+    });
+
+    it("tecla Σ (Cálculo) insere somatório estruturado com índice pré-preenchido 'i'", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToCalculo();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir somatório" }));
+      expect(field.value).toBe("\\sum_{\\placeholder{i}=\\placeholder{}}^{\\placeholder{}}\\placeholder{}");
+    });
+
+    it("tecla ∞ (Cálculo) insere infinito — reaproveita a MESMA configuração que já existia, categoria inteira de Símbolos continua oculta", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToCalculo();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir infinito" }));
+      expect(field.value).toBe("\\infty");
+    });
+
+    it.each([
+      ["d/dx(x²)", "\\frac{d}{dx}\\left(x^2\\right)", "derivada(x², x)"],
+      ["d/dx(x² + 3x)", "\\frac{d}{dx}\\left(x^2+3x\\right)", "derivada(x²+3x, x)"],
+      ["∫x² dx", "\\int x^2\\,dx", "integral(x², x)"],
+      ["∫sin(x) dx", "\\int \\sin(x)\\,dx", "integral(sin(x), x)"],
+      ["∫₀¹x² dx", "\\int_{0}^{1}x^2\\,dx", "integral(x², x, 0, 1)"],
+      ["lim x→0 sin(x)/x", "\\lim_{x\\to0}\\frac{\\sin(x)}{x}", "limite((sin(x))/x, x, 0)"],
+      ["lim x→∞ 1/x", "\\lim_{x\\to\\infty}\\frac{1}{x}", "limite(1/x, x, ∞)"],
+      ["Σ i=1..10 i", "\\sum_{i=1}^{10}i", "Σ(i=1..10) i"],
+    ])("%s digitado/estruturado no campo -> Resolver chama o backend com a sintaxe canônica correta", async (_label, latex, backendExpression) => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({ expression: backendExpression, result: "resultado", approx: null });
+
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      setFieldLatex(field, latex);
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith(backendExpression));
+    });
+
+    it.each([
+      ["derivada sem expressão", "\\frac{d}{dx}\\left(\\placeholder{}\\right)"],
+      ["integral sem integrando", "\\int \\placeholder{}\\,dx"],
+      ["integral definida sem limite inferior", "\\int_{\\placeholder{}}^{1}x^2\\,dx"],
+      ["integral definida sem limite superior", "\\int_{0}^{\\placeholder{}}x^2\\,dx"],
+      ["limite sem destino", "\\lim_{x\\to\\placeholder{}}x"],
+      ["limite sem expressão", "\\lim_{x\\to0}\\placeholder{}"],
+      ["somatório sem limite superior", "\\sum_{i=1}^{\\placeholder{}}i"],
+      ["somatório sem expressão", "\\sum_{i=1}^{10}\\placeholder{}"],
+    ])("%s (slot vazio) mostra mensagem amigável, nunca chama o backend, nunca 500", async (_label, latex) => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      setFieldLatex(field, latex);
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      expect(await screen.findByText("Preencha todos os espaços antes de resolver.")).toBeInTheDocument();
+      expect(apiClient.solve).not.toHaveBeenCalled();
+    });
+
+    it("estrutura aninhada: fração dentro de integral -> integral((x²+1)/x, x)", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({ expression: "integral((x²+1)/x, x)", result: "r", approx: null });
+
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      setFieldLatex(field, "\\int \\frac{x^2+1}{x}\\,dx");
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith("integral((x²+1)/x, x)"));
+    });
+
+    it("estrutura aninhada: raiz dentro de derivada -> derivada(√(x²+1), x)", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({ expression: "derivada(√(x²+1), x)", result: "r", approx: null });
+
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      setFieldLatex(field, "\\frac{d}{dx}\\sqrt{x^2+1}");
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith("derivada(√(x²+1), x)"));
+    });
+
+    it("clicar num exemplo de Cálculo preenche o campo com o LaTeX equivalente (via previewLatex real)", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+
+      fireEvent.click(screen.getByRole("button", { name: "Preencher exemplo: d/dx(x² + 3x)" }));
+
+      const expectedLatex = await previewLatex("d/dx(x² + 3x)");
+      await waitFor(() => expect(field.value).toBe(expectedLatex));
+    });
+  });
+
   it("Limpar esvazia o campo estruturado", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     const { container } = render(<CalculatorWorkspace />);
@@ -316,11 +475,24 @@ describe("CalculatorWorkspace", () => {
     await waitFor(() => expect(field.value).toBe(expectedLatex));
   });
 
-  it("todos os exemplos reduzidos da V3.0 aparecem como botões", async () => {
+  it("todos os exemplos (V3.0 + Cálculo da V3.0.1) aparecem como botões", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     render(<CalculatorWorkspace />);
 
-    for (const label of ["x² - 4 = 0", "2x + 4 = 10", "(x+1)³", "√16", "1/2 + 1/3", "x³-6x²+11x-6=0", "π/2"]) {
+    for (const label of [
+      "x² - 4 = 0",
+      "2x + 4 = 10",
+      "(x+1)³",
+      "√16",
+      "1/2 + 1/3",
+      "x³-6x²+11x-6=0",
+      "π/2",
+      "d/dx(x² + 3x)",
+      "∫ x² dx",
+      "∫₀¹ x² dx",
+      "lim x→0 sin(x)/x",
+      "Σ i=1..10 i",
+    ]) {
       expect(screen.getByRole("button", { name: `Preencher exemplo: ${label}` })).toBeInTheDocument();
     }
   });

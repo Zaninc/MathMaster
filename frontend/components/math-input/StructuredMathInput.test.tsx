@@ -9,8 +9,12 @@ import { StructuredMathInput, type StructuredMathInputApi } from "./StructuredMa
  * do `package.json` da lib) — inerte por design, sem a lógica real de
  * edição. Um mock local, mínimo, cobre só a superfície que
  * `StructuredMathInput` realmente usa (`value`, `insert()`,
- * `mathVirtualKeyboardPolicy`, eventos `input`/`keydown`) — suficiente
- * pra testar O WRAPPER (nosso código), não a biblioteca de terceiros.
+ * `executeCommand()`, `mathVirtualKeyboardPolicy`, eventos
+ * `input`/`keydown`) — suficiente pra testar O WRAPPER (nosso código),
+ * não a biblioteca de terceiros. `executeCommand` é um espião simples
+ * (registra o comando pedido) — a navegação REAL entre placeholders é
+ * lógica do MathLive de verdade, testada no navegador real (ver
+ * relatório da Sprint V3.0.1).
  */
 vi.mock("mathlive", () => {
   class MockMathfieldElement extends HTMLElement {
@@ -18,6 +22,8 @@ vi.mock("mathlive", () => {
     mathVirtualKeyboardPolicy = "auto";
     smartFence = false;
     smartSuperscript = false;
+    lastExecutedCommand: string | null = null;
+    nextExecuteCommandResult = true;
 
     get value() {
       return this._value;
@@ -31,6 +37,11 @@ vi.mock("mathlive", () => {
       this._value += latex;
       this.dispatchEvent(new Event("input"));
       return true;
+    }
+
+    executeCommand(command: string) {
+      this.lastExecutedCommand = command;
+      return this.nextExecuteCommandResult;
     }
   }
   if (!customElements.get("math-field")) {
@@ -163,6 +174,52 @@ describe("StructuredMathInput", () => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
 
     expect(requestSubmit).not.toHaveBeenCalled();
+  });
+
+  // --- Sprint V3.0.1: Tab/Shift+Tab chamam moveToNextPlaceholder/moveToPreviousPlaceholder ---
+  //
+  // Achado da validação no navegador real: depois de `insert()` selecionar
+  // o primeiro `\placeholder{}`, a tecla Tab física nem sempre avança pro
+  // PRÓXIMO placeholder sozinha em estruturas com vários slots (ex.
+  // integral definida) — mas os comandos nativos do MathLive
+  // (`moveToNextPlaceholder`/`moveToPreviousPlaceholder`) sempre funcionam
+  // quando chamados direto. Este componente passou a chamá-los
+  // explicitamente no `keydown` do Tab.
+
+  type MockField = HTMLElement & {
+    lastExecutedCommand: string | null;
+    nextExecuteCommandResult: boolean;
+  };
+
+  it("Tab chama moveToNextPlaceholder (comando nativo do MathLive) e previne o Tab padrão quando há um próximo slot", () => {
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
+    const field = getField(container) as unknown as MockField;
+
+    const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    field.dispatchEvent(event);
+
+    expect(field.lastExecutedCommand).toBe("moveToNextPlaceholder");
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("Shift+Tab chama moveToPreviousPlaceholder", () => {
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
+    const field = getField(container) as unknown as MockField;
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true }));
+
+    expect(field.lastExecutedCommand).toBe("moveToPreviousPlaceholder");
+  });
+
+  it("sem mais placeholders (comando devolve false), o Tab NÃO é interceptado — sai do campo normalmente (acessibilidade)", () => {
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
+    const field = getField(container) as unknown as MockField;
+    field.nextExecuteCommandResult = false;
+
+    const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    field.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
   });
 
   // --- Hotfix V3.0.1a: teclado virtual do MathLive fica inacessível -------

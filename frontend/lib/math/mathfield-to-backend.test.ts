@@ -92,9 +92,10 @@ describe("mathFieldLatexToBackendExpression", () => {
     expect(mathFieldLatexToBackendExpression("\\sqrt{}")).toEqual({ ok: false, reason: "incomplete" });
   });
 
-  it("comando LaTeX fora do catálogo (ex. integral) devolve reason=unsupported, nunca lança", () => {
-    expect(mathFieldLatexToBackendExpression("\\int_0^1 x^2\\,dx")).toEqual({ ok: false, reason: "unsupported" });
-    expect(mathFieldLatexToBackendExpression("\\sum_{i=1}^{10} i")).toEqual({ ok: false, reason: "unsupported" });
+  it("comando LaTeX fora do catálogo (ex. matriz) devolve reason=unsupported, nunca lança", () => {
+    // Integral/somatório SAÍRAM do catálogo "fora de escopo" na Sprint
+    // V3.0.1 (Structured Calculus Input) — ver describe dedicado abaixo.
+    // Matrizes continuam fora do catálogo (V3.0.2+).
     expect(mathFieldLatexToBackendExpression("\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}")).toEqual({
       ok: false,
       reason: "unsupported",
@@ -168,6 +169,208 @@ describe("mathFieldLatexToBackendExpression", () => {
         const converted = mathFieldLatexToBackendExpression(latex!);
         expect(converted.ok, `${text} -> ${latex}`).toBe(true);
       }
+    });
+  });
+
+  // --- Sprint V3.0.1 (Structured Calculus Input) ---------------------------
+  //
+  // O adapter emite a sintaxe TÉCNICA CANÔNICA do backend diretamente
+  // (`derivada(expr,var)`, `integral(expr,var[,inf,sup])`,
+  // `limite(expr,var,ponto)`, `Σ(var=inf..sup) expr`) — confirmado por
+  // `test_calculus_natural_notation.py` (backend) que essa forma passa
+  // IDÊNTICA pela normalização de notação natural (idempotente), então
+  // não há necessidade de emitir "d/dx(...)"/"∫...dx"/"lim x→p ...".
+  // Todos os casos abaixo foram validados contra o backend REAL rodando
+  // (`/solve`), não só contra a forma esperada — resultados conferidos:
+  // ver o relatório da sprint.
+  describe("Sprint V3.0.1 — Derivada (\\frac{d}{dx}(...))", () => {
+    it("d/dx(x²) -> derivada(x², x)", () => {
+      expect(expr("\\frac{d}{dx}\\left(x^2\\right)")).toBe("derivada(x², x)");
+    });
+
+    it("d/dx(x² + 3x) -> derivada(x²+3x, x)", () => {
+      expect(expr("\\frac{d}{dx}\\left(x^2+3x\\right)")).toBe("derivada(x²+3x, x)");
+    });
+
+    it("d/dx((x²+1)³) — cadeia — -> derivada((x²+1)³, x)", () => {
+      expect(expr("\\frac{d}{dx}\\left((x^2+1)^3\\right)")).toBe("derivada((x²+1)³, x)");
+    });
+
+    it("d/dx(x² sin(x)) — produto com função mínima — -> derivada(x²sin(x), x)", () => {
+      expect(expr("\\frac{d}{dx}\\left(x^2\\sin(x)\\right)")).toBe("derivada(x²sin(x), x)");
+    });
+
+    it("d/dx √(x²+1) — aninhado, sem parênteses no argumento — -> derivada(√(x²+1), x)", () => {
+      expect(expr("\\frac{d}{dx}\\sqrt{x^2+1}")).toBe("derivada(√(x²+1), x)");
+    });
+
+    it("variável não hardcodada em x — d/dy(...) funciona genericamente", () => {
+      expect(expr("\\frac{d}{dy}\\left(x*y\\right)")).toBe("derivada(x*y, y)");
+    });
+
+    it("uma fração comum (numerador != 'd') continua sendo fração, nunca confundida com derivada", () => {
+      expect(expr("\\frac{2}{dx}")).toBe("2/(dx)");
+    });
+
+    it("derivada sem expressão (slot vazio) -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\frac{d}{dx}\\left(\\placeholder{}\\right)")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+  });
+
+  describe("Sprint V3.0.1 — Integral indefinida (\\int ... dx)", () => {
+    it("∫x² dx -> integral(x², x)", () => {
+      expect(expr("\\int x^2\\,dx")).toBe("integral(x², x)");
+    });
+
+    it("∫x·eˣ dx -> integral(x*e^x, x)", () => {
+      expect(expr("\\int x\\cdot e^{x}\\,dx")).toBe("integral(x*e^x, x)");
+    });
+
+    it("∫2x(x²+1)³ dx -> integral(2x(x²+1)³, x)", () => {
+      expect(expr("\\int 2x\\left(x^2+1\\right)^3\\,dx")).toBe("integral(2x(x²+1)³, x)");
+    });
+
+    it("∫sin(x) dx -> integral(sin(x), x)", () => {
+      expect(expr("\\int \\sin(x)\\,dx")).toBe("integral(sin(x), x)");
+    });
+
+    it("aninhado: ∫(x²+1)/x dx -> integral((x²+1)/x, x)", () => {
+      expect(expr("\\int \\frac{x^2+1}{x}\\,dx")).toBe("integral((x²+1)/x, x)");
+    });
+
+    it("integral sem integrando (slot vazio) -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\int \\placeholder{}\\,dx")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+  });
+
+  describe("Sprint V3.0.1 — Integral definida (\\int_a^b ... dx)", () => {
+    it("∫₀¹x² dx -> integral(x², x, 0, 1)", () => {
+      expect(expr("\\int_{0}^{1}x^2\\,dx")).toBe("integral(x², x, 0, 1)");
+    });
+
+    it("∫₀^π sen(x) dx -> integral(sin(x), x, 0, π)", () => {
+      expect(expr("\\int_{0}^{\\pi}\\sin(x)\\,dx")).toBe("integral(sin(x), x, 0, π)");
+    });
+
+    it("∫₁²x dx -> integral(x, x, 1, 2)", () => {
+      expect(expr("\\int_{1}^{2}x\\,dx")).toBe("integral(x, x, 1, 2)");
+    });
+
+    it("integral definida sem limite inferior -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\int_{\\placeholder{}}^{1}x^2\\,dx")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+
+    it("integral definida sem limite superior -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\int_{0}^{\\placeholder{}}x^2\\,dx")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+
+    it("integral definida sem integrando -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\int_{0}^{1}\\placeholder{}\\,dx")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+  });
+
+  describe("Sprint V3.0.1 — Limite (\\lim_{x\\to p} ...)", () => {
+    it("lim x→0 sin(x)/x -> limite((sin(x))/x, x, 0)", () => {
+      expect(expr("\\lim_{x\\to0}\\frac{\\sin(x)}{x}")).toBe("limite((sin(x))/x, x, 0)");
+    });
+
+    it("lim x→2 (x²-4)/(x-2) -> limite((x²-4)/(x-2), x, 2)", () => {
+      expect(expr("\\lim_{x\\to2}\\frac{x^2-4}{x-2}")).toBe("limite((x²-4)/(x-2), x, 2)");
+    });
+
+    it("lim x→∞ 1/x — infinito representável no MathField — -> limite(1/x, x, ∞)", () => {
+      expect(expr("\\lim_{x\\to\\infty}\\frac{1}{x}")).toBe("limite(1/x, x, ∞)");
+    });
+
+    it("limite sem destino (slot vazio) -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\lim_{x\\to\\placeholder{}}x")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+
+    it("limite sem expressão (slot vazio) -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\lim_{x\\to0}\\placeholder{}")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+  });
+
+  describe("Sprint V3.0.1 — Somatório (\\sum_{i=a}^{b} ...)", () => {
+    it("Σ i=1..10 i -> Σ(i=1..10) i", () => {
+      expect(expr("\\sum_{i=1}^{10}i")).toBe("Σ(i=1..10) i");
+    });
+
+    it("Σ i=1..10 i² -> Σ(i=1..10) i²", () => {
+      expect(expr("\\sum_{i=1}^{10}i^2")).toBe("Σ(i=1..10) i²");
+    });
+
+    it("Σ k=1..5 k — índice diferente de i, já suportado pelo backend — -> Σ(k=1..5) k", () => {
+      expect(expr("\\sum_{k=1}^{5}k")).toBe("Σ(k=1..5) k");
+    });
+
+    it("somatório sem índice -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\sum_{\\placeholder{}=1}^{10}i")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+
+    it("somatório sem limite inferior -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\sum_{i=\\placeholder{}}^{10}i")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+
+    it("somatório sem limite superior -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\sum_{i=1}^{\\placeholder{}}i")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+
+    it("somatório sem expressão -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\sum_{i=1}^{10}\\placeholder{}")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+
+    it("limites não-inteiros são rejeitados como unsupported — o backend só aceita inteiro literal (summation/parsing.py:_parse_bound)", () => {
+      expect(mathFieldLatexToBackendExpression("\\sum_{i=1}^{n}i")).toEqual({ ok: false, reason: "unsupported" });
+      expect(
+        mathFieldLatexToBackendExpression("\\sum_{i=\\frac{1}{2}}^{10}i")
+      ).toEqual({ ok: false, reason: "unsupported" });
+    });
+  });
+
+  describe("Sprint V3.0.1 — regressão da V3.0/V3.0.1a (categoria Básico não pode quebrar)", () => {
+    it.each([
+      ["x²-4=0", "{ x}^{2}-4 = 0"],
+      ["2x+4=10", "2~ x+4 = 10"],
+      ["(x+1)³", "{\\left( x+1\\right)}^{3}"],
+      ["1/2+1/3", "\\frac{1}{2}+\\frac{1}{3}"],
+      ["√(16)", "\\sqrt{16}"],
+      ["π/2", "\\frac{\\pi}{2}"],
+    ])("%s continua aceito", (expected, latex) => {
+      expect(expr(latex)).toBe(expected);
     });
   });
 });

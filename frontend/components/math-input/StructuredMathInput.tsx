@@ -131,15 +131,42 @@ export function StructuredMathInput({
     // qualquer dispositivo (em especial mobile, sem Ctrl/Cmd). Enter puro
     // fica com o comportamento nativo do MathLive (navegação estrutural),
     // nunca envia o formulário sozinho.
+    //
+    // Sprint V3.0.1 (Structured Calculus Input) — Tab/Shift+Tab chamam
+    // explicitamente `moveToNextPlaceholder`/`moveToPreviousPlaceholder`
+    // (comandos NATIVOS do MathLive, não navegação customizada) —
+    // achado da validação no navegador real: depois de `insert()`
+    // posicionar o cursor no primeiro `\placeholder{}` (`selectionMode:
+    // "placeholder"`), a tecla Tab física nem sempre avança pro PRÓXIMO
+    // placeholder sozinha em estruturas com vários slots (ex. integral
+    // definida: inferior/superior/integrando) — mas o comando
+    // `moveToNextPlaceholder` sempre funciona corretamente quando chamado
+    // direto. Se não houver mais placeholder (`executeCommand` devolve
+    // `false`), o Tab NÃO é interceptado — sai do campo normalmente
+    // (acessibilidade padrão preservada).
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Enter" || !(event.ctrlKey || event.metaKey)) return;
-      event.preventDefault();
-      const form = field.closest("form");
-      const submitButton = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
-      if (submitButton?.disabled) return;
-      form?.requestSubmit();
+      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        const form = field.closest("form");
+        const submitButton = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
+        if (submitButton?.disabled) return;
+        form?.requestSubmit();
+        return;
+      }
+      if (event.key === "Tab") {
+        const moved = field.executeCommand(event.shiftKey ? "moveToPreviousPlaceholder" : "moveToNextPlaceholder");
+        if (moved) event.preventDefault();
+      }
     }
-    field.addEventListener("keydown", handleKeyDown);
+    // Fase de CAPTURA (não bubble): o MathLive tem seu próprio handler de
+    // teclado interno (num nó dentro do shadow DOM, que recebe o foco de
+    // verdade) que intercepta Tab ANTES de qualquer listener em fase de
+    // bubble no elemento hospedeiro conseguir reagir — confirmado no
+    // navegador real (sem `capture: true`, `moveToNextPlaceholder` nunca
+    // era chamado por uma tecla Tab física, só quando disparado
+    // programaticamente). Capturar aqui garante que este handler roda
+    // ANTES do tratamento interno do MathLive ter a chance de agir.
+    field.addEventListener("keydown", handleKeyDown, true);
 
     container.appendChild(field);
     fieldRef.current = field;
@@ -154,7 +181,7 @@ export function StructuredMathInput({
 
     return () => {
       field.removeEventListener("input", handleInput);
-      field.removeEventListener("keydown", handleKeyDown);
+      field.removeEventListener("keydown", handleKeyDown, true);
       container.removeChild(field);
       fieldRef.current = null;
     };

@@ -428,12 +428,44 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(key!.ariaLabel).toBeDefined();
   });
 
-  it("teclas fora da categoria Básico ainda não têm mathLiveInsert (fora de escopo desta sprint)", () => {
+  it("teclas fora de Básico/Cálculo ainda não têm mathLiveInsert (fora de escopo até serem migradas)", () => {
     for (const category of KEYBOARD_CATEGORIES) {
-      if (category.id === "basico") continue;
+      if (category.id === "basico" || category.id === "calculo") continue;
       for (const key of category.keys) {
         expect(key.mathLiveInsert, `${category.id}/${key.label}`).toBeUndefined();
       }
     }
+  });
+
+  // --- Sprint V3.0.1 (Structured Calculus Input) --------------------------
+
+  it("as 5 teclas de Cálculo migradas têm mathLiveInsert com slots \\placeholder{} estruturados", () => {
+    const calculo = KEYBOARD_CATEGORIES.find((category) => category.id === "calculo");
+    const byLabel = new Map(calculo?.keys.map((key) => [key.label, key]));
+
+    expect(byLabel.get("d/dx")?.mathLiveInsert).toBe("\\frac{d}{dx}\\left(\\placeholder{}\\right)");
+    expect(byLabel.get("∫ dx")?.mathLiveInsert).toBe("\\int \\placeholder{}\\,dx");
+    expect(byLabel.get("∫ₐᵇ dx")?.mathLiveInsert).toBe(
+      "\\int_{\\placeholder{}}^{\\placeholder{}}\\placeholder{}\\,dx"
+    );
+    expect(byLabel.get("lim")?.mathLiveInsert).toBe("\\lim_{x\\to\\placeholder{}}\\placeholder{}");
+    expect(byLabel.get("Σ")?.mathLiveInsert).toBe(
+      "\\sum_{\\placeholder{i}=\\placeholder{}}^{\\placeholder{}}\\placeholder{}"
+    );
+    expect(byLabel.get("∞")?.mathLiveInsert).toBe("\\infty");
+  });
+
+  it("categoria Cálculo tem a nova tecla de integral definida (∫ₐᵇ dx), inexistente no teclado legado", () => {
+    const calculo = KEYBOARD_CATEGORIES.find((category) => category.id === "calculo");
+    const key = calculo?.keys.find((candidate) => candidate.label === "∫ₐᵇ dx");
+    expect(key).toBeDefined();
+    expect(key!.ariaLabel).toBeDefined();
+  });
+
+  it("Σ de Cálculo (estruturada) e Σ de Símbolos (ainda legado) coexistem sem conflito — mesmo padrão de π duplicado em Básico/V3.0", () => {
+    const calculo = KEYBOARD_CATEGORIES.find((category) => category.id === "calculo");
+    const simbolos = KEYBOARD_CATEGORIES.find((category) => category.id === "simbolos");
+    expect(calculo?.keys.find((key) => key.label === "Σ")?.mathLiveInsert).toBeDefined();
+    expect(simbolos?.keys.find((key) => key.label === "Σ")?.mathLiveInsert).toBeUndefined();
   });
 });
