@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { mathFieldLatexToBackendExpression } from "./mathfield-to-backend";
+import { previewLatex } from "./to-latex";
 
 function expr(latex: string): string {
   const result = mathFieldLatexToBackendExpression(latex);
@@ -105,5 +106,68 @@ describe("mathFieldLatexToBackendExpression", () => {
       expect(() => mathFieldLatexToBackendExpression(bogus)).not.toThrow();
       expect(mathFieldLatexToBackendExpression(bogus).ok).toBe(false);
     }
+  });
+
+  // --- Hotfix V3.0.1a: regressão de polinômios básicos --------------------
+  //
+  // Causa raiz da regressão: o mathjs (via `previewLatex`) NUNCA gera o
+  // LaTeX "idealizado" que os testes acima usam (`x^2`, `x^3-6x^2...`) —
+  // ele envolve toda variável/base em chaves TRANSPARENTES com espaço
+  // interno (`{ x}`) e separa coeficiente de variável com "~" (espaço fino
+  // de LaTeX), ex. "6~{ x}^{2}" para "6x²". O parser já sabia abrir
+  // `{...}` e já tratava "~" como espaço — mas o detector de multiplicação
+  // implícita em `parseTerm()` só reconhecia `[0-9a-zA-Z(]` como início de
+  // um novo fator, nunca "{" — então "6~{x}^2" era lido como só "6",
+  // truncando o resto da expressão e derrubando tudo com "unsupported".
+  // Corrigido genericamente (adicionando "{" ao conjunto de gatilhos de
+  // multiplicação implícita), não com um caso especial para este polinômio
+  // — os testes abaixo cobrem a FORMA REAL que o mathjs produz, nunca só a
+  // forma idealizada, para este tipo de regressão nunca mais passar
+  // despercebido.
+  describe("Hotfix V3.0.1a — polinômios básicos com a forma REAL do mathjs ({ x}, ~, espaços)", () => {
+    it("x³-6x²+11x-6=0 (o caso relatado) — múltiplos termos, coeficientes, potências e igualdade", () => {
+      expect(expr("{ x}^{3}-6~{ x}^{2}+11~ x-6 = 0")).toBe("x³-6x²+11x-6=0");
+    });
+
+    it("x²-4=0 continua aceito", () => {
+      expect(expr("{ x}^{2}-4 = 0")).toBe("x²-4=0");
+    });
+
+    it("2x+4=10 continua aceito", () => {
+      expect(expr("2~ x+4 = 10")).toBe("2x+4=10");
+    });
+
+    it("generaliza pra um polinômio nunca visto antes (grau 4, coeficientes diferentes, sinais alternados) — prova que não é hardcode", () => {
+      expect(expr("{ x}^{4}+2~{ x}^{3}-3~{ x}^{2}+4~ x-5 = 0")).toBe("x⁴+2x³-3x²+4x-5=0");
+    });
+
+    it("também generaliza sem igualdade (só a expressão)", () => {
+      expect(expr("3~{ x}^{2}-5~ x+2")).toBe("3x²-5x+2");
+    });
+
+    /**
+     * Teste de integração real: passa pelo MESMO `previewLatex` que
+     * `CalculatorWorkspace` usa pra converter exemplos/histórico/deep
+     * links pra LaTeX — não uma string LaTeX escrita à mão que pode
+     * divergir do que o mathjs realmente produz (foi exatamente essa
+     * divergência que escondeu a regressão original). Se o mathjs mudar
+     * sua serialização no futuro, este teste pega a quebra imediatamente.
+     */
+    it("integração real: previewLatex(texto) -> adapter aceita, pros 7 exemplos da Calculadora + o polinômio relatado", async () => {
+      for (const text of [
+        "x² - 4 = 0",
+        "2x + 4 = 10",
+        "(x+1)³",
+        "√16",
+        "1/2 + 1/3",
+        "x³-6x²+11x-6=0",
+        "π/2",
+      ]) {
+        const latex = await previewLatex(text);
+        expect(latex, text).not.toBeNull();
+        const converted = mathFieldLatexToBackendExpression(latex!);
+        expect(converted.ok, `${text} -> ${latex}`).toBe(true);
+      }
+    });
   });
 });

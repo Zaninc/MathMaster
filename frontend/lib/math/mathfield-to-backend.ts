@@ -161,10 +161,12 @@ class LatexParser {
         continue;
       }
       // Multiplicação implícita: outro fator começa direto (número,
-      // variável, `(`, `\frac`, `\sqrt`, `\pi`) sem operador entre eles.
+      // variável, `(`, `{...}` — mathjs envolve variáveis/bases em chaves
+      // transparentes, ex. "6~{x}^{2}" para "6x²" — `\frac`, `\sqrt`,
+      // `\pi`) sem operador entre eles.
       const next = this.peek();
       const startsFactor =
-        /[0-9a-zA-Z(]/.test(next) || this.src.startsWith("\\frac", this.pos) || this.src.startsWith("\\sqrt", this.pos) || this.src.startsWith("\\pi", this.pos);
+        /[0-9a-zA-Z({]/.test(next) || this.src.startsWith("\\frac", this.pos) || this.src.startsWith("\\sqrt", this.pos) || this.src.startsWith("\\pi", this.pos);
       if (!startsFactor) break;
       result += this.parseFactor();
     }

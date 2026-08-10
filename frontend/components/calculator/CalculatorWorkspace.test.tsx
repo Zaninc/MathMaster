@@ -146,6 +146,77 @@ describe("CalculatorWorkspace", () => {
     expect(apiClient.solve).not.toHaveBeenCalled();
   });
 
+  // --- Hotfix V3.0.1a (bridge básica + teclado virtual MathLive) ---------
+  //
+  // Regressão real: `x³-6x²+11x-6=0` (polinômio básico, sempre funcionou)
+  // passou a cair em "unsupported" depois da V3.0. Causa: o LaTeX REAL que
+  // o mathjs produz (via `previewLatex`, usado pros exemplos/histórico)
+  // envolve variáveis em chaves com espaço (`{ x}`) e usa "~" entre
+  // coeficiente e variável (`6~{x}^2`) — o adapter só reconhecia
+  // `[0-9a-zA-Z(]` como início de um novo fator na multiplicação
+  // implícita, nunca "{", truncando a expressão. Corrigido genericamente
+  // em `mathfield-to-backend.ts` (não com um caso especial pra este
+  // polinômio) — os testes abaixo usam a MESMA forma real (não a forma
+  // idealizada que escondeu o bug da primeira vez).
+  describe("Hotfix V3.0.1a — bridge de polinômios básicos + teclado virtual do MathLive", () => {
+    it("x³-6x²+11x-6=0 (regressão relatada) — a bridge aceita, múltiplos termos/coeficientes/sinais/potências/igualdade", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({
+        expression: "x³-6x²+11x-6=0",
+        result: "x=1 ou x=2 ou x=3",
+        approx: null,
+      });
+
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      // Forma REAL que o mathjs produz (não a idealizada) — a mesma que
+      // causou a regressão original.
+      setFieldLatex(field, "{ x}^{3}-6~{ x}^{2}+11~ x-6 = 0");
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith("x³-6x²+11x-6=0"));
+    });
+
+    it("x²-4=0 continua aceito (forma real do mathjs)", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({ expression: "x²-4=0", result: "x=2 ou x=-2", approx: null });
+
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      setFieldLatex(field, "{ x}^{2}-4 = 0");
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith("x²-4=0"));
+    });
+
+    it("2x+4=10 continua aceito (forma real do mathjs)", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({ expression: "2x+4=10", result: "x=3", approx: null });
+
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      setFieldLatex(field, "2~ x+4 = 10");
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith("2x+4=10"));
+    });
+
+    it("teclado virtual do MathLive não fica disponível — política manual e ícone de abrir ocultado por CSS", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+
+      const { container } = render(<CalculatorWorkspace />);
+      const field = (await getField(container)) as unknown as { mathVirtualKeyboardPolicy: string };
+
+      await waitFor(() => expect(field.mathVirtualKeyboardPolicy).toBe("manual"));
+      const style = document.getElementById("structured-math-input-hide-virtual-keyboard-toggle");
+      expect(style?.textContent).toContain("virtual-keyboard-toggle");
+      expect(style?.textContent).toContain("display: none");
+    });
+  });
+
   it("teclado mostra só a categoria Básico nesta página (Álgebra/Funções/Símbolos ficam fora até serem migradas)", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     render(<CalculatorWorkspace />);

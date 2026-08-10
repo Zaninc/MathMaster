@@ -11,6 +11,29 @@ export interface StructuredMathInputApi {
   focus(): void;
 }
 
+const VIRTUAL_KEYBOARD_STYLE_ID = "structured-math-input-hide-virtual-keyboard-toggle";
+
+/**
+ * Hotfix V3.0.1a — `mathVirtualKeyboardPolicy: "manual"` (abaixo) só evita
+ * o teclado virtual do MathLive abrir SOZINHO no foco; o `<math-field>`
+ * continua desenhando seu próprio ícone/botão de abrir o teclado (visível
+ * mesmo em desktop), que o usuário pode clicar manualmente pra acessar
+ * estruturas fora do escopo da V3.0 (matrizes, somatórios, integrais...).
+ * A biblioteca não expõe uma policy "off" nesta versão — a forma
+ * documentada de remover o botão por completo é CSS via `::part()`
+ * (`math-field::part(virtual-keyboard-toggle)`), que só funciona como
+ * regra de folha de estilo real (não como `style` inline no elemento).
+ * Injetado uma única vez, globalmente (idempotente) — todo `<math-field>`
+ * da página herda, nunca precisa repetir por instância.
+ */
+function ensureVirtualKeyboardToggleHidden(): void {
+  if (document.getElementById(VIRTUAL_KEYBOARD_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = VIRTUAL_KEYBOARD_STYLE_ID;
+  style.textContent = "math-field::part(virtual-keyboard-toggle) { display: none !important; }";
+  document.head.appendChild(style);
+}
+
 interface StructuredMathInputProps {
   id: string;
   /** Valor em LaTeX — única fonte da verdade do editor. */
@@ -71,11 +94,18 @@ export function StructuredMathInput({
     const container = containerRef.current;
     if (!container) return;
 
+    ensureVirtualKeyboardToggleHidden();
+
     const field = document.createElement("math-field") as MathfieldElement;
     field.id = id;
     field.value = value;
     // Nunca mostra o teclado virtual próprio do MathLive — o MathMaster já
-    // tem o seu (`MathKeyboard`); "manual" nunca dispara sozinho no foco.
+    // tem o seu (`MathKeyboard`). "manual" evita abrir sozinho no foco (ex.
+    // touch); o ícone de abrir manualmente é ocultado por CSS acima
+    // (`ensureVirtualKeyboardToggleHidden`) — as duas partes juntas
+    // deixam o teclado virtual do MathLive inteiramente inacessível ao
+    // usuário nesta sprint, sem tocar no teclado FÍSICO (digitação direta
+    // continua funcionando normalmente).
     field.mathVirtualKeyboardPolicy = "manual";
     field.smartFence = true;
     field.smartSuperscript = true;

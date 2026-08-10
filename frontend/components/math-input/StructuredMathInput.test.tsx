@@ -165,6 +165,36 @@ describe("StructuredMathInput", () => {
     expect(requestSubmit).not.toHaveBeenCalled();
   });
 
+  // --- Hotfix V3.0.1a: teclado virtual do MathLive fica inacessível -------
+
+  it("mathVirtualKeyboardPolicy é 'manual' — nunca abre sozinho no foco", async () => {
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
+    const field = getField(container) as unknown as { mathVirtualKeyboardPolicy: string };
+    await waitFor(() => expect(field.mathVirtualKeyboardPolicy).toBe("manual"));
+  });
+
+  it("injeta CSS ocultando o ícone de abrir o teclado virtual (::part(virtual-keyboard-toggle))", () => {
+    render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
+
+    const style = document.getElementById("structured-math-input-hide-virtual-keyboard-toggle");
+    expect(style).not.toBeNull();
+    expect(style?.textContent).toContain("virtual-keyboard-toggle");
+    expect(style?.textContent).toContain("display: none");
+  });
+
+  it("a injeção do CSS é idempotente — só uma tag <style>, mesmo com vários campos montados", () => {
+    render(
+      <>
+        <StructuredMathInput id="campo-1" value="" onChange={vi.fn()} />
+        <StructuredMathInput id="campo-2" value="" onChange={vi.fn()} />
+      </>
+    );
+
+    expect(
+      document.querySelectorAll("#structured-math-input-hide-virtual-keyboard-toggle")
+    ).toHaveLength(1);
+  });
+
   it("aria-describedby/aria-invalid são refletidos no elemento real", () => {
     const { container, rerender } = render(
       <StructuredMathInput id="campo" value="" onChange={vi.fn()} ariaDescribedBy="erro-1" ariaInvalid={false} />
