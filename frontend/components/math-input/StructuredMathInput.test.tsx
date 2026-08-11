@@ -62,6 +62,39 @@ vi.mock("mathlive", () => {
       this.lastExecutedCommand = command;
       return this.nextExecuteCommandResult;
     }
+
+    // Hotfix — Cursor e navegação estrutural: mocks mínimos das APIs reais
+    // usadas por `computeBestOffset`/`cursorPointForOffset` e pelos
+    // handlers de clique — nunca a lógica de layout real do MathLive (só
+    // testada no navegador real, ver relatório do hotfix). `mockBounds`
+    // deixa cada teste descrever a MESMA geometria capturada de verdade
+    // (`getElementInfo` real) sem depender de um layout engine.
+    lastOffset = 0;
+    selectionIsCollapsed = true;
+    mockBounds = new Map<number, { latex?: string; bounds: { x: number; y: number; width: number; height: number } | null }>();
+    mockShadowHit: { classListLength: number } | null = null;
+    positionSetCalls: number[] = [];
+    private _position = 0;
+
+    get position() {
+      return this._position;
+    }
+
+    set position(value: number) {
+      this._position = value;
+      this.positionSetCalls.push(value);
+    }
+
+    getElementInfo(offset: number) {
+      return this.mockBounds.get(offset);
+    }
+
+    get shadowRoot() {
+      const hit = this.mockShadowHit;
+      return {
+        elementFromPoint: () => (hit ? ({ classList: { length: hit.classListLength } } as unknown as Element) : null),
+      } as unknown as ShadowRoot;
+    }
   }
   if (!customElements.get("math-field")) {
     customElements.define("math-field", MockMathfieldElement);
@@ -361,5 +394,134 @@ describe("StructuredMathInput", () => {
 
     expect(field.lastSetValueCall).toBeNull();
     expect(onChange).toHaveBeenLastCalledWith("\\sqrt{\\placeholder{}}");
+  });
+
+  // --- Hotfix — Cursor e navegação estrutural ------------------------------
+  //
+  // Geometria abaixo (bounds de cada offset) é a CAPTURADA de verdade no
+  // navegador real via `field.getElementInfo(offset)` pra
+  // `\begin{cases}x^2\\ \placeholder{}\end{cases}` — nunca valores
+  // idealizados. Offset 5 (`bounds: null`) é o marcador de fim-de-grupo do
+  // expoente (logo depois de "x²", ainda dentro da primeira linha do
+  // sistema) — a causa raiz real do bug: sem herança, nenhum candidato
+  // representa "o fim da linha", e o clique cai sempre dentro do "2"
+  // (offset 4). Clique real capturado (`math-field.value`/`position`
+  // antes/depois) confirmou exatamente isso no navegador antes do reparo.
+  type MockFieldWithClickSupport = MockFieldWithSetValue & {
+    lastOffset: number;
+    selectionIsCollapsed: boolean;
+    mockBounds: Map<number, { latex?: string; bounds: { x: number; y: number; width: number; height: number } | null }>;
+    mockShadowHit: { classListLength: number } | null;
+    positionSetCalls: number[];
+    position: number;
+  };
+
+  function setCasesWithPowerGeometry(field: MockFieldWithClickSupport) {
+    field.value = "\\begin{cases}x^2\\\\ \\placeholder{}\\end{cases}";
+    field.lastOffset = 8;
+    field.mockBounds = new Map([
+      [0, { latex: "", bounds: { x: 54, y: 157, width: -1, height: 23 } }],
+      [1, { latex: "", bounds: { x: 69, y: 144, width: -1, height: 23 } }],
+      [2, { latex: "x", bounds: { x: 69, y: 149, width: 9, height: 17 } }],
+      [3, { latex: "", bounds: { x: 79, y: 143, width: -1, height: 17 } }],
+      [4, { latex: "2", bounds: { x: 79, y: 145, width: 6, height: 14 } }],
+      [5, { latex: "^2", bounds: null }],
+      [6, { latex: "", bounds: { x: 69, y: 170, width: -1, height: 23 } }],
+      [7, { latex: "\\placeholder{}", bounds: { x: 69, y: 172, width: 14, height: 21 } }],
+      [8, { latex: "\\begin{cases}x^2\\\\ \\placeholder{}\\end{cases}", bounds: { x: 54, y: 144, width: 52, height: 54 } }],
+    ]);
+  }
+
+  it("clique no espaço vazio à direita de 'x²' dentro de cases (elemento sem classe CSS — estrutural) pousa no fim da linha, nunca dentro do expoente", () => {
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
+    const field = getField(container) as unknown as MockFieldWithClickSupport;
+    setCasesWithPowerGeometry(field);
+    field.mockShadowHit = { classListLength: 0 };
+
+    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 95, clientY: 150 }));
+
+    expect(field.position).toBe(5);
+  });
+
+  it("clique NORMAL sobre um glifo real (classe CSS presente) nunca aciona o recálculo — o MathLive continua 100% responsável", () => {
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
+    const field = getField(container) as unknown as MockFieldWithClickSupport;
+    setCasesWithPowerGeometry(field);
+    field.mockShadowHit = { classListLength: 1 };
+
+    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 72, clientY: 155 }));
+
+    expect(field.positionSetCalls).toHaveLength(0);
+  });
+
+  it("seleção em andamento (arrasto do usuário) nunca é colapsada por um clique em espaço vazio", () => {
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
+    const field = getField(container) as unknown as MockFieldWithClickSupport;
+    setCasesWithPowerGeometry(field);
+    field.mockShadowHit = { classListLength: 0 };
+    field.selectionIsCollapsed = false;
+
+    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 95, clientY: 150 }));
+
+    expect(field.positionSetCalls).toHaveLength(0);
+  });
+
+  it("clique dentro de uma matriz com potência numa célula (mesma assinatura estrutural) também pousa no fim da célula, não dentro do expoente", () => {
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
+    const field = getField(container) as unknown as MockFieldWithClickSupport;
+    // Geometria real capturada pra `\begin{bmatrix}x^2&2\\3&4\end{bmatrix}`.
+    field.value = "\\begin{bmatrix}x^2&2\\\\3&4\\end{bmatrix}";
+    field.lastOffset = 12;
+    field.mockBounds = new Map([
+      [1, { latex: "", bounds: { x: 64, y: 140, width: -1, height: 23 } }],
+      [2, { latex: "x", bounds: { x: 64, y: 145, width: 9, height: 17 } }],
+      [3, { latex: "", bounds: { x: 74, y: 139, width: -1, height: 17 } }],
+      [4, { latex: "2", bounds: { x: 74, y: 141, width: 6, height: 14 } }],
+      [5, { latex: "^2", bounds: null }],
+      [6, { latex: "", bounds: { x: 100, y: 140, width: -1, height: 23 } }],
+      [7, { latex: "2", bounds: { x: 100, y: 142, width: 8, height: 21 } }],
+    ]);
+    field.mockShadowHit = { classListLength: 0 };
+
+    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 90, clientY: 145 }));
+
+    expect(field.position).toBe(5);
+  });
+
+  it("clique no padding do wrapper externo (fora do retângulo real do campo) foca e manda o cursor pro fim via moveToMathfieldEnd", () => {
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
+    const field = getField(container) as unknown as MockFieldWithClickSupport;
+    const wrapper = field.parentElement!;
+    const focusSpy = vi.spyOn(field, "focus");
+
+    wrapper.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 10, clientY: 10 }));
+
+    expect(focusSpy).toHaveBeenCalled();
+    expect(field.lastExecutedCommand).toBe("moveToMathfieldEnd");
+  });
+
+  it("clique cujo target já é o próprio campo (nunca o wrapper) não aciona moveToMathfieldEnd", () => {
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
+    const field = getField(container) as unknown as MockFieldWithClickSupport;
+    setCasesWithPowerGeometry(field);
+    field.mockShadowHit = { classListLength: 1 };
+
+    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 72, clientY: 155 }));
+
+    expect(field.lastExecutedCommand).toBeNull();
+  });
+
+  it("Space continua sem nenhum efeito dentro de cases/matriz (Hotfix V3.0.2a preservado) — confirmado de novo no navegador real para este hotfix", () => {
+    const onChange = vi.fn();
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={onChange} />);
+    const field = getField(container) as unknown as MockFieldWithClickSupport;
+    field.value = "\\begin{cases}x^2\\\\ \\placeholder{}\\end{cases}";
+
+    const event = new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true });
+    field.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(field.value).toBe("\\begin{cases}x^2\\\\ \\placeholder{}\\end{cases}");
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

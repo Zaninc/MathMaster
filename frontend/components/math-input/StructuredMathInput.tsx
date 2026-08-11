@@ -15,6 +15,80 @@ export interface StructuredMathInputApi {
 
 const VIRTUAL_KEYBOARD_STYLE_ID = "structured-math-input-hide-virtual-keyboard-toggle";
 
+interface OffsetPoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * Hotfix — Cursor e navegação estrutural: acha o "ponto-cursor" visual de
+ * um offset — o ponto onde a linha do cursor apareceria se `field.position`
+ * fosse esse offset. Investigação real no navegador (`getElementInfo`)
+ * confirmou 2 formas: se o offset tem `bounds` e representa um átomo real
+ * (`latex` não vazio), o ponto fica logo à DIREITA desse átomo (fim do que
+ * já foi digitado); se `bounds` existe mas é um marcador vazio (`latex`
+ * vazio, ex. começo de uma célula), o ponto é o próprio `bounds.x/y`. A
+ * lacuna real: um offset de FIM-DE-GRUPO (ex. logo depois de todo um "x²"
+ * dentro de `cases`/matriz) frequentemente tem `bounds: null` — sem
+ * nenhuma hitbox própria — então herda recursivamente o ponto do offset
+ * ANTERIOR (o último átomo real dentro do grupo). Sem essa herança, um
+ * clique no espaço vazio à direita de "x²" nunca considera esse offset
+ * como candidato, e cai só nos offsets REAIS mais próximos — que ficam
+ * DENTRO do expoente, nunca no fim da linha (o bug relatado, confirmado
+ * com clique genuíno: `\begin{cases}x^2\\ \placeholder{}\end{cases}`,
+ * clique à direita de "x²" pousa no offset 4 — dentro do "2" — em vez do
+ * offset 5, o fim de "x²").
+ */
+function cursorPointForOffset(
+  field: MathfieldElement,
+  offset: number,
+  memo: Map<number, OffsetPoint | null>
+): OffsetPoint | null {
+  if (memo.has(offset)) return memo.get(offset) ?? null;
+  const info = field.getElementInfo(offset);
+  const bounds = info?.bounds;
+  let point: OffsetPoint | null = null;
+  if (bounds) {
+    point =
+      info?.latex && bounds.width >= 0
+        ? { x: bounds.x + bounds.width, y: bounds.y + bounds.height / 2 }
+        : { x: bounds.x, y: bounds.y + bounds.height / 2 };
+  } else if (offset > 0) {
+    point = cursorPointForOffset(field, offset - 1, memo);
+  }
+  memo.set(offset, point);
+  return point;
+}
+
+/**
+ * Hotfix — Cursor e navegação estrutural: escolhe, entre TODOS os offsets
+ * do campo (0..`lastOffset`), o mais próximo do ponto clicado — usando o
+ * ponto-cursor de `cursorPointForOffset` (que já inclui os offsets de
+ * fim-de-grupo sem `bounds` próprio, via herança). Em caso de empate
+ * (mesma distância — sempre acontece entre "dentro do grupo" e "fim do
+ * grupo", já que o segundo herda o ponto do primeiro), o offset MAIOR
+ * vence (`<=`, não `<`) — ou seja, o fim-de-grupo, nunca o interior —
+ * confirmado no navegador real que essa é a interpretação que o usuário
+ * espera ao clicar depois de uma expressão já completa.
+ */
+function computeBestOffset(field: MathfieldElement, x: number, y: number): number | null {
+  const memo = new Map<number, OffsetPoint | null>();
+  let best: number | null = null;
+  let bestDistance = Infinity;
+  for (let offset = 0; offset <= field.lastOffset; offset++) {
+    const point = cursorPointForOffset(field, offset, memo);
+    if (!point) continue;
+    const dx = point.x - x;
+    const dy = point.y - y;
+    const distance = dx * dx + dy * dy;
+    if (distance <= bestDistance) {
+      bestDistance = distance;
+      best = offset;
+    }
+  }
+  return best;
+}
+
 /**
  * Hotfix V3.0.1a — `mathVirtualKeyboardPolicy: "manual"` (abaixo) só evita
  * o teclado virtual do MathLive abrir SOZINHO no foco; o `<math-field>`
@@ -237,6 +311,74 @@ export function StructuredMathInput({
     // ANTES do tratamento interno do MathLive ter a chance de agir.
     field.addEventListener("keydown", handleKeyDown, true);
 
+    // Hotfix — Cursor e navegação estrutural: 2 falhas reais de clique,
+    // nenhuma delas corrigível via CSS/coordenada frágil — só APIs
+    // públicas do MathLive (`getElementInfo`, `position`,
+    // `executeCommand`) e um sinal do DOM real (classe CSS do elemento
+    // clicado, nunca cálculo de pixel pra decidir SE interfere).
+    //
+    // Cenário A — clique dentro do retângulo real do campo, mas em
+    // espaço visualmente vazio de uma estrutura (`cases`/matriz/potência
+    // — ver `cursorPointForOffset`). Distinguido de um clique NORMAL
+    // (sobre um glifo de verdade) por uma investigação real no
+    // navegador: TODO glifo renderizado pelo MathLive ganha uma classe
+    // CSS própria (`ML__mathit`, `ML__cmr`, `ML__vlist`...); um wrapper
+    // puramente estrutural (linha/tabela/ambiente inteiro) nunca ganha
+    // nenhuma (`classList.length === 0`) — confirmado comparando um
+    // clique sobre "x" (`ML__mathit`) contra o clique no espaço vazio
+    // (`classList.length === 0`, mesmo campo, mesma estrutura). Só
+    // recalcula a posição (`computeBestOffset`) quando esse sinal
+    // estrutural aparece — um clique normal nunca aciona isto, o
+    // MathLive continua 100% responsável por ele, exatamente como antes.
+    //
+    // Registrado no PRÓPRIO `field` (nunca no wrapper) — achado real no
+    // navegador: o handler interno de clique do MathLive chama
+    // `stopPropagation()` depois de processar o clique (confirmado
+    // dispatachando um clique real e comparando um listener no `field`
+    // contra um no `container`: o do `field` sempre dispara, o do
+    // `container` nunca recebe nada quando o clique se origina dentro do
+    // conteúdo do campo) — outros listeners registrados no MESMO nó
+    // (`field`) ainda disparam normalmente (`stopPropagation` só
+    // impede chegar no PRÓXIMO nó da árvore, nunca os do mesmo nó), só
+    // não adianta esperar o evento subir até o wrapper.
+    //
+    // `!field.selectionIsCollapsed` sai cedo em ambos os casos — nunca
+    // colapsa uma seleção que o usuário acabou de arrastar OU obtida por
+    // duplo/triplo clique (seleção de palavra/linha nativa do MathLive
+    // sempre deixa `selectionIsCollapsed === false`, cobrindo o mesmo caso
+    // que checar `event.detail` cobriria). `event.detail` NÃO é usado
+    // aqui deliberadamente — achado real no navegador: o clique que
+    // chega neste listener não é o eventoriginal do usuário, é um
+    // evento SINTETIZADO pelo próprio MathLive pra notificar listeners
+    // externos (confirmado: o clique original, despachado fundo no
+    // shadow DOM com `detail:1`, nunca chega aqui — o que chega é outro
+    // `click`, composed, disparado pelo MathLive diretamente no host,
+    // sempre com `detail:0`) — checar `=== 1` bloquearia SEMPRE, nunca
+    // deixando o reparo acontecer.
+    function handleFieldClick(event: MouseEvent) {
+      if (!field.selectionIsCollapsed) return;
+      const hit = field.shadowRoot?.elementFromPoint(event.clientX, event.clientY);
+      if (!hit || hit.classList.length > 0) return;
+      const best = computeBestOffset(field, event.clientX, event.clientY);
+      if (best !== null) field.position = best;
+    }
+    field.addEventListener("click", handleFieldClick);
+
+    // Cenário B — clique no padding do wrapper (fora do retângulo real
+    // do `<math-field>`, mas dentro da caixa com borda visível): o
+    // wrapper nunca teve nenhum listener — confirmado no navegador real
+    // que nada acontecia (nem foco, nem cursor). Um clique aqui nunca
+    // atinge nenhum filho do `field` (nenhum cobre esse ponto), então
+    // `event.target` chega como o PRÓPRIO wrapper — só nesse caso foca e
+    // manda o cursor pro fim do campo via `moveToMathfieldEnd` (comando
+    // NATIVO, nunca coordenada).
+    function handleContainerClick(event: MouseEvent) {
+      if (event.target !== container) return;
+      field.focus();
+      field.executeCommand("moveToMathfieldEnd");
+    }
+    container.addEventListener("click", handleContainerClick);
+
     container.appendChild(field);
     fieldRef.current = field;
     onReadyRef.current?.({
@@ -258,6 +400,8 @@ export function StructuredMathInput({
     return () => {
       field.removeEventListener("input", handleInput);
       field.removeEventListener("keydown", handleKeyDown, true);
+      field.removeEventListener("click", handleFieldClick);
+      container.removeEventListener("click", handleContainerClick);
       container.removeChild(field);
       fieldRef.current = null;
     };
