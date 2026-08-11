@@ -252,6 +252,21 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
           "\\begin{vmatrix}\\placeholder{}&\\placeholder{}&\\placeholder{}\\\\\\placeholder{}&\\placeholder{}&\\placeholder{}\\\\\\placeholder{}&\\placeholder{}&\\placeholder{}\\end{vmatrix}",
       },
       {
+        // Hotfix V3.0.2c (PROBLEMA CRÍTICO 4) — tecla GENÉRICA de
+        // determinante, além dos templates 2×2/3×3 de barras acima: usa
+        // `\det` (comando LaTeX nativo, a MESMA notação que `\begin{vmatrix}`
+        // já converte pra `det(...)`, nunca uma segunda função) com um
+        // único placeholder — funciona pra QUALQUER argumento estrutural
+        // que o MathLive consiga representar ali dentro (matriz 2×2, 3×3,
+        // ou uma variável nomeada), sem ficar preso a um tamanho fixo.
+        label: "det(□)",
+        insert: "det()",
+        cursorOffset: "det(".length,
+        ariaLabel: "Inserir determinante genérico",
+        latex: "\\det(\\square)",
+        mathLiveInsert: "\\det\\left(\\placeholder{}\\right)",
+      },
+      {
         label: "A⁻¹",
         insert: "inv()",
         cursorOffset: 4,

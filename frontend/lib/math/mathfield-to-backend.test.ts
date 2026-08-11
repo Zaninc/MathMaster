@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { mathFieldLatexToBackendExpression, repairMathLiveEnvironmentEscape } from "./mathfield-to-backend";
+import {
+  mathFieldLatexToBackendExpression,
+  repairMathLiveEnvironmentEscape,
+  repairMathLiveInput,
+  repairNestedFenceCorruption,
+  repairNestedStructuralTemplate,
+} from "./mathfield-to-backend";
 import { previewLatex } from "./to-latex";
 
 function expr(latex: string): string {
@@ -623,6 +629,186 @@ describe("mathFieldLatexToBackendExpression", () => {
       expect(mathFieldLatexToBackendExpression("\\begin{cases}x^2-4=0\\\\ \\placeholder{}\\end{cases}")).toEqual({
         ok: false,
         reason: "incomplete",
+      });
+    });
+  });
+
+  // --- Hotfix V3.0.2c — Matrix Expression Hardening ------------------------
+  //
+  // PROBLEMA CRÍTICO 1 (matriz aninhada) e PROBLEMA CRÍTICO 2/3 (corrupção
+  // de cerca `\left/\right` em inv/transpose+matriz). Todos os LaTeX
+  // abaixo são exatamente os capturados via `math-field.value` real no
+  // navegador (produção), reproduzindo cada cenário clicando as teclas de
+  // verdade — nunca LaTeX idealizado escrito à mão.
+  describe("Hotfix V3.0.2c — Matrix Expression Hardening", () => {
+    describe("repairNestedStructuralTemplate (PROBLEMA CRÍTICO 1 — matriz aninhada)", () => {
+      it("matriz clicada duas vezes sem sair da célula -> vira estrutura IRMÃ, nunca aninhada", () => {
+        const nested =
+          "\\begin{bmatrix}1 & 2\\\\ 3 & 4\\begin{bmatrix}\\placeholder{} & \\placeholder{}\\\\ \\placeholder{} & \\placeholder{}\\end{bmatrix}\\end{bmatrix}";
+        expect(repairNestedStructuralTemplate(nested)).toBe(
+          "\\begin{bmatrix}1 & 2\\\\ 3 & 4\\end{bmatrix}\\begin{bmatrix}\\placeholder{} & \\placeholder{}\\\\ \\placeholder{} & \\placeholder{}\\end{bmatrix}"
+        );
+      });
+
+      it("sistema clicado duas vezes sem sair da célula -> mesmo tratamento (qualquer ambiente aninhado em qualquer outro)", () => {
+        const nested = "\\begin{cases}x\\begin{cases}\\placeholder{}\\\\\\placeholder{}\\end{cases}\\end{cases}";
+        expect(repairNestedStructuralTemplate(nested)).toBe(
+          "\\begin{cases}x\\end{cases}\\begin{cases}\\placeholder{}\\\\\\placeholder{}\\end{cases}"
+        );
+      });
+
+      it("negativo: matriz + matriz já como irmãs (cursor movido corretamente) permanece intocada", () => {
+        const siblings = "\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}";
+        expect(repairNestedStructuralTemplate(siblings)).toBe(siblings);
+      });
+
+      it("negativo: nenhum ambiente estruturado presente -> intocado", () => {
+        const plain = "x^2-4=0";
+        expect(repairNestedStructuralTemplate(plain)).toBe(plain);
+      });
+    });
+
+    describe("repairNestedFenceCorruption (PROBLEMA CRÍTICO 2/3 — \\left/\\right corrompido)", () => {
+      it("template recém-inserido (A⁻¹ + Matriz, ANTES de digitar) -- \\right) já deslocado, sem \\right.", () => {
+        const fresh =
+          "\\operatorname{\\mathrm{inv}}\\left(\\begin{bmatrix}\\right)\\placeholder{} & \\placeholder{}\\\\ \\placeholder{} & \\placeholder{}\\end{bmatrix}";
+        expect(repairNestedFenceCorruption(fresh)).toBe(
+          "\\operatorname{\\mathrm{inv}}\\left(\\begin{bmatrix}\\placeholder{} & \\placeholder{}\\\\ \\placeholder{} & \\placeholder{}\\end{bmatrix}\\right)"
+        );
+      });
+
+      it("depois de digitar '1' no primeiro placeholder -- \\right) e \\right. deslocados", () => {
+        const typed =
+          "\\operatorname{\\mathrm{inv}}\\left(\\begin{bmatrix}\\right)1\\right. & \\placeholder{}\\\\ \\placeholder{} & \\placeholder{}\\end{bmatrix}";
+        expect(repairNestedFenceCorruption(typed)).toBe(
+          "\\operatorname{\\mathrm{inv}}\\left(\\begin{bmatrix}1 & \\placeholder{}\\\\ \\placeholder{} & \\placeholder{}\\end{bmatrix}\\right)"
+        );
+      });
+
+      it("mesma assinatura com Aᵀ (transpose) e outro conteúdo digitado ('x')", () => {
+        const typed =
+          "\\operatorname{\\mathrm{transpose}}\\left(\\begin{bmatrix}\\right)x\\right. & \\placeholder{}\\\\ \\placeholder{} & \\placeholder{}\\end{bmatrix}";
+        expect(repairNestedFenceCorruption(typed)).toBe(
+          "\\operatorname{\\mathrm{transpose}}\\left(\\begin{bmatrix}x & \\placeholder{}\\\\ \\placeholder{} & \\placeholder{}\\end{bmatrix}\\right)"
+        );
+      });
+
+      it("negativo: nunca ativa sem um \\left( antes -- \\right) sozinho, fora de contexto, fica intocado", () => {
+        const noFence = "\\begin{bmatrix}\\right)1&2\\\\3&4\\end{bmatrix}";
+        expect(repairNestedFenceCorruption(noFence)).toBe(noFence);
+      });
+
+      it("negativo: LaTeX bem-formado (sem nenhum \\right) deslocado) nunca é alterado", () => {
+        const wellFormed = "\\operatorname{inv}\\left(\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}\\right)";
+        expect(repairNestedFenceCorruption(wellFormed)).toBe(wellFormed);
+      });
+    });
+
+    describe("canonicalização de \\operatorname{inv|transpose|det} (grafias reais do MathLive)", () => {
+      it.each([
+        ["\\operatorname{inv}", "inv"],
+        ["\\operatorname{\\mathrm{inv}}", "inv"],
+        ["\\mathrm{inv}", "inv"],
+        ["\\operatorname{transpose}", "transpose"],
+        ["\\operatorname{\\mathrm{transpose}}", "transpose"],
+        ["\\mathrm{transpose}", "transpose"],
+        ["\\operatorname{det}", "det"],
+        ["\\operatorname{\\mathrm{det}}", "det"],
+        ["\\mathrm{det}", "det"],
+      ] as const)("%s(matriz) -> %s(...)", (command, name) => {
+        expect(expr(`${command}\\left(\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}\\right)`)).toBe(
+          `${name}([[1,2],[3,4]])`
+        );
+      });
+
+      it("\\det continua funcionando como comando nativo separado (não precisa de \\operatorname)", () => {
+        expect(expr("\\det\\left(\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}\\right)")).toBe("det([[1,2],[3,4]])");
+      });
+    });
+
+    describe("integração completa: PROBLEMA CRÍTICO 1 (matriz adjacente a matriz)", () => {
+      it("adjacência estruturada (cursor movido corretamente pra fora) -> multiplicação implícita", () => {
+        const adjacent = "\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}";
+        expect(expr(adjacent)).toBe("[[1,2],[3,4]]*[[5,6],[7,8]]");
+      });
+
+      it("matriz clicada duas vezes SEM sair da célula (aninhada) -> mesmo resultado, depois do reparo", () => {
+        const nested =
+          "\\begin{bmatrix}1 & 2\\\\ 3 & 4\\begin{bmatrix}5 & 6\\\\ 7 & 8\\end{bmatrix}\\end{bmatrix}";
+        expect(expr(nested)).toBe("[[1,2],[3,4]]*[[5,6],[7,8]]");
+      });
+
+      it("matriz aninhada AINDA incompleta -> incomplete, nunca crasha, nunca envia request malformada", () => {
+        const nestedIncomplete =
+          "\\begin{bmatrix}1 & 2\\\\ 3 & 4\\begin{bmatrix}\\placeholder{} & 6\\\\ 7 & 8\\end{bmatrix}\\end{bmatrix}";
+        expect(mathFieldLatexToBackendExpression(nestedIncomplete)).toEqual({ ok: false, reason: "incomplete" });
+      });
+    });
+
+    describe("integração completa: PROBLEMA CRÍTICO 2/3 (inv/transpose + matriz, ponta a ponta)", () => {
+      it("A⁻¹ + Matriz 2×2, LaTeX real capturado ANTES de digitar (bem-formado) -> incomplete", () => {
+        const fresh =
+          "\\operatorname{\\mathrm{inv}}\\left(\\begin{bmatrix}\\placeholder{} & \\placeholder{}\\\\ \\placeholder{} & \\placeholder{}\\end{bmatrix}\\right)";
+        expect(mathFieldLatexToBackendExpression(fresh)).toEqual({ ok: false, reason: "incomplete" });
+      });
+
+      it("A⁻¹ + Matriz 2×2, célula 1,1 digitada com corrupção de cerca -> ainda incomplete (resto vazio), nunca crasha", () => {
+        const partiallyTyped =
+          "\\operatorname{\\mathrm{inv}}\\left(\\begin{bmatrix}\\right)1\\right. & \\placeholder{}\\\\ \\placeholder{} & \\placeholder{}\\end{bmatrix}";
+        expect(mathFieldLatexToBackendExpression(partiallyTyped)).toEqual({ ok: false, reason: "incomplete" });
+      });
+
+      it("A⁻¹ + Matriz 2×2 totalmente preenchida (com a corrupção de cerca na célula 1,1) -> resolve corretamente", () => {
+        const fullyTyped =
+          "\\operatorname{\\mathrm{inv}}\\left(\\begin{bmatrix}\\right)1\\right. & 2\\\\ 3 & 4\\end{bmatrix}";
+        expect(expr(fullyTyped)).toBe("inv([[1,2],[3,4]])");
+      });
+
+      it("Aᵀ + Matriz 2×2 totalmente preenchida -> resolve corretamente", () => {
+        const fullyTyped =
+          "\\operatorname{\\mathrm{transpose}}\\left(\\begin{bmatrix}\\right)1\\right. & 2\\\\ 3 & 4\\end{bmatrix}";
+        expect(expr(fullyTyped)).toBe("transpose([[1,2],[3,4]])");
+      });
+    });
+
+    describe("negativos obrigatórios — nunca canonicalizar incorretamente", () => {
+      it("A + B nunca vira A*B", () => {
+        expect(expr("\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}+\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}")).toBe(
+          "[[1,2],[3,4]]+[[5,6],[7,8]]"
+        );
+      });
+
+      it("det(A)+2 nunca vira det(A*2) -- soma acontece FORA da função, nunca dentro", () => {
+        expect(expr("\\det\\left(\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}\\right)+2")).toBe("det([[1,2],[3,4]])+2");
+      });
+
+      it("matriz totalmente preenchida + operador legítimo nunca é tocada pelo pipeline de reparo", () => {
+        const legit = "\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}^2";
+        expect(repairMathLiveInput(legit)).toBe(legit);
+      });
+
+      it("duas matrizes SEPARADAS por operador legítimo nunca são fundidas em uma só chamada", () => {
+        const legit = "\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}*\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}";
+        expect(repairMathLiveInput(legit)).toBe(legit);
+      });
+
+      it("escalar + matriz (operação real, não confundida com adjacência) continua explícita", () => {
+        expect(expr("2\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}")).toBe("2*[[1,2],[3,4]]");
+      });
+
+      it("comando LaTeX desconhecido continua unsupported, nunca lança", () => {
+        expect(() => mathFieldLatexToBackendExpression("\\unknowncommand{x}")).not.toThrow();
+        expect(mathFieldLatexToBackendExpression("\\unknowncommand{x}").ok).toBe(false);
+      });
+    });
+
+    describe("célula de matriz com estruturas — potência, fração, raiz (regressão V3.0.2, reconfirmada)", () => {
+      it("célula com potência/fração/raiz/π dentro de A⁻¹ (composição completa)", () => {
+        expect(
+          expr(
+            "\\operatorname{inv}\\left(\\begin{bmatrix}x^2&\\frac{1}{2}\\\\\\sqrt{2}&\\pi\\end{bmatrix}\\right)"
+          )
+        ).toBe("inv([[x²,1/2],[√(2),π]])");
       });
     });
   });

@@ -35,9 +35,16 @@ vi.mock("mathlive", () => {
       this._value = v;
     }
 
+    // Hotfix V3.0.2c — achado do navegador real: `field.insert()` (chamado
+    // por TODO clique de tecla do `MathKeyboard`, via `api.insert()`) NÃO
+    // dispara um evento `input` visível a `addEventListener("input", ...)`
+    // — só digitação física dispara. Este mock reflete esse contrato real
+    // (nunca despachando `input` sozinho) para que os testes provem que o
+    // reparo em `api.insert()` (`StructuredMathInput.tsx`) é acionado pela
+    // chamada EXPLÍCITA do componente, não por um evento que na vida real
+    // nunca chegaria.
     insert(latex: string) {
       this._value += latex;
-      this.dispatchEvent(new Event("input"));
       return true;
     }
 
@@ -320,5 +327,39 @@ describe("StructuredMathInput", () => {
 
     expect(field.lastSetValueCall).toBeNull();
     expect(onChange).toHaveBeenLastCalledWith("x^2-4=0");
+  });
+
+  // --- Hotfix V3.0.2c — reparo acionado explicitamente em api.insert() ----
+
+  it("api.insert() aciona o reparo mesmo sem o campo despachar 'input' sozinho (MathLive real não dispara input em insert() — só digitação física dispara)", async () => {
+    const onReady = vi.fn();
+    const onChange = vi.fn();
+    const { container } = render(
+      <StructuredMathInput id="campo" value="" onChange={onChange} onReady={onReady} />
+    );
+    await waitFor(() => expect(onReady).toHaveBeenCalledTimes(1));
+    const api = onReady.mock.calls[0][0] as StructuredMathInputApi;
+    const field = getField(container) as MockFieldWithSetValue;
+
+    api.insert("\\begin{cases}x^2\\\\ \\placeholder{}\\end{cases}-4=0");
+
+    expect(field.lastSetValueCall?.value).toBe("\\begin{cases}x^2-4=0\\\\ \\placeholder{}\\end{cases}");
+    expect(onChange).toHaveBeenLastCalledWith("\\begin{cases}x^2-4=0\\\\ \\placeholder{}\\end{cases}");
+  });
+
+  it("api.insert() com LaTeX já bem-formado nunca chama setValue — só o insert() normal do campo", async () => {
+    const onReady = vi.fn();
+    const onChange = vi.fn();
+    const { container } = render(
+      <StructuredMathInput id="campo" value="" onChange={onChange} onReady={onReady} />
+    );
+    await waitFor(() => expect(onReady).toHaveBeenCalledTimes(1));
+    const api = onReady.mock.calls[0][0] as StructuredMathInputApi;
+    const field = getField(container) as MockFieldWithSetValue;
+
+    api.insert("\\sqrt{\\placeholder{}}");
+
+    expect(field.lastSetValueCall).toBeNull();
+    expect(onChange).toHaveBeenLastCalledWith("\\sqrt{\\placeholder{}}");
   });
 });

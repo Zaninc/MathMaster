@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 import "mathlive";
 import type { MathfieldElement } from "mathlive";
 
-import { repairMathLiveEnvironmentEscape } from "@/lib/math/mathfield-to-backend";
+import { repairMathLiveInput } from "@/lib/math/mathfield-to-backend";
 
 export interface StructuredMathInputApi {
   /** Insere LaTeX na posição do cursor via a API real do MathLive (nunca concatenação de string). */
@@ -127,13 +127,14 @@ export function StructuredMathInput({
     // cursor "pular" pra fora do `\begin{cases|bmatrix|pmatrix|matrix|
     // vmatrix}` INTEIRO em vez de só sair do nível mais interno (bug real
     // do MathLive, sem hook público pra impedir — ver docstring de
-    // `mathfield-to-backend.ts`). Corrigido aqui, a cada `input`, ANTES
-    // que o usuário tenha chance de continuar editando em cima do estado
-    // quebrado (ex. clicar manualmente de volta no próximo placeholder,
-    // que ficaria ambíguo depois de preenchido — o reparo só sabe que um
-    // conteúdo órfão pertence a aquele placeholder enquanto ele AINDA
-    // está vazio): `repairMathLiveEnvironmentEscape` devolve o conteúdo
-    // órfão pro lugar certo.
+    // `mathfield-to-backend.ts`).
+    //
+    // Hotfix V3.0.2c — mais 2 padrões reais de corrupção do MathLive:
+    // inserir uma estrutura com o cursor preso numa célula já preenchida
+    // (aninha em vez de virar irmã) e digitar dentro de uma estrutura
+    // recém-inserida num placeholder de `\left(...\right)` (corrompe a
+    // cerca externa). `repairMathLiveInput` compõe os 3 reparos numa
+    // ordem fixa — ver a docstring dela em `mathfield-to-backend.ts`.
     //
     // `field.setValue(repaired)` sozinho — nunca `field.value = repaired`
     // (o setter puro da propriedade, testado: deixa o `moveToNextPlaceholder`
@@ -147,15 +148,26 @@ export function StructuredMathInput({
     // extra é a única forma testada que deixa a digitação seguinte (com ou
     // sem Tab físico no meio) pousar exatamente na próxima célula/linha
     // vazia, em ordem, sem pular nenhuma.
-    function handleInput() {
+    // Extraída da SUBSCRIÇÃO de `input` (abaixo) porque `field.insert()`
+    // — chamado por `api.insert()`, ou seja, TODO clique de tecla do
+    // `MathKeyboard` — não dispara um evento `input` que este listener
+    // veja (achado do navegador real: digitação física dispara `input`
+    // normalmente, mas a chamada programática de `insert()` não — mesmo
+    // com `{bubbles:true}` manual, confirmado que só um `dispatchEvent`
+    // MANUAL depois recupera o reparo). Sem chamar isto também depois de
+    // `field.insert()`, o Hotfix V3.0.2c (aninhamento de estrutura,
+    // corrupção de cerca) só se autocorrigiria pra digitação física,
+    // nunca pra cliques de tecla — exatamente o caminho mais comum pra
+    // reproduzir os dois bugs (clicar Matriz/A⁻¹ duas vezes seguidas).
+    function repairFieldIfNeeded(): string {
       const current = field.value;
-      const repaired = repairMathLiveEnvironmentEscape(current);
-      if (repaired !== current) {
-        field.setValue(repaired);
-        onChangeRef.current(field.value);
-        return;
-      }
-      onChangeRef.current(current);
+      const repaired = repairMathLiveInput(current);
+      if (repaired !== current) field.setValue(repaired);
+      return field.value;
+    }
+
+    function handleInput() {
+      onChangeRef.current(repairFieldIfNeeded());
     }
     field.addEventListener("input", handleInput);
 
@@ -230,6 +242,13 @@ export function StructuredMathInput({
     onReadyRef.current?.({
       insert(latex: string) {
         field.insert(latex, { focus: true, selectionMode: "placeholder" });
+        // `field.insert()` não passa pelo listener de `input` (ver
+        // `repairFieldIfNeeded` acima) — chamado explicitamente aqui pra
+        // cliques de tecla ficarem auto-corrigidos exatamente como
+        // digitação física. `onChangeRef` também precisa ser avisado
+        // manualmente pelo mesmo motivo (nunca dispara via `handleInput`
+        // neste caminho).
+        onChangeRef.current(repairFieldIfNeeded());
       },
       focus() {
         field.focus();

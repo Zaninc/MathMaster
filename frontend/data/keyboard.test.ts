@@ -479,7 +479,7 @@ describe("KEYBOARD_CATEGORIES", () => {
 
   // --- Sprint V3.0.2 (Structured Algebra Input) ----------------------------
 
-  it("dentro de Álgebra, só as 10 teclas migradas (x, y, sistemas 2x2/3x3, matrizes 2x2/3x3, determinantes 2x2/3x3, inv, transpose) têm mathLiveInsert — polinômios e ≤/≥/≠ continuam fora de escopo", () => {
+  it("dentro de Álgebra, só as 11 teclas migradas (x, y, sistemas 2x2/3x3, matrizes 2x2/3x3, determinantes 2x2/3x3, det genérico, inv, transpose) têm mathLiveInsert — polinômios e ≤/≥/≠ continuam fora de escopo", () => {
     const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
     const migrated = new Set([
       "x",
@@ -490,6 +490,7 @@ describe("KEYBOARD_CATEGORIES", () => {
       "Matriz 3×3",
       "Determinante 2×2",
       "Determinante 3×3",
+      "det(□)",
       "A⁻¹",
       "Aᵀ",
     ]);
@@ -527,6 +528,24 @@ describe("KEYBOARD_CATEGORIES", () => {
     for (const label of ["Sistema 2×2", "Sistema 3×3", "Matriz 2×2", "Matriz 3×3", "Determinante 2×2", "Determinante 3×3"]) {
       expect(byLabel.get(label)?.mathLiveInsert, label).not.toContain("[[");
     }
+  });
+
+  // --- Hotfix V3.0.2c (Matrix Expression Hardening) ------------------------
+
+  it("tecla genérica det(□) usa \\det nativo com um único placeholder — aceita qualquer estrutura no argumento, não fica presa a 2x2/3x3", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    const key = algebra?.keys.find((candidate) => candidate.label === "det(□)");
+    expect(key).toBeDefined();
+    expect(key!.mathLiveInsert).toBe("\\det\\left(\\placeholder{}\\right)");
+    expect(key!.ariaLabel).toBeDefined();
+  });
+
+  it("det(□) coexiste com os templates fixos Determinante 2×2/3×3 (mantidos, não substituídos)", () => {
+    const algebra = KEYBOARD_CATEGORIES.find((category) => category.id === "algebra");
+    const labels = (algebra?.keys ?? []).map((key) => key.label);
+    expect(labels).toContain("det(□)");
+    expect(labels).toContain("Determinante 2×2");
+    expect(labels).toContain("Determinante 3×3");
   });
 
   // --- Sprint V3.0.1 (Structured Calculus Input) --------------------------

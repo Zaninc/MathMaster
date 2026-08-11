@@ -105,6 +105,159 @@ const STRUCTURED_ENVIRONMENTS = ["cases", "bmatrix", "pmatrix", "matrix", "vmatr
  */
 const TRAILING_EMPTY_PLACEHOLDERS = /(?:\s*(?:&|\\\\)?\s*\\placeholder\{\})+$/;
 
+const ENV_TOKEN_PATTERN = /\\(begin|end)\{(cases|bmatrix|pmatrix|matrix|vmatrix)\}/g;
+
+/**
+ * Hotfix V3.0.2c — acha o `\end{...}` que FECHA de verdade o `\begin{...}`
+ * que acabou de ser consumido em `afterBeginIdx`, contando profundidade
+ * sobre QUALQUER par `\begin{...}/\end{...}` dos 5 ambientes suportados
+ * (nunca ingênuo `indexOf` do primeiro `\end{...}` — esse acharia o
+ * fechamento de um ambiente ANINHADO por engano, nunca o externo). LaTeX
+ * sempre aninha propriamente, mesmo quando o MathLive produz esse
+ * aninhamento por acidente (ver `repairNestedStructuralTemplate`) — por
+ * isso profundidade sobre QUALQUER nome de ambiente (não só o mesmo nome
+ * do `\begin` de origem) é suficiente e correto.
+ */
+function findMatchingEnvironmentEnd(text: string, afterBeginIdx: number): { index: number; token: string } | null {
+  ENV_TOKEN_PATTERN.lastIndex = afterBeginIdx;
+  let depth = 0;
+  let match: RegExpExecArray | null;
+  while ((match = ENV_TOKEN_PATTERN.exec(text)) !== null) {
+    if (match[1] === "begin") {
+      depth++;
+    } else if (depth === 0) {
+      return { index: match.index, token: match[0] };
+    } else {
+      depth--;
+    }
+  }
+  return null;
+}
+
+/**
+ * Hotfix V3.0.2c — PROBLEMA CRÍTICO 1: clicar numa tecla estrutural
+ * (Matriz/Sistema/Determinante) com o cursor ainda "preso" dentro de uma
+ * célula já preenchida de uma estrutura anterior (nunca navegado pra fora
+ * antes de inserir de novo) faz o MathLive inserir o NOVO
+ * `\begin{...}...\end{...}` ANINHADO dentro dessa célula, em vez de como
+ * uma estrutura irmã — confirmado no navegador real clicando "Matriz 2×2"
+ * duas vezes seguidas sem sair da matriz: a segunda vira conteúdo da
+ * célula 2,2 da primeira, nunca suportado como célula real (ver
+ * `buildMatrixLiteral`) e sempre `unsupported`.
+ *
+ * Correção puramente textual: acha um `\begin{...}` genuinamente ANINHADO
+ * (usando `findMatchingEnvironmentEnd`, nunca confundido com o fechamento
+ * do ambiente externo) dentro do corpo de outro, extrai o bloco aninhado
+ * inteiro e devolve ele como IRMÃO, logo depois do `\end{...}` externo —
+ * exatamente a estrutura que o MathLive produz quando o cursor É movido
+ * pra fora antes de inserir (confirmado via `moveToMathfieldEnd` real:
+ * produz literalmente a mesma forma "lado a lado" que este reparo gera).
+ * Nunca precisa de operador entre as duas — a adjacência de ambientes já
+ * é interpretada como multiplicação implícita por `parseTerm()`.
+ */
+export function repairNestedStructuralTemplate(latex: string): string {
+  let result = latex;
+  for (const env of STRUCTURED_ENVIRONMENTS) {
+    const beginToken = `\\begin{${env}}`;
+    let searchFrom = 0;
+    for (;;) {
+      const beginIdx = result.indexOf(beginToken, searchFrom);
+      if (beginIdx === -1) break;
+      const bodyStart = beginIdx + beginToken.length;
+      const outerEnd = findMatchingEnvironmentEnd(result, bodyStart);
+      if (outerEnd === null) {
+        searchFrom = bodyStart;
+        continue;
+      }
+      const body = result.slice(bodyStart, outerEnd.index);
+
+      const nestedBeginMatch = /\\begin\{(cases|bmatrix|pmatrix|matrix|vmatrix)\}/.exec(body);
+      if (!nestedBeginMatch) {
+        searchFrom = outerEnd.index + outerEnd.token.length;
+        continue;
+      }
+      const nestedBeginIdxAbs = bodyStart + nestedBeginMatch.index;
+      const nestedBodyStartAbs = nestedBeginIdxAbs + nestedBeginMatch[0].length;
+      const nestedEnd = findMatchingEnvironmentEnd(result, nestedBodyStartAbs);
+      if (nestedEnd === null) {
+        searchFrom = outerEnd.index + outerEnd.token.length;
+        continue;
+      }
+      const nestedBlockEndAbs = nestedEnd.index + nestedEnd.token.length;
+      const nestedBlock = result.slice(nestedBeginIdxAbs, nestedBlockEndAbs);
+
+      result =
+        result.slice(0, nestedBeginIdxAbs) +
+        result.slice(nestedBlockEndAbs, outerEnd.index) +
+        outerEnd.token +
+        nestedBlock +
+        result.slice(outerEnd.index + outerEnd.token.length);
+      // Reprocessa o MESMO `\begin{env}` (posição inalterada) — o corpo
+      // dele encolheu (o bloco aninhado saiu), então uma segunda checagem
+      // aqui sempre converge (nunca mais acha aninhamento na mesma
+      // ocorrência depois de removê-lo uma vez).
+      searchFrom = beginIdx;
+    }
+  }
+  return result;
+}
+
+/**
+ * Hotfix V3.0.2c — PROBLEMA CRÍTICO 2/3: inserir (ou digitar dentro de)
+ * uma matriz/sistema recém-inserido DENTRO do placeholder de um
+ * `\left(...\right)` (ex. tecla A⁻¹/Aᵀ seguida de Matriz 2×2) corrompe a
+ * cerca externa — confirmado no navegador real, duas variantes da MESMA
+ * assinatura: logo após o clique (antes de qualquer digitação) o
+ * `\right)` que deveria fechar o `\left(` MAIS EXTERNO já aparece
+ * deslocado pra logo depois de `\begin{...}`; depois de digitar o
+ * primeiro caractere, um `\right.` (delimitador invisível) TAMBÉM aparece
+ * logo depois do caractere digitado. Em ambos os casos o `\right)` que
+ * deveria aparecer no fim (depois do `\end{...}`) simplesmente some.
+ *
+ * Correção em 2 passos: (1) remove o `\right)` deslocado logo após
+ * `\begin{ENV}` (sempre presente, com ou sem digitação); (2) se um
+ * `\right.` aparecer OPCIONALMENTE logo depois dele — antes do próximo
+ * separador de célula/linha (`&`/`\\`) ou do fechamento do ambiente —
+ * remove também, preservando qualquer conteúdo real digitado entre os
+ * dois. Por fim reinsere o `\right)` que sumiu logo depois do `\end{ENV}`
+ * verdadeiro (achado via `findMatchingEnvironmentEnd`) — SOMENTE quando a
+ * assinatura é encontrada E existe mesmo um `\left(` antes dela (nunca em
+ * LaTeX que não tem essa cerca aberta, nunca duplica um `\right)` que já
+ * esteja lá).
+ */
+export function repairNestedFenceCorruption(latex: string): string {
+  let result = latex;
+  const misplacedParen = /\\begin\{(cases|bmatrix|pmatrix|matrix|vmatrix)\}\\right\)/;
+  for (;;) {
+    const match = misplacedParen.exec(result);
+    if (!match) return result;
+    const env = match[1];
+    const hasEnclosingFence = result.lastIndexOf("\\left(", match.index) !== -1;
+    if (!hasEnclosingFence) return result;
+
+    const beginToken = `\\begin{${env}}`;
+    let withoutCorruption = result.slice(0, match.index) + beginToken + result.slice(match.index + match[0].length);
+
+    const bodyStart = match.index + beginToken.length;
+    const cellBoundary = /&|\\\\|\\end\{/.exec(withoutCorruption.slice(bodyStart));
+    const cellEnd = cellBoundary ? bodyStart + cellBoundary.index : withoutCorruption.length;
+    const rightDotIdx = withoutCorruption.indexOf("\\right.", bodyStart);
+    if (rightDotIdx !== -1 && rightDotIdx < cellEnd) {
+      withoutCorruption =
+        withoutCorruption.slice(0, rightDotIdx) + withoutCorruption.slice(rightDotIdx + "\\right.".length);
+    }
+
+    const outerEnd = findMatchingEnvironmentEnd(withoutCorruption, bodyStart);
+    if (outerEnd === null) return withoutCorruption;
+    const afterEnd = outerEnd.index + outerEnd.token.length;
+    if (withoutCorruption.startsWith("\\right)", afterEnd)) {
+      result = withoutCorruption;
+      continue;
+    }
+    result = withoutCorruption.slice(0, afterEnd) + "\\right)" + withoutCorruption.slice(afterEnd);
+  }
+}
+
 /**
  * Hotfix V3.0.2a — desfaz o "pulo pra fora do ambiente inteiro" que a
  * barra de espaço do MathLive causa dentro de `\begin{cases|bmatrix|
@@ -140,6 +293,21 @@ export function repairMathLiveEnvironmentEscape(latex: string): string {
         continue;
       }
 
+      // Hotfix V3.0.2c — se o órfão é EXATAMENTE `\right)` (nunca
+      // conteúdo digitado por um usuário — nenhuma tecla/caractere físico
+      // produz essa sequência sozinha) e existe um `\left(` mais externo
+      // antes deste ambiente, é o fecho legítimo dessa cerca (já
+      // corrigido por `repairNestedFenceCorruption`, que roda ANTES desta
+      // função no pipeline) — nunca conteúdo órfão pra reanexar. Sem essa
+      // guarda, um `\right)` corretamente restaurado (ex. depois de A⁻¹ +
+      // Matriz com uma célula já preenchida) seria confundido com texto
+      // escapado e injetado de volta DENTRO da matriz, desfazendo a
+      // correção anterior.
+      if (stray === "\\right)" && result.lastIndexOf("\\left(", beginIdx) !== -1) {
+        searchFrom = afterEnd;
+        continue;
+      }
+
       // `cases` (sistema) NUNCA tem conteúdo legítimo depois de
       // `\end{cases}` — é sempre a expressão INTEIRA nesta sprint, nunca
       // combinado com mais nada (diferente de matriz, que suporta `A^2`/
@@ -153,8 +321,19 @@ export function repairMathLiveEnvironmentEscape(latex: string): string {
       // sendo editada; a ÚLTIMA célula de uma matriz digitada com espaço
       // interno — ex. "x + 1" quando já é a única que falta — é uma
       // limitação residual conhecida, documentada no relatório do hotfix).
-      const trailingMatch = body.match(TRAILING_EMPTY_PLACEHOLDERS);
-      if (env !== "cases" && !trailingMatch) {
+      // Hotfix V3.0.2c — se o "trecho final de placeholders vazios" cobre
+      // o corpo INTEIRO (`index === 0`, ex. um template recém-inserido,
+      // ainda 100% vazio — nenhuma célula/linha tem conteúdo real algum),
+      // não existe "última linha/célula REAL" nenhuma pra anexar o
+      // conteúdo órfão — tratado como se não tivesse match (nunca insere
+      // no início do corpo, na frente do primeiro placeholder). Achado
+      // real: sem essa guarda, um `\right)` legítimo (fechando um
+      // `\left(` mais externo, ex. A⁻¹/Aᵀ) logo depois de `\end{...}` era
+      // confundido com conteúdo órfão e injetado DENTRO do template vazio
+      // — corrompendo uma estrutura que nem tinha sido tocada ainda.
+      const trailingMatchRaw = body.match(TRAILING_EMPTY_PLACEHOLDERS);
+      const trailingMatch = trailingMatchRaw && trailingMatchRaw.index !== 0 ? trailingMatchRaw : null;
+      if (!trailingMatch && (env !== "cases" || trailingMatchRaw?.index === 0)) {
         searchFrom = afterEnd;
         continue;
       }
@@ -216,6 +395,25 @@ class LatexParser {
 
   private expect(str: string): void {
     if (!this.consume(str)) throw new Unsupported(`esperava "${str}"`);
+  }
+
+  /**
+   * Hotfix V3.0.2c — o MathLive não emite sempre a MESMA grafia LaTeX pra
+   * um nome de função de matriz inserido via `\operatorname{nome}`: depois
+   * de inserir uma estrutura (ex. Matriz) dentro do placeholder, o campo
+   * às vezes reescreve pra `\operatorname{\mathrm{nome}}` (confirmado no
+   * navegador real, A⁻¹ seguido de Matriz 2×2) — semanticamente idêntico
+   * (`\mathrm` só marca o texto como "roman", sem significado matemático
+   * novo), nunca uma função diferente. Tenta as 3 grafias equivalentes
+   * (nunca uma lista de exceções hardcoded pra um nome só — qualquer nome
+   * futuro ganha as 3 formas de graça) antes de desistir.
+   */
+  private consumeFunctionName(name: string): boolean {
+    return (
+      this.consume(`\\operatorname{${name}}`) ||
+      this.consume(`\\operatorname{\\mathrm{${name}}}`) ||
+      this.consume(`\\mathrm{${name}}`)
+    );
   }
 
   /** Lê o conteúdo de um grupo `{...}` já sabendo que o `{` está no cursor. */
@@ -598,19 +796,23 @@ class LatexParser {
       return `det(${this.buildMatrixLiteral(this.readRawRows("vmatrix"))})`;
     }
 
-    for (const [command, name] of [
-      // "\det(...)" — a notação que o PRÓPRIO `to-latex.ts` (`previewLatex`,
-      // via o serializer nativo do mathjs) já produz para `det(...)`
-      // digitado/histórico; reconhecida aqui para os exemplos rápidos
-      // "carregarem visualmente" (`\det\left(\begin{bmatrix}...\end{bmatrix}
-      // \right)`) e continuarem resolvíveis sem edição manual — mesma
-      // função do backend que `\begin{vmatrix}...\end{vmatrix}` já cobre
-      // (a representação de barras pedida pelo ticket), nunca uma segunda.
-      ["\\det", "det"],
-      ["\\operatorname{inv}", "inv"],
-      ["\\operatorname{transpose}", "transpose"],
-    ] as const) {
-      if (this.consume(command)) {
+    // "\det(...)" — a notação que o PRÓPRIO `to-latex.ts` (`previewLatex`,
+    // via o serializer nativo do mathjs) já produz para `det(...)`
+    // digitado/histórico; reconhecida aqui para os exemplos rápidos
+    // "carregarem visualmente" (`\det\left(\begin{bmatrix}...\end{bmatrix}
+    // \right)`) e continuarem resolvíveis sem edição manual — mesma
+    // função do backend que `\begin{vmatrix}...\end{vmatrix}` já cobre
+    // (a representação de barras pedida pelo ticket), nunca uma segunda.
+    // Sempre checado ANTES de `consumeFunctionName("det")` (Hotfix
+    // V3.0.2c — tecla genérica "det(□)"): `\det` é um comando LaTeX nativo
+    // de UM token só, não uma grafia alternativa de `\operatorname{det}`.
+    if (this.consume("\\det")) {
+      const arg = this.parseParenthesizedOrAtom();
+      return `det(${arg})`;
+    }
+
+    for (const name of ["det", "inv", "transpose"] as const) {
+      if (this.consumeFunctionName(name)) {
         const arg = this.parseParenthesizedOrAtom();
         return `${name}(${arg})`;
       }
@@ -661,9 +863,25 @@ class LatexParser {
   }
 }
 
+/**
+ * Hotfix V3.0.2c — compõe os 3 reparos textuais nesta ordem fixa:
+ * desaninha estruturas primeiro (`repairNestedStructuralTemplate`),
+ * depois desfaz a corrupção de cerca `\right)/\right.` (
+ * `repairNestedFenceCorruption` — o `\begin{...}` da assinatura dela
+ * precisa estar no formato final, não mais aninhado), só então repara o
+ * pulo de ambiente da barra de espaço (`repairMathLiveEnvironmentEscape`
+ * — Hotfix V3.0.2a). Único ponto de entrada usado tanto no envio
+ * (`mathFieldLatexToBackendExpression`) quanto ao vivo, a cada tecla
+ * (`StructuredMathInput.tsx`), garantindo que os dois caminhos vejam
+ * exatamente a mesma correção.
+ */
+export function repairMathLiveInput(latex: string): string {
+  return repairMathLiveEnvironmentEscape(repairNestedFenceCorruption(repairNestedStructuralTemplate(latex)));
+}
+
 export function mathFieldLatexToBackendExpression(latex: string): MathfieldConversion {
   try {
-    const repaired = repairMathLiveEnvironmentEscape(latex.trim());
+    const repaired = repairMathLiveInput(latex.trim());
     const expression = new LatexParser(repaired).parseEquation();
     return { ok: true, expression };
   } catch (error) {
