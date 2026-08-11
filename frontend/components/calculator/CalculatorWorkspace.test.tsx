@@ -42,6 +42,21 @@ vi.mock("mathlive", () => {
       this.dispatchEvent(new Event("input"));
       return true;
     }
+
+    // Hotfix V3.0.2a — `StructuredMathInput`'s `handleInput` chama
+    // `setValue`/`executeCommand` quando detecta um pulo de ambiente
+    // (ver `StructuredMathInput.test.tsx` pros testes dedicados a esse
+    // comportamento); mockados aqui só pra este arquivo não quebrar caso
+    // algum teste futuro dispare o caminho de reparo — nenhum teste
+    // EXISTENTE aqui produz LaTeX malformado, então nunca são chamados na
+    // prática hoje.
+    setValue(value: string) {
+      this._value = value;
+    }
+
+    executeCommand() {
+      return true;
+    }
   }
   if (!customElements.get("math-field")) {
     customElements.define("math-field", MockMathfieldElement);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { mathFieldLatexToBackendExpression } from "./mathfield-to-backend";
+import { mathFieldLatexToBackendExpression, repairMathLiveEnvironmentEscape } from "./mathfield-to-backend";
 import { previewLatex } from "./to-latex";
 
 function expr(latex: string): string {
@@ -540,6 +540,90 @@ describe("mathFieldLatexToBackendExpression", () => {
       const latex = await previewLatex(text);
       expect(latex, text).not.toBeNull();
       expect(expr(latex!)).toBe(expected);
+    });
+  });
+
+  // --- Hotfix V3.0.2a — MathLive "sai do ambiente inteiro" na barra de espaço ---
+  //
+  // Causa raiz (confirmada no navegador real, produção): dentro de um
+  // `\begin{cases|bmatrix|pmatrix|matrix|vmatrix}`, a barra de espaço do
+  // MathLive não sai só do nível mais interno (ex. do expoente de "x^2")
+  // — sai da ESTRUTURA INTEIRA de uma vez, deixando o resto do que o
+  // usuário digitou órfão, logo depois de `\end{...}`, sem nenhum
+  // operador entre eles. Todos os valores de LaTeX abaixo são exatamente
+  // os capturados via `math-field.value` real depois de reproduzir cada
+  // cenário no navegador (produção, `next build`+`next start`) — nunca
+  // LaTeX idealizado escrito à mão.
+  describe("Hotfix V3.0.2a — repara o pulo de ambiente causado pela barra de espaço do MathLive", () => {
+    describe("repairMathLiveEnvironmentEscape (função pura, testada isolada)", () => {
+      it("sistema: devolve o conteúdo órfão pro fim da ÚLTIMA linha com conteúdo real, não pro fim do ambiente", () => {
+        expect(repairMathLiveEnvironmentEscape("\\begin{cases}x^2\\\\ \\placeholder{}\\end{cases}-4=0")).toBe(
+          "\\begin{cases}x^2-4=0\\\\ \\placeholder{}\\end{cases}"
+        );
+      });
+
+      it("sistema sem aninhamento (space escapa mesmo sem expoente envolvido)", () => {
+        expect(repairMathLiveEnvironmentEscape("\\begin{cases}x\\\\ \\placeholder{}\\end{cases}+y")).toBe(
+          "\\begin{cases}x+y\\\\ \\placeholder{}\\end{cases}"
+        );
+      });
+
+      it("sistema: repara mesmo com o ambiente já 100% preenchido (protege a ÚLTIMA linha, cujo placeholder já foi parcialmente consumido)", () => {
+        expect(repairMathLiveEnvironmentEscape("\\begin{cases}x+y=5\\\\ x\\end{cases}-y=1")).toBe(
+          "\\begin{cases}x+y=5\\\\ x-y=1\\end{cases}"
+        );
+      });
+
+      it("matriz: devolve o conteúdo órfão pra célula certa (célula 1,1), não pro fim da matriz", () => {
+        expect(
+          repairMathLiveEnvironmentEscape(
+            "\\begin{bmatrix}x & \\placeholder{}\\\\ \\placeholder{} & \\placeholder{}\\end{bmatrix}+1"
+          )
+        ).toBe("\\begin{bmatrix}x+1 & \\placeholder{}\\\\ \\placeholder{} & \\placeholder{}\\end{bmatrix}");
+      });
+
+      it("nunca ativa numa matriz 100% preenchida — A^2/A+B/2*A continuam intocados (operação legítima, não um pulo)", () => {
+        const power = "\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}^2";
+        const sum = "\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}+\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}";
+        expect(repairMathLiveEnvironmentEscape(power)).toBe(power);
+        expect(repairMathLiveEnvironmentEscape(sum)).toBe(sum);
+      });
+
+      it("nunca engole o CONTEÚDO de uma segunda estrutura genuína (matrizA + matrizB) — a captura do órfão sempre para no próximo \\begin{", () => {
+        // Cenário composto e de baixa probabilidade (exige a matriz A ainda
+        // incompleta E um "+matrizB" genuíno digitado por cima do estado já
+        // quebrado) — a segunda matriz nunca é tocada/reescrita; o pior caso
+        // é a primeira célula ganhar um "+" sem operando (`"x+"`), que o
+        // parser já rejeita com segurança como `incomplete` (nunca crasha,
+        // nunca envia request malformada) — confirmado abaixo.
+        const latex =
+          "\\begin{bmatrix}x & \\placeholder{}\\\\ \\placeholder{} & \\placeholder{}\\end{bmatrix}+\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}";
+        const repaired = repairMathLiveEnvironmentEscape(latex);
+        expect(repaired).toContain("\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}");
+        expect(mathFieldLatexToBackendExpression(repaired)).toEqual({ ok: false, reason: "incomplete" });
+      });
+
+      it("sem conteúdo órfão nenhum (LaTeX já bem-formado) -> devolve intocado", () => {
+        const latex = "\\begin{cases}x+y=5\\\\x-y=1\\end{cases}";
+        expect(repairMathLiveEnvironmentEscape(latex)).toBe(latex);
+      });
+    });
+
+    it("integração: sistema 2x2 totalmente escapado (as duas linhas) -> adapter aceita e converte corretamente", () => {
+      expect(expr("\\begin{cases}x+y=5\\\\ x-y=1\\end{cases}")).toBe("x+y=5;x-y=1");
+    });
+
+    it("integração: matriz com célula parcialmente escapada -> adapter aceita e converte corretamente", () => {
+      expect(
+        expr("\\begin{bmatrix}x+1 & 2\\\\ 3 & 4\\end{bmatrix}")
+      ).toBe("[[x+1,2],[3,4]]");
+    });
+
+    it("integração: sistema com linha AINDA genuinamente vazia continua incomplete (o reparo nunca inventa conteúdo)", () => {
+      expect(mathFieldLatexToBackendExpression("\\begin{cases}x^2-4=0\\\\ \\placeholder{}\\end{cases}")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
     });
   });
 });

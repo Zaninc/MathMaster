@@ -5,6 +5,8 @@ import { useEffect, useRef } from "react";
 import "mathlive";
 import type { MathfieldElement } from "mathlive";
 
+import { repairMathLiveEnvironmentEscape } from "@/lib/math/mathfield-to-backend";
+
 export interface StructuredMathInputApi {
   /** Insere LaTeX na posição do cursor via a API real do MathLive (nunca concatenação de string). */
   insert(latex: string): void;
@@ -121,8 +123,39 @@ export function StructuredMathInput({
     field.style.fontSize = "1.125rem";
     field.style.padding = "0";
 
+    // Hotfix V3.0.2a — a barra de espaço, dentro do MathLive, faz o
+    // cursor "pular" pra fora do `\begin{cases|bmatrix|pmatrix|matrix|
+    // vmatrix}` INTEIRO em vez de só sair do nível mais interno (bug real
+    // do MathLive, sem hook público pra impedir — ver docstring de
+    // `mathfield-to-backend.ts`). Corrigido aqui, a cada `input`, ANTES
+    // que o usuário tenha chance de continuar editando em cima do estado
+    // quebrado (ex. clicar manualmente de volta no próximo placeholder,
+    // que ficaria ambíguo depois de preenchido — o reparo só sabe que um
+    // conteúdo órfão pertence a aquele placeholder enquanto ele AINDA
+    // está vazio): `repairMathLiveEnvironmentEscape` devolve o conteúdo
+    // órfão pro lugar certo.
+    //
+    // `field.setValue(repaired)` sozinho — nunca `field.value = repaired`
+    // (o setter puro da propriedade, testado: deixa o `moveToNextPlaceholder`
+    // SEGUINTE pousar na célula errada) e nunca acompanhado de um
+    // `executeCommand("moveToNextPlaceholder")` explícito por cima (testado:
+    // isso SIM fazia pular uma célula/linha a mais — ex. célula 1,2 vazia
+    // pra sempre, "2" caindo direto na 2,1 — porque `setValue()` sozinho JÁ
+    // reposiciona corretamente no próximo `\placeholder{}` restante por
+    // padrão; chamar o comando de novo por cima avança um segundo passo,
+    // sempre um a mais do que deveria). `setValue()` sem nenhuma opção
+    // extra é a única forma testada que deixa a digitação seguinte (com ou
+    // sem Tab físico no meio) pousar exatamente na próxima célula/linha
+    // vazia, em ordem, sem pular nenhuma.
     function handleInput() {
-      onChangeRef.current(field.value);
+      const current = field.value;
+      const repaired = repairMathLiveEnvironmentEscape(current);
+      if (repaired !== current) {
+        field.setValue(repaired);
+        onChangeRef.current(field.value);
+        return;
+      }
+      onChangeRef.current(current);
     }
     field.addEventListener("input", handleInput);
 
@@ -156,6 +189,30 @@ export function StructuredMathInput({
       if (event.key === "Tab") {
         const moved = field.executeCommand(event.shiftKey ? "moveToPreviousPlaceholder" : "moveToNextPlaceholder");
         if (moved) event.preventDefault();
+        return;
+      }
+      // Hotfix V3.0.2a — a barra de espaço, dentro do MathLive, significa
+      // "sair do grupo delimitador atual" (mesma tecla que fecha um
+      // expoente/fração e volta pra base). Dentro de um
+      // `\begin{cases}`/`\begin{bmatrix}`/`\begin{vmatrix}` (Álgebra,
+      // V3.0.2) isso não sai só do nível mais interno — sai da ESTRUTURA
+      // INTEIRA de uma vez (bug real do MathLive, reproduzido no
+      // navegador real: digitar "x^2 -4=0", com espaço, produz
+      // `\begin{cases}x^2\\ \placeholder{}\end{cases}-4=0` — o resto cai
+      // FORA do ambiente, e o placeholder da próxima linha/célula fica
+      // vazio pra sempre, gerando "incomplete" mesmo num sistema/matriz
+      // que o usuário via como preenchido). `skipSpace()` no adapter
+      // (`mathfield-to-backend.ts`) já trata qualquer espaço como
+      // 100% insignificante, e a navegação oficial entre slots é o Tab
+      // (não a barra de espaço) — suprimir a barra de espaço por
+      // completo aqui (nunca insere nada, nunca navega) elimina esta
+      // classe de bug de forma genérica, sem depender de estar dentro de
+      // um ambiente `\begin{...}` especificamente: cobre sistemas,
+      // matrizes, determinante e qualquer estrutura futura que reutilize
+      // o mesmo mecanismo.
+      if (event.key === " ") {
+        event.preventDefault();
+        return;
       }
     }
     // Fase de CAPTURA (não bubble): o MathLive tem seu próprio handler de

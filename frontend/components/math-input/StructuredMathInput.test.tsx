@@ -8,13 +8,14 @@ import { StructuredMathInput, type StructuredMathInputApi } from "./StructuredMa
  * própria build "SSR-safe" (`mathlive-ssr.min.mjs`, via a condição `node`
  * do `package.json` da lib) — inerte por design, sem a lógica real de
  * edição. Um mock local, mínimo, cobre só a superfície que
- * `StructuredMathInput` realmente usa (`value`, `insert()`,
+ * `StructuredMathInput` realmente usa (`value`, `insert()`, `setValue()`,
  * `executeCommand()`, `mathVirtualKeyboardPolicy`, eventos
  * `input`/`keydown`) — suficiente pra testar O WRAPPER (nosso código),
- * não a biblioteca de terceiros. `executeCommand` é um espião simples
- * (registra o comando pedido) — a navegação REAL entre placeholders é
- * lógica do MathLive de verdade, testada no navegador real (ver
- * relatório da Sprint V3.0.1).
+ * não a biblioteca de terceiros. `executeCommand`/`setValue` são espiões
+ * simples (registram o que foi pedido) — a navegação REAL entre
+ * placeholders, e o comportamento REAL de "sair do ambiente inteiro" na
+ * barra de espaço (Hotfix V3.0.2a), são lógica do MathLive de verdade,
+ * testados no navegador real (ver relatório do hotfix).
  */
 vi.mock("mathlive", () => {
   class MockMathfieldElement extends HTMLElement {
@@ -24,6 +25,7 @@ vi.mock("mathlive", () => {
     smartSuperscript = false;
     lastExecutedCommand: string | null = null;
     nextExecuteCommandResult = true;
+    lastSetValueCall: { value: string; options: unknown } | null = null;
 
     get value() {
       return this._value;
@@ -37,6 +39,16 @@ vi.mock("mathlive", () => {
       this._value += latex;
       this.dispatchEvent(new Event("input"));
       return true;
+    }
+
+    // Hotfix V3.0.2a — usado por `handleInput` pra corrigir o campo depois
+    // do reparo textual (`repairMathLiveEnvironmentEscape`), sem disparar
+    // um novo `input` sozinho (a chamada em `handleInput` já dispara
+    // `onChangeRef.current` explicitamente depois) — mesmo contrato do
+    // `setValue` real (não redispara `input`).
+    setValue(value: string, options?: unknown) {
+      this.lastSetValueCall = { value, options };
+      this._value = value;
     }
 
     executeCommand(command: string) {
@@ -264,5 +276,49 @@ describe("StructuredMathInput", () => {
       <StructuredMathInput id="campo" value="" onChange={vi.fn()} ariaDescribedBy="erro-1" ariaInvalid={true} />
     );
     expect(field.getAttribute("aria-invalid")).toBe("true");
+  });
+
+  // --- Hotfix V3.0.2a — corrige ao vivo o "pulo pra fora do ambiente
+  // inteiro" que a barra de espaço do MathLive causa dentro de
+  // `\begin{cases|bmatrix|...}` (ver `mathfield-to-backend.ts`). O valor
+  // malformado usado abaixo é exatamente o que o MathLive real produz
+  // (capturado via `math-field.value` no navegador real) — simulado aqui
+  // atribuindo `.value` direto no mock e disparando `input`, do mesmo
+  // jeito que o campo real dispararia depois do MathLive processar a
+  // barra de espaço sozinho.
+  type MockFieldWithSetValue = HTMLElement & {
+    value: string;
+    lastSetValueCall: { value: string; options: unknown } | null;
+    lastExecutedCommand: string | null;
+  };
+
+  it("campo malformado por um pulo de ambiente (barra de espaço) é corrigido ao vivo via setValue — sem executeCommand extra por cima", () => {
+    const onChange = vi.fn();
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={onChange} />);
+    const field = getField(container) as MockFieldWithSetValue;
+
+    field.value = "\\begin{cases}x^2\\\\ \\placeholder{}\\end{cases}-4=0";
+    field.dispatchEvent(new Event("input"));
+
+    expect(field.lastSetValueCall?.value).toBe("\\begin{cases}x^2-4=0\\\\ \\placeholder{}\\end{cases}");
+    // Achado da validação no navegador real: `setValue()` sozinho já
+    // reposiciona corretamente no próximo `\placeholder{}` restante —
+    // chamar `executeCommand("moveToNextPlaceholder")` por cima pulava
+    // UMA célula/linha a mais (confirmado com sistema 3x3 e matriz 2x2)
+    // — por isso NUNCA é chamado aqui.
+    expect(field.lastExecutedCommand).toBeNull();
+    expect(onChange).toHaveBeenLastCalledWith("\\begin{cases}x^2-4=0\\\\ \\placeholder{}\\end{cases}");
+  });
+
+  it("campo já bem-formado (sem pulo de ambiente) nunca chama setValue — só o input normal", () => {
+    const onChange = vi.fn();
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={onChange} />);
+    const field = getField(container) as MockFieldWithSetValue;
+
+    field.value = "x^2-4=0";
+    field.dispatchEvent(new Event("input"));
+
+    expect(field.lastSetValueCall).toBeNull();
+    expect(onChange).toHaveBeenLastCalledWith("x^2-4=0");
   });
 });

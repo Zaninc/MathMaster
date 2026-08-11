@@ -44,6 +44,36 @@
  * `parseSubExpression` (portanto pelo parser recursivo inteiro — potência,
  * fração, raiz, π — de graça) — nunca um parser de matriz/sistema
  * separado.
+ *
+ * Hotfix V3.0.2a — o MathLive trata a barra de espaço como "sair do grupo
+ * delimitador atual" (mesma tecla que fecha um expoente/fração e volta pra
+ * base) — mas dentro de um `\begin{cases|bmatrix|pmatrix|matrix|vmatrix}`
+ * isso não sai só do nível mais interno, sai da ESTRUTURA INTEIRA de uma
+ * vez, um bug real do MathLive (confirmado no navegador real: digitar
+ * "x^2 -4=0" ou uma célula "x + 1" com espaço) que deixa o restante do que
+ * o usuário digitou FORA do ambiente, órfão, e a linha/célula que estava
+ * sendo editada permanentemente vazia. Não existe nenhum hook público do
+ * MathLive pra impedir esse pulo (testado: `keydown`/`beforeinput` em fase
+ * de captura, no campo E em `document`, nenhum consegue interceptar — a
+ * decisão acontece inteiramente dentro do modelo interno do MathLive,
+ * nunca exposta como evento cancelável) — a correção acontece aqui,
+ * puramente textual, em `repairMathLiveEnvironmentEscape`, ANTES de
+ * qualquer parsing: se o ambiente ainda tem algum `\placeholder{}` vazio
+ * (prova estrutural de incompletude, nunca uma suposição) e existe
+ * conteúdo logo depois de `\end{...}`, esse conteúdo só pode ser o que o
+ * usuário estava digitando na última linha/célula tocada antes do pulo —
+ * devolvido pro lugar certo antes de qualquer parsing. Para matriz/
+ * determinante, nunca ativa quando o ambiente já está 100% preenchido
+ * (sem `\placeholder{}` sobrando): nesse caso o conteúdo depois de
+ * `\end{...}` é uma operação legítima já suportada (`A^2`, `A+B`,
+ * `2*A`...) e continua 100% intocado. `cases` (sistema) é uma exceção
+ * deliberada a essa proteção: nunca existe conteúdo legítimo depois de
+ * `\end{cases}` nesta sprint (é sempre a expressão INTEIRA, nunca
+ * combinado com mais nada), então repara mesmo sem `\placeholder{}`
+ * sobrando — necessário pra proteger a ÚLTIMA linha do sistema (uma vez
+ * que o placeholder dela já foi parcialmente consumido, ex. só "x" de
+ * "x-y=1", não sobra mais nenhuma prova de incompletude em lugar nenhum,
+ * mas o pulo pode acontecer de novo mesmo assim).
  */
 
 export type MathfieldConversion =
@@ -62,6 +92,79 @@ const SUPERSCRIPT_DIGITS: Record<string, string> = {
   "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴",
   "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
 };
+
+const STRUCTURED_ENVIRONMENTS = ["cases", "bmatrix", "pmatrix", "matrix", "vmatrix"] as const;
+
+/**
+ * Casa um trecho FINAL de `\placeholder{}` vazios consecutivos (cada um
+ * opcionalmente precedido por um separador de célula/linha — `&`/`\\` — e
+ * espaço em volta) no fim de uma string — exatamente os placeholders que o
+ * usuário ainda não alcançou no momento do pulo (ver
+ * `repairMathLiveEnvironmentEscape`), já que MathLive preenche
+ * célula/linha em ORDEM (Tab/digitação sequencial), nunca fora de ordem.
+ */
+const TRAILING_EMPTY_PLACEHOLDERS = /(?:\s*(?:&|\\\\)?\s*\\placeholder\{\})+$/;
+
+/**
+ * Hotfix V3.0.2a — desfaz o "pulo pra fora do ambiente inteiro" que a
+ * barra de espaço do MathLive causa dentro de `\begin{cases|bmatrix|
+ * pmatrix|matrix|vmatrix}` (ver docstring do módulo). Puramente textual,
+ * roda ANTES de qualquer parsing — devolve o conteúdo órfão (que sobrou
+ * logo depois de `\end{...}`) pro lugar exato onde a última linha/célula
+ * REAL (não-placeholder) termina, nunca simplesmente "no fim do ambiente"
+ * (que poderia ser uma linha/célula diferente, ainda vazia, da que o
+ * usuário estava realmente editando).
+ */
+export function repairMathLiveEnvironmentEscape(latex: string): string {
+  let result = latex;
+  for (const env of STRUCTURED_ENVIRONMENTS) {
+    const beginToken = `\\begin{${env}}`;
+    const endToken = `\\end{${env}}`;
+    let searchFrom = 0;
+    for (;;) {
+      const beginIdx = result.indexOf(beginToken, searchFrom);
+      if (beginIdx === -1) break;
+      const bodyStart = beginIdx + beginToken.length;
+      const endIdx = result.indexOf(endToken, bodyStart);
+      if (endIdx === -1) break;
+      const afterEnd = endIdx + endToken.length;
+      const body = result.slice(bodyStart, endIdx);
+
+      // Nunca engole uma SEGUNDA estrutura genuína (ex. "matrizA + matrizB"):
+      // o conteúdo órfão para no próximo `\begin{...}`, nunca além dele.
+      const nextBeginIdx = result.indexOf("\\begin{", afterEnd);
+      const strayEnd = nextBeginIdx === -1 ? result.length : nextBeginIdx;
+      const stray = result.slice(afterEnd, strayEnd);
+      if (stray.trim() === "") {
+        searchFrom = afterEnd;
+        continue;
+      }
+
+      // `cases` (sistema) NUNCA tem conteúdo legítimo depois de
+      // `\end{cases}` — é sempre a expressão INTEIRA nesta sprint, nunca
+      // combinado com mais nada (diferente de matriz, que suporta `A^2`/
+      // `A+B`/escalar de verdade) — por isso repara mesmo quando o
+      // ambiente já parece 100% preenchido (protege a ÚLTIMA linha: uma
+      // vez que o placeholder dela já foi consumido por conteúdo real
+      // parcial — ex. só "x" de "x-y=1" — não sobra mais nenhum
+      // `\placeholder{}` em lugar nenhum pra provar incompletude, mas o
+      // pulo pode acontecer de novo mesmo assim). Matriz continua exigindo
+      // `\placeholder{}` sobrando (só protege as células além da última
+      // sendo editada; a ÚLTIMA célula de uma matriz digitada com espaço
+      // interno — ex. "x + 1" quando já é a única que falta — é uma
+      // limitação residual conhecida, documentada no relatório do hotfix).
+      const trailingMatch = body.match(TRAILING_EMPTY_PLACEHOLDERS);
+      if (env !== "cases" && !trailingMatch) {
+        searchFrom = afterEnd;
+        continue;
+      }
+      const insertAt = trailingMatch ? bodyStart + trailingMatch.index! : endIdx;
+      result = result.slice(0, insertAt) + stray + result.slice(insertAt, afterEnd) + result.slice(strayEnd);
+      searchFrom = afterEnd + stray.length;
+    }
+  }
+  return result;
+}
 
 class Unsupported extends Error {}
 class Incomplete extends Error {}
@@ -560,7 +663,8 @@ class LatexParser {
 
 export function mathFieldLatexToBackendExpression(latex: string): MathfieldConversion {
   try {
-    const expression = new LatexParser(latex.trim()).parseEquation();
+    const repaired = repairMathLiveEnvironmentEscape(latex.trim());
+    const expression = new LatexParser(repaired).parseEquation();
     return { ok: true, expression };
   } catch (error) {
     if (error instanceof Incomplete) return { ok: false, reason: "incomplete" };
