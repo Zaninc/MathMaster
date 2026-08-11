@@ -74,6 +74,25 @@
  * que o placeholder dela já foi parcialmente consumido, ex. só "x" de
  * "x-y=1", não sobra mais nenhuma prova de incompletude em lugar nenhum,
  * mas o pulo pode acontecer de novo mesmo assim).
+ *
+ * Hotfix V3.0.2d — investigação real no navegador confirmou que o MathLive
+ * já converte o caractere "·" (Unicode, middle dot) e "×" (Unicode, sinal
+ * de multiplicação) sozinho para `\cdot`/`\times` respectivamente — ambos
+ * já reconhecidos por `parseTerm()` desde a Sprint V3.0.2, nenhuma mudança
+ * necessária ali. A LACUNA real: a tecla física "." (ponto) produz um
+ * caractere "." cru — o MathLive NUNCA o autoconverte — tanto entre duas
+ * matrizes (`matrix.matrix`) quanto entre escalar e matriz em qualquer
+ * ordem (`2.matrix`/`matrix.2`), sempre resultando em "unsupported" antes
+ * deste hotfix. Corrigido em dois pontos, SEM replace global de "." por
+ * "*" (que corromperia números decimais como "2.5"): (1) o parser de
+ * número em `parseAtom()` só absorve o "." como ponto decimal quando
+ * IMEDIATAMENTE seguido de outro dígito — um "." sem dígito depois (ex.
+ * antes de uma matriz) nunca é consumido ali; (2) `parseTerm()` reconhece
+ * esse "." residual (que só chega até ali quando não foi absorvido como
+ * decimal) como equivalente a "*"/"\cdot"/"\times" — estruturalmente
+ * inambíguo, porque todo "." que sobra até esse ponto do parser SEMPRE
+ * resultava em erro antes (nunca havia uma interpretação alternativa
+ * válida), então a mudança é estritamente aditiva.
  */
 
 export type MathfieldConversion =
@@ -592,7 +611,25 @@ class LatexParser {
     let result = this.parseFactor();
     for (;;) {
       this.skipSpace();
-      if (this.consume("\\times") || this.consume("\\cdot") || this.consume("*")) {
+      // Hotfix V3.0.2d — todas as formas VISUAIS de multiplicação já
+      // produzidas pelo MathLive real convergem pro mesmo "*" do backend:
+      // "\times"/"\cdot" (o teclado físico "×"/"·" já vira isso sozinho,
+      // confirmado no navegador real — nunca precisou de tratamento
+      // novo), "*" (tecla física asterisco, já tratada desde a V3.0.2) e
+      // "." (tecla física ponto — confirmado no navegador real que o
+      // MathLive NUNCA autoconverte pra "\cdot", produz o caractere "."
+      // cru, tanto entre duas matrizes quanto entre escalar e matriz —
+      // esta é a lacuna real do Hotfix V3.0.2d). "." só chega até aqui
+      // quando `parseAtom()` NÃO o absorveu como ponto decimal (só absorve
+      // quando imediatamente seguido de outro dígito) — ou seja, todo "."
+      // que sobra pra este ponto do parser é estruturalmente inambíguo:
+      // nunca decimal, sempre operador. Sem essa distinção por posição no
+      // parser, um "." solto aqui SEMPRE resultava em "sobrou conteúdo
+      // após a expressão" (Unsupported) — nunca havia uma interpretação
+      // válida alternativa, então reconhecê-lo como multiplicação aqui é
+      // estritamente aditivo, nunca capaz de regredir um caso que já
+      // funcionava.
+      if (this.consume("\\times") || this.consume("\\cdot") || this.consume("*") || this.consume(".")) {
         result += `*${this.parseFactor()}`;
         continue;
       }
@@ -850,7 +887,19 @@ class LatexParser {
 
     if (/[0-9]/.test(ch)) {
       const start = this.pos;
-      while (this.pos < this.src.length && /[0-9.]/.test(this.src[this.pos])) this.pos++;
+      while (this.pos < this.src.length && /[0-9]/.test(this.src[this.pos])) this.pos++;
+      // Hotfix V3.0.2d — o "." só faz parte do número quando IMEDIATAMENTE
+      // seguido de outro dígito (ponto decimal de verdade, ex. "2.5"). Um
+      // "." sem dígito depois (ex. "2." antes de uma matriz/variável) nunca
+      // é consumido aqui — fica pro nível de `parseTerm()` reconhecer como
+      // operador de multiplicação (ver `MULTIPLICATION_OPERATORS`),
+      // exatamente a mesma tokenização estrutural que já distingue "2*A"
+      // (asterisco explícito) de "2A" (multiplicação implícita), nunca um
+      // replace global de "." por "*".
+      if (this.src[this.pos] === "." && /[0-9]/.test(this.src[this.pos + 1] ?? "")) {
+        this.pos++;
+        while (this.pos < this.src.length && /[0-9]/.test(this.src[this.pos])) this.pos++;
+      }
       return this.src.slice(start, this.pos);
     }
 

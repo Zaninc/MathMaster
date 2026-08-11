@@ -812,4 +812,136 @@ describe("mathFieldLatexToBackendExpression", () => {
       });
     });
   });
+
+  describe("Hotfix V3.0.2d — Explicit Dot Multiplication", () => {
+    // LaTeX real capturado no navegador (math-field.value) — investigação
+    // confirmou que "·"/"×" (Unicode) já viram "\cdot"/"\times" sozinhos no
+    // MathLive, já reconhecidos desde a Sprint V3.0.2; a tecla física "."
+    // produz um caractere "." cru, NUNCA autoconvertido — essa é a lacuna
+    // real desta hotfix.
+    const A = "\\begin{bmatrix}1 & 2\\\\ 3 & 4\\end{bmatrix}";
+    const B = "\\begin{bmatrix}5 & 6\\\\ 7 & 8\\end{bmatrix}";
+
+    describe("todas as formas visuais convergem para o mesmo '*'", () => {
+      it("matriz adjacente matriz (sem operador, capturado real) -> multiplicação implícita", () => {
+        expect(expr(`${A}${B}`)).toBe("[[1,2],[3,4]]*[[5,6],[7,8]]");
+      });
+
+      it("matriz*matriz (asterisco físico, capturado real: '*' cru)", () => {
+        expect(expr(`${A}*${B}`)).toBe("[[1,2],[3,4]]*[[5,6],[7,8]]");
+      });
+
+      it("matriz.matriz (ponto físico, capturado real: '.' cru -- a lacuna real deste hotfix)", () => {
+        expect(expr(`${A}.${B}`)).toBe("[[1,2],[3,4]]*[[5,6],[7,8]]");
+      });
+
+      it("matriz\\cdot matriz (capturado real: MathLive converte '·' Unicode sozinho)", () => {
+        expect(expr(`${A}\\cdot${B}`)).toBe("[[1,2],[3,4]]*[[5,6],[7,8]]");
+      });
+
+      it("matriz\\times matriz (capturado real: MathLive converte '×' Unicode sozinho)", () => {
+        expect(expr(`${A}\\times${B}`)).toBe("[[1,2],[3,4]]*[[5,6],[7,8]]");
+      });
+    });
+
+    describe("escalar × matriz, nas duas ordens (backend confirmado suportar ambas)", () => {
+      it("2\\cdot matriz (capturado real: '2·' vira '2\\cdot')", () => {
+        expect(expr(`2\\cdot${A}`)).toBe("2*[[1,2],[3,4]]");
+      });
+
+      it("2.matriz (ponto físico, capturado real: '2.' + matriz -- não pode virar decimal '2.')", () => {
+        expect(expr(`2.${A}`)).toBe("2*[[1,2],[3,4]]");
+      });
+
+      it("matriz.2 (ponto físico depois da matriz, capturado real)", () => {
+        expect(expr(`${A}.2`)).toBe("[[1,2],[3,4]]*2");
+      });
+
+      it("matriz\\cdot 2", () => {
+        expect(expr(`${A}\\cdot 2`)).toBe("[[1,2],[3,4]]*2");
+      });
+    });
+
+    describe("decimal nunca é confundido com operador (nunca replace global de '.')", () => {
+      it("2.5 isolado continua decimal", () => {
+        expect(expr("2.5")).toBe("2.5");
+      });
+
+      it("2.5*A preserva '2.5' como decimal -- o '*' explícito é o operador, não o ponto", () => {
+        expect(expr(`2.5*${A}`)).toBe("2.5*[[1,2],[3,4]]");
+      });
+
+      it("0.25 (decimal sem parte inteira relevante) continua decimal", () => {
+        expect(expr("0.25+1")).toBe("0.25+1");
+      });
+
+      it("célula de matriz com decimal continua decimal, nunca vira operador", () => {
+        expect(expr("\\begin{bmatrix}1.5&2\\\\3&4\\end{bmatrix}")).toBe("[[1.5,2],[3,4]]");
+      });
+
+      it("'2.' seguido de variável (nunca dígito) não é tratado como decimal truncado -- '.' vira operador, '2' fica isolado", () => {
+        expect(expr("2.A")).toBe("2*A");
+      });
+    });
+
+    describe("negativos obrigatórios -- '.' nunca canonicaliza incorretamente", () => {
+      it("A+B nunca vira A*B mesmo com '.' em outro lugar da expressão", () => {
+        expect(expr(`${A}+${B}`)).toBe("[[1,2],[3,4]]+[[5,6],[7,8]]");
+      });
+
+      it("um '.' isolado sem número/matriz nenhum dos lados continua unsupported (nunca inventa operandos)", () => {
+        expect(mathFieldLatexToBackendExpression(".").ok).toBe(false);
+      });
+    });
+
+    describe("bateria matemática obrigatória -- A=[[1,2],[3,4]], B=[[1,2],[3,4]]", () => {
+      it("AB (adjacência) == A·B == A*B == A.B, todos [[7,10],[15,22]]", () => {
+        const expected = "[[1,2],[3,4]]*[[1,2],[3,4]]";
+        expect(expr(`${A}${A}`)).toBe(expected);
+        expect(expr(`${A}\\cdot${A}`)).toBe(expected);
+        expect(expr(`${A}*${A}`)).toBe(expected);
+        expect(expr(`${A}.${A}`)).toBe(expected);
+      });
+
+      it("2·A == [[2,4],[6,8]] (payload backend)", () => {
+        expect(expr(`2\\cdot${A}`)).toBe("2*[[1,2],[3,4]]");
+      });
+    });
+
+    describe("hardening rápido -- nenhuma operação matricial existente regride", () => {
+      it("matriz + matriz", () => {
+        expect(expr(`${A}+${B}`)).toBe("[[1,2],[3,4]]+[[5,6],[7,8]]");
+      });
+      it("matriz - matriz", () => {
+        expect(expr(`${A}-${B}`)).toBe("[[1,2],[3,4]]-[[5,6],[7,8]]");
+      });
+      it("matriz * matriz", () => {
+        expect(expr(`${A}*${B}`)).toBe("[[1,2],[3,4]]*[[5,6],[7,8]]");
+      });
+      it("matriz \\cdot matriz", () => {
+        expect(expr(`${A}\\cdot${B}`)).toBe("[[1,2],[3,4]]*[[5,6],[7,8]]");
+      });
+      it("matriz adjacente matriz", () => {
+        expect(expr(`${A}${B}`)).toBe("[[1,2],[3,4]]*[[5,6],[7,8]]");
+      });
+      it("2 matriz (implícita)", () => {
+        expect(expr(`2${A}`)).toBe("2*[[1,2],[3,4]]");
+      });
+      it("2·matriz", () => {
+        expect(expr(`2\\cdot${A}`)).toBe("2*[[1,2],[3,4]]");
+      });
+      it("matriz²", () => {
+        expect(expr(`${A}^2`)).toBe("[[1,2],[3,4]]^2");
+      });
+      it("det(matriz)", () => {
+        expect(expr(`\\det\\left(${A}\\right)`)).toBe("det([[1,2],[3,4]])");
+      });
+      it("inv(matriz)", () => {
+        expect(expr(`\\operatorname{inv}\\left(${A}\\right)`)).toBe("inv([[1,2],[3,4]])");
+      });
+      it("transpose(matriz)", () => {
+        expect(expr(`\\operatorname{transpose}\\left(${A}\\right)`)).toBe("transpose([[1,2],[3,4]])");
+      });
+    });
+  });
 });
