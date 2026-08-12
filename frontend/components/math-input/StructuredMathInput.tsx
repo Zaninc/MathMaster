@@ -17,15 +17,18 @@ const VIRTUAL_KEYBOARD_STYLE_ID = "structured-math-input-hide-virtual-keyboard-t
 
 /**
  * Hotfix P0 (3ª rodada — nesting de expoente confirmado) — LaTeX EXATO
- * inserido pela tecla "xⁿ" (`data/keyboard.ts`) — o único botão do
- * catálogo cujo `mathLiveInsert` é um placeholder de SUPERSCRIPT sozinho
- * (nunca embutido num template maior, ex. os limites de uma integral
- * definida ou de um somatório, que também usam `^{...}` mas nunca como a
- * string inteira). Usado como assinatura estrutural pra saber quando um
- * novo expoente "fresco" acabou de ser criado — nunca amarrado a "e" ou
- * a qualquer caractere específico.
+ * inserido pelas teclas cujo `mathLiveInsert` é um placeholder de
+ * SUPERSCRIPT sozinho no fim da string (nunca embutido num template
+ * maior, ex. os limites de uma integral definida ou de um somatório, que
+ * também usam `^{...}` mas nunca como a string inteira): "xⁿ" (`^{...}`
+ * puro) e, desde a Sprint V3.0.3 (Structured Logs & Exponentials), "eˣ"
+ * (`\exponentialE^{...}` — mesma assinatura de expoente fresco, só com a
+ * base fixa da constante de Euler na frente). Usado como assinatura
+ * estrutural pra saber quando um novo expoente "fresco" acabou de ser
+ * criado — nunca amarrado a "e" (o caractere digitado DENTRO do
+ * expoente) ou a qualquer caractere específico.
  */
-const SIMPLE_EXPONENT_PLACEHOLDER_TEMPLATE = "^{\\placeholder{}}";
+const SIMPLE_EXPONENT_PLACEHOLDER_TEMPLATES = new Set(["^{\\placeholder{}}", "\\exponentialE^{\\placeholder{}}"]);
 
 /** Dígito ou ponto decimal — o único conteúdo que continua ACUMULANDO
  * dentro de um expoente "fresco" sem forçar saída (permite `x^23`). */
@@ -203,16 +206,26 @@ export function StructuredMathInput({
     field.style.fontSize = "1.125rem";
     field.style.padding = "0";
 
-    // Hotfix P0 (3ª rodada — nesting de expoente confirmado no navegador
-    // real): `true` só entre o momento em que a tecla "xⁿ" cria um
-    // expoente placeholder FRESCO e o primeiro caractere NÃO-dígito
-    // digitado depois — ver `handleKeyDown` (consome/decide) e
-    // `api.insert()` (liga) abaixo. Qualquer clique (`handleFieldClick`)
-    // ou tecla de controle/navegação (Backspace, setas, Tab...) desliga
-    // sem forçar saída — só um caractere imprimível não-dígito, digitado
-    // logo em seguida sem nenhuma navegação explícita no meio, aciona a
-    // saída automática (ver docstring completa em `handleKeyDown`).
-    let freshExponentPlaceholder = false;
+    // Hotfix P0 (3ª/4ª rodada — nesting de expoente confirmado no
+    // navegador real, achado 2 confirmado ao testar "eˣ"): 3 estados, não
+    // um booleano — "empty" (placeholder recém-criado pela tecla "xⁿ"/
+    // "eˣ", NENHUM caractere digitado ainda), "digits" (só dígitos/ponto
+    // digitados até agora), "off" (qualquer outra coisa: expirou). Achado
+    // real (Sprint V3.0.3): a versão booleana original SÓ soltava a
+    // primeira letra digitada — inaceitável pra "eˣ", cujo expoente
+    // TIPICAMENTE começa com uma letra ("x" de eˣ), nunca um dígito;
+    // clicar "eˣ" e digitar "x" imediatamente disparava a saída ANTES do
+    // "x" ser inserido, deixando "x" cair FORA do expoente
+    // (`\exponentialE^{}x` em vez de `\exponentialE^{x}`) — confirmado no
+    // navegador real. A regra corrigida: o PRIMEIRO caractere digitado
+    // (dígito OU letra) SEMPRE insere normalmente dentro do placeholder
+    // fresco, nunca aciona saída — só a partir do SEGUNDO caractere em
+    // diante, se o placeholder só tinha dígitos até agora ("digits") e o
+    // novo caractere NÃO é dígito, a saída é acionada (ver `handleKeyDown`
+    // abaixo). Qualquer clique (`handleFieldClick`) ou tecla de
+    // controle/navegação (Backspace, setas, Tab...) desliga pra "off" sem
+    // forçar saída.
+    let freshExponentPlaceholder: "off" | "empty" | "digits" = "off";
 
     // Hotfix V3.0.2a — a barra de espaço, dentro do MathLive, faz o
     // cursor "pular" pra fora do `\begin{cases|bmatrix|pmatrix|matrix|
@@ -281,57 +294,79 @@ export function StructuredMathInput({
     // `false`), o Tab NÃO é interceptado — sai do campo normalmente
     // (acessibilidade padrão preservada).
     function handleKeyDown(event: KeyboardEvent) {
-      // Hotfix P0 (3ª rodada — nesting de expoente confirmado no
+      // Hotfix P0 (3ª/4ª rodada — nesting de expoente confirmado no
       // navegador real): complementa o `smartSuperscript` do MathLive
       // (que só cobre DÍGITO sozinho — confirmado lendo o código-fonte
       // da própria biblioteca, `atom.parentBranch === "superscript" &&
       // /\d/.test(c)` — nunca letras) sem tocar em `node_modules`. Regra
       // 100% estrutural (nunca amarrada a "e" ou a qualquer caractere
-      // específico): enquanto `freshExponentPlaceholder` estiver ligado
-      // (só liga em `api.insert()` quando o LaTeX inserido é EXATAMENTE
-      // o template da tecla "xⁿ" — `SIMPLE_EXPONENT_PLACEHOLDER_TEMPLATE`
-      // — nunca fração/raiz/integral/matriz, cujos templates nunca batem
-      // essa string exata), o PRIMEIRO caractere imprimível digitado que
-      // NÃO seja dígito/ponto decimal aciona `moveToNextChar` ANTES de
-      // deixar o MathLive inserir esse caractere — fazendo `x²` seguido
-      // de "e"/"y"/"+"/"(" etc. produzir `x²e`/`x²y`/`x²+`/`x²(` (nível
-      // pai) em vez de `x^(2e)`/`x^(2y)`/... (aninhado). Dígitos/ponto
-      // NUNCA disparam a saída (mantém `freshExponentPlaceholder`
-      // ligado) — preserva `x^23` quando o usuário genuinamente quer um
-      // expoente de vários dígitos.
+      // específico): enquanto `freshExponentPlaceholder` for "empty" ou
+      // "digits" (só liga em `api.insert()` quando o LaTeX inserido é
+      // EXATAMENTE um dos templates de "xⁿ"/"eˣ" —
+      // `SIMPLE_EXPONENT_PLACEHOLDER_TEMPLATES` — nunca fração/raiz/
+      // integral/matriz/log, cujos templates nunca batem essas strings
+      // exatas):
+      //
+      //   - "empty" (placeholder ainda vazio, NENHUM caractere digitado
+      //     ainda): o PRIMEIRO caractere — dígito OU letra — SEMPRE
+      //     insere normalmente, NUNCA aciona saída. Achado real (Sprint
+      //     V3.0.3, "eˣ"): a versão anterior (booleana) disparava a saída
+      //     já no primeiro caractere, porque nunca distinguia "placeholder
+      //     ainda vazio" de "placeholder já preenchido" — inaceitável pra
+      //     "eˣ", cujo expoente TIPICAMENTE começa com uma LETRA ("x" de
+      //     eˣ), nunca um dígito: clicar "eˣ" e digitar "x" imediatamente
+      //     jogava o "x" pra FORA do expoente (`\exponentialE^{}x` em vez
+      //     de `\exponentialE^{x}`), confirmado no navegador real. Se o
+      //     primeiro caractere for dígito/ponto, transiciona pra
+      //     "digits"; senão, pra "off" (uma vez que o conteúdo não é mais
+      //     "numérico simples", nenhuma checagem a mais é necessária).
+      //   - "digits" (só dígitos/ponto digitados até agora): o PRÓXIMO
+      //     caractere, se NÃO for dígito/ponto, aciona `moveToNextChar`
+      //     ANTES de deixar o MathLive inserir esse caractere — fazendo
+      //     `x²` seguido de "e"/"y"/"+"/"(" etc. produzir
+      //     `x²e`/`x²y`/`x²+`/`x²(` (nível pai) em vez de
+      //     `x^(2e)`/`x^(2y)`/... (aninhado). Dígito/ponto continua
+      //     acumulando, mantém "digits" — preserva `x^23` quando o
+      //     usuário genuinamente quer um expoente de vários dígitos.
       //
       // Desligamento sem forçar saída: qualquer tecla de
       // controle/navegação (Backspace, Delete, setas, Escape,
-      // Shift/Ctrl/Alt/Meta sozinhas, Tab, Enter, Espaço) só desliga a
-      // flag — nunca chama `moveToNextChar` — porque essas são
+      // Shift/Ctrl/Alt/Meta sozinhas, Tab, Enter, Espaço) só desliga pra
+      // "off" — nunca chama `moveToNextChar` — porque essas são
       // justamente as ações que já representam uma decisão EXPLÍCITA do
       // usuário sobre onde o cursor deve estar (ex. Backspace pra apagar
       // o dígito, seta pra navegar manualmente); forçar uma saída por
       // cima delas seria o mesmo tipo de "correção que atropela a
       // intenção do usuário" que este hotfix inteiro existe pra
-      // eliminar. `handleFieldClick` (abaixo) desliga a flag do mesmo
+      // eliminar. `handleFieldClick` (abaixo) desliga pra "off" do mesmo
       // jeito pro caso de clique manual dentro do expoente — exatamente
       // o "clicar manualmente no expoente e digitar e → x^(2e)" pedido
       // explicitamente: depois de um clique a flag nunca mais liga
       // sozinha, então o próximo caractere fica DENTRO, como esperado.
-      if (freshExponentPlaceholder) {
+      if (freshExponentPlaceholder !== "off") {
         // Espaço fica de fora deliberadamente (tratado por completo à
         // parte, mais abaixo, como no-op — Hotfix V3.0.2a): não muda
-        // esse comportamento já validado, só desliga a flag como
+        // esse comportamento já validado, só desliga pra "off" como
         // qualquer outra tecla de controle.
         const isPlainCharacterKey =
           event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey && !event.altKey;
         if (isPlainCharacterKey) {
-          if (!CONTINUES_SIMPLE_EXPONENT.test(event.key)) {
+          if (CONTINUES_SIMPLE_EXPONENT.test(event.key)) {
+            freshExponentPlaceholder = "digits";
+          } else if (freshExponentPlaceholder === "empty") {
+            // Primeiro caractere do placeholder, não-dígito — insere
+            // normalmente (nunca força saída no primeiro caractere).
+            freshExponentPlaceholder = "off";
+          } else {
+            // Já tinha dígito(s)/ponto e agora veio um não-dígito — aciona a saída.
             const info = field.getElementInfo(field.position);
             if ((info?.depth ?? 0) > 0) {
               field.executeCommand("moveToNextChar");
             }
-            freshExponentPlaceholder = false;
+            freshExponentPlaceholder = "off";
           }
-          // dígito/ponto: continua ligado, deixa acumular dentro do expoente.
         } else {
-          freshExponentPlaceholder = false;
+          freshExponentPlaceholder = "off";
         }
       }
 
@@ -453,7 +488,7 @@ export function StructuredMathInput({
       // o "clicar manualmente no expoente e digitar e → x^(2e)" pedido
       // explicitamente. Desligado incondicionalmente, mesmo na saída
       // antecipada da seleção em andamento logo abaixo.
-      freshExponentPlaceholder = false;
+      freshExponentPlaceholder = "off";
       if (!field.selectionIsCollapsed) return;
       const resolved = resolveClickOffset(field, event.clientX, event.clientY);
       if (resolved !== null) field.position = resolved;
@@ -481,11 +516,12 @@ export function StructuredMathInput({
       insert(latex: string) {
         // Hotfix P0 (3ª rodada) — liga `freshExponentPlaceholder` SÓ
         // quando o LaTeX inserido é EXATAMENTE o template da tecla "xⁿ"
-        // (um expoente placeholder fresco, sozinho) — qualquer outra
-        // tecla (fração, raiz, integral, matriz, parênteses, x²/x³ com
-        // expoente FIXO, etc.) desliga, cobrindo o caso de clicar outra
-        // tecla entre o "xⁿ" e o próximo caractere digitado.
-        freshExponentPlaceholder = latex === SIMPLE_EXPONENT_PLACEHOLDER_TEMPLATE;
+        // ou "eˣ" (um expoente placeholder fresco, sozinho) — qualquer
+        // outra tecla (fração, raiz, integral, matriz, log, parênteses,
+        // x²/x³ com expoente FIXO, etc.) desliga, cobrindo o caso de
+        // clicar outra tecla entre "xⁿ"/"eˣ" e o próximo caractere
+        // digitado.
+        freshExponentPlaceholder = SIMPLE_EXPONENT_PLACEHOLDER_TEMPLATES.has(latex) ? "empty" : "off";
         field.insert(latex, { focus: true, selectionMode: "placeholder" });
         // `field.insert()` não passa pelo listener de `input` (ver
         // `repairFieldIfNeeded` acima) — chamado explicitamente aqui pra

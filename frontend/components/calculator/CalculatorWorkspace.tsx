@@ -36,13 +36,19 @@ import { ResultPanel, type ResultStatus } from "./ResultPanel";
  * coeficientes/divisão) ficam fora do escopo desta sprint e continuam sem
  * `mathLiveInsert` — por isso `structuredOnly` (abaixo, no `<MathKeyboard>`)
  * as esconde automaticamente, sem precisar de uma segunda lista de
- * categorias filtradas por dentro. Funções/Trigonometria/Geometria/
- * Combinatória/Probabilidade/Símbolos continuam ocultas — voltam
- * progressivamente nas próximas V3.0.x, sem precisar mudar este arquivo de
- * novo (só ampliar esta lista).
+ * categorias filtradas por dentro.
+ *
+ * Sprint V3.0.3 (Structured Logs & Exponentials) — Funções volta a
+ * aparecer, mas só o subconjunto migrado (log, ln, logₐ, eˣ — todos com
+ * `mathLiveInsert`); "f(x)="/"f( )" ficam fora do escopo desta sprint
+ * (definição/avaliação de função genérica, não logaritmo/exponencial) e
+ * continuam sem `mathLiveInsert`, escondidas por `structuredOnly` do mesmo
+ * jeito. Trigonometria/Geometria/Combinatória/Probabilidade/Símbolos
+ * continuam ocultas — voltam progressivamente nas próximas V3.0.x, sem
+ * precisar mudar este arquivo de novo (só ampliar esta lista).
  */
-const ENABLED_KEYBOARD_CATEGORIES = KEYBOARD_CATEGORIES.filter(
-  (category) => category.id === "basico" || category.id === "calculo" || category.id === "algebra"
+const ENABLED_KEYBOARD_CATEGORIES = KEYBOARD_CATEGORIES.filter((category) =>
+  ["basico", "calculo", "algebra", "funcoes"].includes(category.id)
 );
 
 /** Escapa `\`/`{`/`}` — o mínimo pra um texto cru não quebrar dentro de `\text{...}`. */

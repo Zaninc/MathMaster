@@ -147,6 +147,21 @@ export const QUICK_EXAMPLES: QuickExample[] = [
  * `previewLatex` real + o adapter + o backend real rodando — inversa/
  * transposta ficaram de fora da vitrine (o ticket só pediu sistema/
  * matriz/determinante), embora as teclas A⁻¹/Aᵀ continuem funcionando.
+ *
+ * Sprint V3.0.3 (Structured Logs & Exponentials) — 4 exemplos acrescentados
+ * (16 → 20): "ln(e)", "2^x=8", "ln(x)=2", "log₂(8)" (texto real:
+ * "log(8)/log(2)" — mesma composição de mudança de base que a tecla
+ * "logₐ" já usa, `previewLatex` real confirmado rendendo
+ * `\frac{\log(8)}{\log(2)}`, o adapter reconhece e o backend resolve "3").
+ * "eˣ"/"e^2" DELIBERADAMENTE fora da vitrine: `previewLatex` (mathjs, sem
+ * nenhum conhecimento do token semântico `\exponentialE` do MathLive)
+ * renderiza "e" solto como letra comum (`{ e}^{2}`), nunca como Euler —
+ * carregar esse texto no campo estruturado produziria `e²`/`e^x` (o MESMO
+ * "e" ambíguo, tratado como variável, que a tecla "eˣ" existe
+ * especificamente para evitar) — confirmado empiricamente contra
+ * `previewLatex` real antes de decidir não incluir. A exponencial de
+ * Euler só é alcançável estruturalmente pela tecla dedicada "eˣ" nesta
+ * sprint, nunca por um exemplo de texto carregado.
  */
 export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "x² - 4 = 0", expression: "x² - 4 = 0" },
@@ -165,6 +180,10 @@ export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "Sistema 3×3", expression: "x+y+z=6; 2x-y+z=3; x+2y-z=2" },
   { label: "[[1,2],[3,4]]", expression: "[[1,2],[3,4]]" },
   { label: "det([[1,2],[3,4]])", expression: "det([[1,2],[3,4]])" },
+  { label: "ln(e)", expression: "ln(e)" },
+  { label: "2^x=8", expression: "2^x=8" },
+  { label: "ln(x)=2", expression: "ln(x)=2" },
+  { label: "log₂(8)", expression: "log(8)/log(2)" },
 ];
 
 export interface QuickShortcut {

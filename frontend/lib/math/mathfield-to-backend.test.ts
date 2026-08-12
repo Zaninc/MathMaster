@@ -98,12 +98,14 @@ describe("mathFieldLatexToBackendExpression", () => {
     expect(mathFieldLatexToBackendExpression("\\sqrt{}")).toEqual({ ok: false, reason: "incomplete" });
   });
 
-  it("comando LaTeX fora do catálogo (ex. logaritmo) devolve reason=unsupported, nunca lança", () => {
+  it("comando LaTeX fora do catálogo (ex. binomial) devolve reason=unsupported, nunca lança", () => {
     // Integral/somatório SAÍRAM do catálogo "fora de escopo" na Sprint
     // V3.0.1 (Structured Calculus Input); sistema/matriz/determinante
-    // SAÍRAM do catálogo "fora de escopo" na Sprint V3.0.2 — ver describes
-    // dedicados abaixo. log/ln (categoria Funções) continuam fora.
-    expect(mathFieldLatexToBackendExpression("\\log(x)")).toEqual({
+    // SAÍRAM do catálogo "fora de escopo" na Sprint V3.0.2; log/ln/log de
+    // base/exponencial de Euler SAÍRAM do catálogo "fora de escopo" na
+    // Sprint V3.0.3 (Structured Logs & Exponentials) — ver describes
+    // dedicados abaixo. Combinatória (`\binom{}{}`) continua fora.
+    expect(mathFieldLatexToBackendExpression("\\binom{n}{k}")).toEqual({
       ok: false,
       reason: "unsupported",
     });
@@ -546,6 +548,139 @@ describe("mathFieldLatexToBackendExpression", () => {
       const latex = await previewLatex(text);
       expect(latex, text).not.toBeNull();
       expect(expr(latex!)).toBe(expected);
+    });
+  });
+
+  // --- Sprint V3.0.3 (Structured Logs & Exponentials) -----------------------
+  //
+  // Investigação obrigatória contra o backend real (`app.math_engine`, ver
+  // relatório da sprint) confirmou: `exp(x)` funciona em TODO contexto sem
+  // exceção (padrão, equação, cálculo, composto); `e**x`/`E**x` (símbolo
+  // solto, mesmo maiúsculo) FALHAM como equação ("só é possível resolver
+  // equações de uma única incógnita" — "e" vira uma segunda variável
+  // livre nesse caminho) — por isso a bridge SEMPRE canonicaliza pra
+  // `exp(...)`, nunca `e**...`/`E**...`. `log(x)` = base 10, `ln(x)` =
+  // natural (convenção OFICIAL de `log_convention.py`, o INVERSO do
+  // padrão nativo do SymPy). Log de base arbitrária NÃO tem sintaxe
+  // própria (`log(8,2)`/`log_2(8)`/`logb(8,2)` todos rejeitados,
+  // confirmado empiricamente) — a única forma que funciona é mudança de
+  // base `log(arg)/log(base)`, a MESMA composição que a tecla legada
+  // "logₐ" já usava antes desta sprint.
+  describe("Sprint V3.0.3 — Exponencial de Euler (\\exponentialE^{...})", () => {
+    it("e^x -> exp(x) — NUNCA e**x/E**x (Sprint P0 anterior: bare 'e' vira uma segunda variável livre em equações)", () => {
+      expect(expr("\\exponentialE^{x}")).toBe("exp(x)");
+    });
+
+    it("e^{x^2+1} -> exp(x²+1) — expoente composto, clicar eˣ e digitar x²+1 dentro", () => {
+      expect(expr("\\exponentialE^{x^2+1}")).toBe("exp(x²+1)");
+    });
+
+    it("\\exponentialE sozinho (sem ^, ex. placeholder do expoente apagado) -> E — a constante literal, nunca 'e' minúsculo", () => {
+      expect(expr("\\exponentialE")).toBe("E");
+    });
+
+    it("e^{\\placeholder{}} (tecla eˣ recém-clicada, expoente ainda vazio) -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\exponentialE^{\\placeholder{}}")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+
+    it("multiplicação implícita: 2e^x -> 2exp(x) (dígito precedente, já tokeniza sozinho); xe^x -> x*exp(x) (letra precedente, precisa de * explícito)", () => {
+      expect(expr("2\\exponentialE^{x}")).toBe("2exp(x)");
+      expect(expr("x\\exponentialE^{x}")).toBe("x*exp(x)");
+    });
+
+    it("regressão P0 crítica: x²eˣ e x²e² continuam DISTINTOS — nunca o mesmo payload por erro de cursor/adapter", () => {
+      const euler = expr("x^2\\exponentialE^{x}");
+      const literalTwo = expr("x^2\\exponentialE^{2}");
+      expect(euler).toBe("x²exp(x)");
+      expect(literalTwo).toBe("x²exp(2)");
+      expect(euler).not.toBe(literalTwo);
+    });
+
+    it("composição com ln: ln(e^x) -> ln(exp(x)); e^{ln(x)} -> exp(ln(x)) — argumento recursivo comum, nunca parser especial", () => {
+      expect(expr("\\ln\\left(\\exponentialE^{x}\\right)")).toBe("ln(exp(x))");
+      expect(expr("\\exponentialE^{\\ln\\left(x\\right)}")).toBe("exp(ln(x))");
+    });
+  });
+
+  describe("Sprint V3.0.3 — Logaritmo natural (\\ln) e de base 10 (\\log)", () => {
+    it("ln(x) -> ln(x); log(x) -> log(x) — a convenção OFICIAL do produto (log=base10, ln=natural) preservada literalmente na bridge", () => {
+      expect(expr("\\ln\\left(x\\right)")).toBe("ln(x)");
+      expect(expr("\\log\\left(x\\right)")).toBe("log(x)");
+    });
+
+    it("ln(\\placeholder{}) -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\ln\\left(\\placeholder{}\\right)")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+
+    it("multiplicação implícita: 3ln(x) -> 3ln(x) (dígito precedente); xln(x) -> x*ln(x) (letra precedente, precisa de * explícito)", () => {
+      expect(expr("3\\ln\\left(x\\right)")).toBe("3ln(x)");
+      expect(expr("x\\ln\\left(x\\right)")).toBe("x*ln(x)");
+    });
+
+    it("argumento composto passa pelo parser recursivo comum: ln(x²+1), ln((x+1)/x)", () => {
+      expect(expr("\\ln\\left(x^2+1\\right)")).toBe("ln(x²+1)");
+      expect(expr("\\ln\\left(\\frac{x+1}{x}\\right)")).toBe("ln((x+1)/x)");
+    });
+  });
+
+  describe("Sprint V3.0.3 — Logaritmo de base arbitrária (\\log_{base}(arg) -> log(arg)/log(base))", () => {
+    it("log_2(8) -> log(8)/log(2) — mudança de base, a MESMA sintaxe já aceita pelo backend (log(x,base) é rejeitado)", () => {
+      expect(expr("\\log_{2}\\left(8\\right)")).toBe("log(8)/log(2)");
+    });
+
+    it("MathLive colapsa subscrito de um dígito só sem chaves (\\log_2, não \\log_{2}) — a bridge reconhece as duas formas", () => {
+      expect(expr("\\log_2\\left(8\\right)")).toBe(expr("\\log_{2}\\left(8\\right)"));
+    });
+
+    it("base composta usa chaves: log_{x+1}(8) -> log(8)/log(x+1)", () => {
+      expect(expr("\\log_{x+1}\\left(8\\right)")).toBe("log(8)/log(x+1)");
+    });
+
+    it("argumento composto: log_2(x²+1) -> log(x²+1)/log(2)", () => {
+      expect(expr("\\log_{2}\\left(x^2+1\\right)")).toBe("log(x²+1)/log(2)");
+    });
+
+    it("base vazia -> incomplete; argumento vazio -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\log_{\\placeholder{}}\\left(8\\right)")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+      expect(mathFieldLatexToBackendExpression("\\log_{2}\\left(\\placeholder{}\\right)")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+  });
+
+  describe("Sprint V3.0.3 — integração real: previewLatex(texto) -> adapter aceita, pros exemplos rápidos de Funções", () => {
+    it.each([
+      ["ln(e)", "ln(e)"],
+      ["2^x=8", "2^x=8"],
+      ["ln(x)=2", "ln(x)=2"],
+      ["log(8)/log(2)", "(log(8))/(log(2))"],
+    ])("%s -> previewLatex -> adapter -> %s", async (text, expected) => {
+      const latex = await previewLatex(text);
+      expect(latex, text).not.toBeNull();
+      expect(expr(latex!)).toBe(expected);
+    });
+
+    // Achado real (Sprint V3.0.3): `previewLatex` (mathjs, sem nenhum
+    // conhecimento do token semântico `\exponentialE` do MathLive)
+    // renderiza "e" solto como letra comum — NUNCA como Euler. Documentado
+    // aqui como teste, não só comentário: prova que a exponencial de Euler
+    // só é alcançável estruturalmente pela tecla dedicada "eˣ", nunca por
+    // texto carregado via `previewLatex` — por isso "e^2"/"exp(x)" NUNCA
+    // entram na vitrine de exemplos rápidos (ver `data/examples.ts`).
+    it("previewLatex('e^2') NUNCA produz \\exponentialE — limitação conhecida, documentada, não um bug desta sprint", async () => {
+      const latex = await previewLatex("e^2");
+      expect(latex).not.toBeNull();
+      expect(latex).not.toContain("\\exponentialE");
     });
   });
 

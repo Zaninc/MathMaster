@@ -140,10 +140,11 @@ describe("CalculatorWorkspace", () => {
 
     const { container } = render(<CalculatorWorkspace />);
     const field = await getField(container);
-    // Logaritmo — integral/limite/derivada/somatório (V3.0.1) e sistema/
-    // matriz/determinante (V3.0.2) passaram a ser suportados; log/ln
-    // (categoria Funções) continuam fora do catálogo.
-    setFieldLatex(field, "\\log(x)");
+    // Binomial (combinatória) — integral/limite/derivada/somatório
+    // (V3.0.1), sistema/matriz/determinante (V3.0.2) e log/ln/logₐ/eˣ
+    // (V3.0.3, categoria Funções) passaram a ser suportados; combinatória
+    // continua fora do catálogo.
+    setFieldLatex(field, "\\binom{n}{k}");
 
     fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
 
@@ -235,16 +236,27 @@ describe("CalculatorWorkspace", () => {
     });
   });
 
-  it("teclado mostra Básico, Cálculo e Álgebra nesta página (Funções/Trigonometria/Geometria/Combinatória/Probabilidade/Símbolos ficam fora até serem migradas)", async () => {
+  it("teclado mostra Básico, Cálculo, Álgebra e Funções nesta página (Trigonometria/Geometria/Combinatória/Probabilidade/Símbolos ficam fora até serem migradas)", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     render(<CalculatorWorkspace />);
 
-    expect(screen.getAllByRole("tab")).toHaveLength(3);
+    expect(screen.getAllByRole("tab")).toHaveLength(4);
     expect(screen.getByRole("tab", { name: "Básico" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Cálculo" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Álgebra" })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Funções" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Funções" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Símbolos" })).not.toBeInTheDocument();
+  });
+
+  it("aba Funções (structuredOnly) esconde f(x)=/f( ) fora de escopo (sem mathLiveInsert)", async () => {
+    vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+    render(<CalculatorWorkspace />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Funções" }));
+    expect(screen.queryByRole("button", { name: "Inserir definição de função" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Inserir avaliação de função" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Inserir logaritmo natural" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Inserir exponencial de base e" })).toBeInTheDocument();
   });
 
   it("aba Álgebra (structuredOnly) esconde as teclas de polinômio fora de escopo (sem mathLiveInsert)", async () => {
@@ -669,7 +681,7 @@ describe("CalculatorWorkspace", () => {
     await waitFor(() => expect(field.value).toBe(expectedLatex));
   });
 
-  it("todos os exemplos (V3.0 + Cálculo da V3.0.1 + Álgebra da V3.0.2) aparecem como botões", async () => {
+  it("todos os exemplos (V3.0 + Cálculo da V3.0.1 + Álgebra da V3.0.2 + Funções da V3.0.3) aparecem como botões", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     render(<CalculatorWorkspace />);
 
@@ -690,6 +702,10 @@ describe("CalculatorWorkspace", () => {
       "Sistema 3×3",
       "[[1,2],[3,4]]",
       "det([[1,2],[3,4]])",
+      "ln(e)",
+      "2^x=8",
+      "ln(x)=2",
+      "log₂(8)",
     ]) {
       expect(screen.getByRole("button", { name: `Preencher exemplo: ${label}` })).toBeInTheDocument();
     }

@@ -660,6 +660,50 @@ describe("StructuredMathInput", () => {
     expect(field.lastExecutedCommand).toBeNull();
   });
 
+  // Hotfix P0 (4ª rodada — achado no navegador real, Sprint V3.0.3): a
+  // versão booleana original disparava `moveToNextChar` já no PRIMEIRO
+  // caractere digitado — inaceitável pra "eˣ" (`\exponentialE^{...}`),
+  // cujo expoente TIPICAMENTE começa com uma LETRA ("x" de eˣ), nunca um
+  // dígito: clicar "eˣ" e digitar "x" imediatamente jogava o "x" pra FORA
+  // do expoente. A versão corrigida (3 estados: "off"/"empty"/"digits")
+  // NUNCA aciona saída no primeiro caractere, seja ele dígito ou letra.
+  it("primeiro caractere de um expoente fresco (letra) insere normalmente — nunca aciona saída (achado real: bug do 'eˣ')", async () => {
+    const { api, field } = await buildFreshExponentField();
+    api.insert("\\exponentialE^{\\placeholder{}}"); // clique na tecla "eˣ"
+    field.lastOffset = 4;
+    field.position = 3; // placeholder do expoente, ainda vazio
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "x", bubbles: true, cancelable: true }));
+
+    expect(field.lastExecutedCommand).toBeNull();
+  });
+
+  it("depois do primeiro caractere ser letra, o expoente já não é mais 'fresco' — segunda letra também nunca aciona saída", async () => {
+    const { api, field } = await buildFreshExponentField();
+    api.insert("\\exponentialE^{\\placeholder{}}");
+    field.lastOffset = 4;
+    field.position = 3;
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "x", bubbles: true, cancelable: true }));
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "y", bubbles: true, cancelable: true }));
+
+    expect(field.lastExecutedCommand).toBeNull();
+  });
+
+  it("primeiro caractere dígito continua funcionando como antes (x^{\\placeholder{}} -> dígito -> letra aciona saída)", async () => {
+    const { api, field } = await buildFreshExponentField();
+    api.insert("^{\\placeholder{}}");
+    field.lastOffset = 4;
+    field.mockBounds = new Map([[3, { latex: "2", depth: 1, bounds: { x: 10, y: 10, width: 5, height: 10 } }]]);
+    field.position = 3;
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "2", bubbles: true, cancelable: true }));
+    expect(field.lastExecutedCommand).toBeNull();
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "e", bubbles: true, cancelable: true }));
+    expect(field.lastExecutedCommand).toBe("moveToNextChar");
+  });
+
   it("dígito seguido de operador (+) também aciona a saída (regra estrutural, não amarrada a letras)", async () => {
     const { api, field } = await buildFreshExponentField();
     api.insert("^{\\placeholder{}}");

@@ -354,17 +354,60 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
     // (e**x não é exponencial), confirmado empiricamente em 2026-07-18.
     // Os rótulos usam Unicode tipográfico (ₐ/ˣ) só no visual do botão; o
     // texto inserido é sempre ASCII que o parser aceita.
+    //
+    // Sprint V3.0.3 (Structured Logs & Exponentials) — as 4 teclas ganham
+    // `mathLiveInsert` (estruturas reais do MathLive, com `\placeholder{}`
+    // nos slots editáveis) e a categoria volta a aparecer na Calculadora,
+    // ao lado de Básico/Álgebra/Cálculo. "f(x)="/"f( )" permanecem sem
+    // `mathLiveInsert` (fora de escopo desta sprint — definição/avaliação
+    // de função genérica, não logaritmo/exponencial) — `structuredOnly`
+    // já as esconde automaticamente, mesmo padrão de migração incremental
+    // já usado em Cálculo/Álgebra.
+    //
+    // "eˣ" insere `\exponentialE^{\placeholder{}}` — `\exponentialE` é o
+    // token NATIVO do MathLive pra constante de Euler (glifo ℯ, U+2147),
+    // visualmente quase idêntico a um "e" comum mas semanticamente
+    // DISTINTO — nunca confundido pelo parser com a letra "e" digitada à
+    // mão (que continua uma variável genérica qualquer, convenção
+    // inalterada). A bridge (`mathfield-to-backend.ts`) canonicaliza
+    // SEMPRE para `exp(...)` — nunca `e**...`/`E**...` — confirmado
+    // empiricamente contra o backend real que só essa forma funciona em
+    // TODO contexto sem exceção, inclusive equações (`exp(x)=5` resolve;
+    // `e**x=5` falha, "e" vira uma segunda variável livre nesse caminho).
+    //
+    // "logₐ" insere `\log_{\placeholder{}}\left(\placeholder{}\right)` —
+    // slots base/argumento, nessa ordem (primeiro slot = base, pedido
+    // explícito do ticket). A bridge reconhece tanto `\log_{2}` (base
+    // composta, com chaves) quanto `\log_2` (MathLive colapsa
+    // automaticamente o subscrito de UM dígito só, confirmado no
+    // navegador real) e gera a MESMA composição de mudança de base já
+    // usada pela versão legada da tecla — nenhuma sintaxe nova inventada.
     keys: [
       { label: "f(x) =", insert: "f(x) = ", cursorOffset: 7, ariaLabel: "Inserir definição de função" },
       { label: "f( )", insert: "f()", cursorOffset: 2, ariaLabel: "Inserir avaliação de função" },
-      { label: "log", insert: "log()", cursorOffset: 4, ariaLabel: "Inserir logaritmo de base 10", latex: "\\log" },
-      { label: "ln", insert: "ln()", cursorOffset: 3, ariaLabel: "Inserir logaritmo natural", latex: "\\ln" },
+      {
+        label: "log",
+        insert: "log()",
+        cursorOffset: 4,
+        ariaLabel: "Inserir logaritmo de base 10",
+        latex: "\\log",
+        mathLiveInsert: "\\log\\left(\\placeholder{}\\right)",
+      },
+      {
+        label: "ln",
+        insert: "ln()",
+        cursorOffset: 3,
+        ariaLabel: "Inserir logaritmo natural",
+        latex: "\\ln",
+        mathLiveInsert: "\\ln\\left(\\placeholder{}\\right)",
+      },
       {
         label: "logₐ",
         insert: "log()/log()",
         cursorOffset: 4,
         ariaLabel: "Inserir logaritmo de base arbitrária (mudança de base: log do argumento dividido por log da base)",
         latex: "\\log_a",
+        mathLiveInsert: "\\log_{\\placeholder{}}\\left(\\placeholder{}\\right)",
       },
       {
         label: "eˣ",
@@ -375,6 +418,7 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
         cursorOffset: 3,
         ariaLabel: "Inserir exponencial de base e",
         latex: "e^x",
+        mathLiveInsert: "\\exponentialE^{\\placeholder{}}",
       },
     ],
   },

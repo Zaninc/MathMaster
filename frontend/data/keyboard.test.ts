@@ -468,9 +468,9 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(key!.ariaLabel).toBeDefined();
   });
 
-  it("teclas fora de Básico/Cálculo/Álgebra ainda não têm mathLiveInsert (fora de escopo até serem migradas)", () => {
+  it("teclas fora de Básico/Cálculo/Álgebra/Funções ainda não têm mathLiveInsert (fora de escopo até serem migradas)", () => {
     for (const category of KEYBOARD_CATEGORIES) {
-      if (category.id === "basico" || category.id === "calculo" || category.id === "algebra") continue;
+      if (["basico", "calculo", "algebra", "funcoes"].includes(category.id)) continue;
       for (const key of category.keys) {
         expect(key.mathLiveInsert, `${category.id}/${key.label}`).toBeUndefined();
       }
@@ -578,5 +578,26 @@ describe("KEYBOARD_CATEGORIES", () => {
     const simbolos = KEYBOARD_CATEGORIES.find((category) => category.id === "simbolos");
     expect(calculo?.keys.find((key) => key.label === "Σ")?.mathLiveInsert).toBeDefined();
     expect(simbolos?.keys.find((key) => key.label === "Σ")?.mathLiveInsert).toBeUndefined();
+  });
+
+  // --- Sprint V3.0.3 (Structured Logs & Exponentials) ----------------------
+
+  it("dentro de Funções, só as 4 teclas migradas (log, ln, logₐ, eˣ) têm mathLiveInsert — f(x)=/f( ) continuam fora de escopo", () => {
+    const funcoes = KEYBOARD_CATEGORIES.find((category) => category.id === "funcoes");
+    const migrated = new Set(["log", "ln", "logₐ", "eˣ"]);
+    const withMathLiveInsert = new Set(
+      (funcoes?.keys ?? []).filter((key) => key.mathLiveInsert !== undefined).map((key) => key.label)
+    );
+    expect(withMathLiveInsert).toEqual(migrated);
+  });
+
+  it("as 4 teclas migradas de Funções usam os templates LaTeX reais confirmados contra o backend", () => {
+    const funcoes = KEYBOARD_CATEGORIES.find((category) => category.id === "funcoes");
+    const byLabel = new Map(funcoes?.keys.map((key) => [key.label, key]));
+
+    expect(byLabel.get("log")?.mathLiveInsert).toBe("\\log\\left(\\placeholder{}\\right)");
+    expect(byLabel.get("ln")?.mathLiveInsert).toBe("\\ln\\left(\\placeholder{}\\right)");
+    expect(byLabel.get("logₐ")?.mathLiveInsert).toBe("\\log_{\\placeholder{}}\\left(\\placeholder{}\\right)");
+    expect(byLabel.get("eˣ")?.mathLiveInsert).toBe("\\exponentialE^{\\placeholder{}}");
   });
 });

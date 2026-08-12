@@ -639,29 +639,47 @@ class LatexParser {
       }
       // Multiplicação implícita: outro fator começa direto (número,
       // variável, `(`, `{...}` — mathjs envolve variáveis/bases em chaves
-      // transparentes, ex. "6~{x}^{2}" para "6x²" — `\frac`, `\sqrt`,
-      // `\pi`, uma função mínima `\sin`/`\cos`/`\tan` — Sprint V3.0.1,
-      // necessário pra "x² sin(x)" — ou um ambiente de matriz — Sprint
-      // V3.0.2, necessário pra "2A") sem operador entre eles.
+      // transparentes, ex. "6~{x}^{2}" para "6x²" — `\frac`, `\sqrt`, `\pi`
+      // — ou um ambiente de matriz — Sprint V3.0.2, necessário pra "2A")
+      // sem operador entre eles.
       //
-      // Matriz é uma EXCEÇÃO: diferente do parser geral (que aceita
-      // `2x` sem "*" via `implicit_multiplication_application`),
-      // `matrix/parsing.py:_parse_term` do backend só reconhece "*"
-      // EXPLÍCITO — confirmado contra o backend real: "2[[1,2],[3,4]]"
-      // (sem "*") é REJEITADO, "2*[[1,2],[3,4]]" funciona. Por isso
-      // matriz sempre entra com "*" explícito aqui, mesmo quando o
-      // usuário digitou/inseriu sem operador — as outras formas
-      // continuam concatenando sem operador, como sempre.
+      // Matriz SEMPRE entra com "*" EXPLÍCITO, mesmo sem o usuário ter
+      // digitado um operador: `matrix/parsing.py:_parse_term` só reconhece
+      // "*" explícito (`2[[1,2],[3,4]]` é REJEITADO, `2*[[1,2],[3,4]]`
+      // funciona), confirmado contra o backend real.
+      //
+      // Nome de FUNÇÃO (`\sin`/`\cos`/`\tan`/`\ln`/`\log`/`\exponentialE`)
+      // só precisa de "*" explícito quando o fator ANTERIOR termina em
+      // LETRA (`x`, `π`... — não dígito nem "²"/"³" superescrito unicode):
+      // a camada de segurança do parser
+      // (`safe_parsing.py:_reject_ambiguous_identifiers`) já separa
+      // corretamente "2sin(x)"/"x²sin(x)" (dígito ou superescrito colado —
+      // o identificador regex nunca começa num dígito, então "sin" sempre
+      // tokeniza sozinho) — mas "xsin(x)"/"xexp(x)"/"xln(x)" (LETRA colada
+      // direto num nome de função) formam UM identificador de várias
+      // letras só, REJEITADO como nome desconhecido antes mesmo do SymPy
+      // tentar separar. Confirmado empiricamente contra o backend real
+      // (Sprint V3.0.3, achado ao testar "xe^x"/"x\ln(x)" do ticket — o
+      // mesmo bug latente já existia pra sin/cos/tan, nunca testado antes
+      // por não ter tecla nenhuma ligada a eles ainda). Restrito a "letra
+      // precedente" — nunca incondicional — pra não regredir
+      // `x² sin(x) -> x²sin(x)` (já testado, já funciona sem "*").
       const next = this.peek();
       const matrixEnvironment = ["\\begin{bmatrix}", "\\begin{pmatrix}", "\\begin{matrix}", "\\begin{vmatrix}"].find(
         (token) => this.src.startsWith(token, this.pos)
       );
+      const functionName = ["\\sin", "\\cos", "\\tan", "\\ln", "\\log", "\\exponentialE"].find((token) =>
+        this.src.startsWith(token, this.pos)
+      );
+      const precedingIsLetter = /[a-zA-Z]/.test(result[result.length - 1] ?? "");
+      const needsExplicitOperator = matrixEnvironment !== undefined || (functionName !== undefined && precedingIsLetter);
       const startsFactor =
         matrixEnvironment !== undefined ||
+        functionName !== undefined ||
         /[0-9a-zA-Z({]/.test(next) ||
-        ["\\frac", "\\sqrt", "\\pi", "\\sin", "\\cos", "\\tan"].some((token) => this.src.startsWith(token, this.pos));
+        ["\\frac", "\\sqrt", "\\pi"].some((token) => this.src.startsWith(token, this.pos));
       if (!startsFactor) break;
-      result += matrixEnvironment !== undefined ? `*${this.parseFactor()}` : this.parseFactor();
+      result += needsExplicitOperator ? `*${this.parseFactor()}` : this.parseFactor();
     }
     return result;
   }
@@ -808,6 +826,42 @@ class LatexParser {
       }
     }
 
+    // --- Sprint V3.0.3 (Structured Logs & Exponentials) --------------------
+    //
+    // Convenção OFICIAL e PERMANENTE do backend (`log_convention.py`,
+    // compartilhada por `logarithms/` e `functions/`): `log(x)` = base 10,
+    // `ln(x)` = natural — o INVERSO do padrão nativo do SymPy (`log` bare =
+    // natural). Confirmado empiricamente contra o dispatcher real antes de
+    // escrever isto (nunca assumido): `solve_expression("log(x)")` devolve
+    // `ln(x)/ln(10)`, `solve_expression("log(x)=2")` devolve `x = 100`.
+    if (this.consume("\\ln")) {
+      const arg = this.parseParenthesizedOrAtom();
+      return `ln(${arg})`;
+    }
+
+    if (this.consume("\\log")) {
+      // Logaritmo de base arbitrária NÃO tem sintaxe própria no backend —
+      // confirmado empiricamente: `log(8,2)`, `log_2(8)` e `logb(8,2)` são
+      // todos rejeitados ("não foi possível interpretar a expressão"), a
+      // lambda de `log_convention.py:LOCAL_DICT["log"]` só aceita 1
+      // argumento. A mudança de base `log(arg)/log(base)` já é o caminho
+      // OFICIAL e testado do produto (mesma composição que a tecla legada
+      // "logₐ" — `data/keyboard.ts`, categoria Funções — já usa desde
+      // antes desta sprint) — nunca uma segunda sintaxe inventada aqui.
+      // MathLive pode emitir o subscrito COM chaves (`\log_{2}`, base
+      // composta) ou SEM (`\log_2`, colapsado automaticamente pra um
+      // dígito só, confirmado no navegador real) — `readGroup()`/
+      // `parseAtom()` já cobrem as duas formas, mesmo padrão usado pelos
+      // limites de `\int`/`\sum` acima.
+      if (this.consume("_")) {
+        const base = this.peek() === "{" ? this.readGroup() : this.parseAtom();
+        const arg = this.parseParenthesizedOrAtom();
+        return `log(${arg})/log(${base})`;
+      }
+      const arg = this.parseParenthesizedOrAtom();
+      return `log(${arg})`;
+    }
+
     // --- Sprint V3.0.2 (Structured Algebra Input) --------------------------
 
     if (this.consume("\\begin{cases}")) {
@@ -872,6 +926,34 @@ class LatexParser {
     }
 
     if (this.consume("\\pi")) return "π";
+
+    // Sprint V3.0.3 — `\exponentialE` é o token NATIVO do MathLive pra
+    // "constante de Euler" (distinto de um "e" digitado à mão, que o
+    // parser abaixo trata como QUALQUER outra letra solta — variável
+    // genérica, nunca Euler; convenção antiga e deliberada do produto,
+    // documentada em `data/keyboard.ts`, nunca alterada por esta sprint).
+    // A tecla estruturada "eˣ" insere exatamente
+    // `\exponentialE^{\placeholder{}}` — o `^` é consumido AQUI DENTRO
+    // (nunca deixado pra `parseFactor()`/`applyPower()` genérico) porque
+    // o alvo tem que ser sempre `exp(...)`, nunca `e**...`: confirmado
+    // empiricamente contra o backend real que só `exp(...)` (ou a
+    // constante maiúscula `E`, mas nunca a letra minúscula solta "e")
+    // funciona em TODO contexto sem exceção — inclusive equações
+    // (`exp(x)=5` resolve, `e**x=5`/`E**x=5` falham com "só é possível
+    // resolver equações de uma única incógnita", porque "e" vira uma
+    // SEGUNDA variável livre nesse caminho específico do dispatcher).
+    // `\exponentialE` sozinho, sem `^` (ex. placeholder do expoente
+    // apagado depois) devolve "E" — a constante literal maiúscula do
+    // SymPy, testada e funcional em todo contexto ISOLADO (`ln(E)`,
+    // `E` sozinho), a mesma prudência de nunca devolver "e" minúsculo.
+    if (this.consume("\\exponentialE")) {
+      this.skipSpace();
+      if (this.consume("^")) {
+        const exponent = this.peek() === "{" ? this.readGroup() : this.parseAtom();
+        return `exp(${exponent})`;
+      }
+      return "E";
+    }
 
     if (this.consume("(")) {
       const inner = this.parseExpression();
