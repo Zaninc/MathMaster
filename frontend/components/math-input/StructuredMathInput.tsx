@@ -15,78 +15,84 @@ export interface StructuredMathInputApi {
 
 const VIRTUAL_KEYBOARD_STYLE_ID = "structured-math-input-hide-virtual-keyboard-toggle";
 
-interface OffsetPoint {
-  x: number;
-  y: number;
-}
+/**
+ * Hotfix P0 (3ª rodada — nesting de expoente confirmado) — LaTeX EXATO
+ * inserido pela tecla "xⁿ" (`data/keyboard.ts`) — o único botão do
+ * catálogo cujo `mathLiveInsert` é um placeholder de SUPERSCRIPT sozinho
+ * (nunca embutido num template maior, ex. os limites de uma integral
+ * definida ou de um somatório, que também usam `^{...}` mas nunca como a
+ * string inteira). Usado como assinatura estrutural pra saber quando um
+ * novo expoente "fresco" acabou de ser criado — nunca amarrado a "e" ou
+ * a qualquer caractere específico.
+ */
+const SIMPLE_EXPONENT_PLACEHOLDER_TEMPLATE = "^{\\placeholder{}}";
+
+/** Dígito ou ponto decimal — o único conteúdo que continua ACUMULANDO
+ * dentro de um expoente "fresco" sem forçar saída (permite `x^23`). */
+const CONTINUES_SIMPLE_EXPONENT = /^[0-9.]$/;
 
 /**
- * Hotfix — Cursor e navegação estrutural: acha o "ponto-cursor" visual de
- * um offset — o ponto onde a linha do cursor apareceria se `field.position`
- * fosse esse offset. Investigação real no navegador (`getElementInfo`)
- * confirmou 2 formas: se o offset tem `bounds` e representa um átomo real
- * (`latex` não vazio), o ponto fica logo à DIREITA desse átomo (fim do que
- * já foi digitado); se `bounds` existe mas é um marcador vazio (`latex`
- * vazio, ex. começo de uma célula), o ponto é o próprio `bounds.x/y`. A
- * lacuna real: um offset de FIM-DE-GRUPO (ex. logo depois de todo um "x²"
- * dentro de `cases`/matriz) frequentemente tem `bounds: null` — sem
- * nenhuma hitbox própria — então herda recursivamente o ponto do offset
- * ANTERIOR (o último átomo real dentro do grupo). Sem essa herança, um
- * clique no espaço vazio à direita de "x²" nunca considera esse offset
- * como candidato, e cai só nos offsets REAIS mais próximos — que ficam
- * DENTRO do expoente, nunca no fim da linha (o bug relatado, confirmado
- * com clique genuíno: `\begin{cases}x^2\\ \placeholder{}\end{cases}`,
- * clique à direita de "x²" pousa no offset 4 — dentro do "2" — em vez do
- * offset 5, o fim de "x²").
+ * Hotfix P0 (2ª rodada — dump real do usuário) — abandona a heurística
+ * caseira de "ponto-cursor por offset + distância euclidiana"
+ * (`cursorPointForOffset`/`computeBestOffset`/`clampedRightEdgeDistanceSquared`,
+ * removidas nesta revisão — 2 regressões reais nesta mesma hotfix) em
+ * favor da API PÚBLICA e NATIVA do MathLive pra hit-testing:
+ * `field.getOffsetFromPoint(x, y)` ("The offset closest to the location
+ * (x,y) in viewport coordinate" — `mathlive/types/mathfield-element.d.ts`).
+ * Ticket pediu explicitamente "investigar se existe API do MathLive pra
+ * coordenada→posição, em vez de confiar só no comportamento interno do
+ * clique" — investigação (`getOffsetFromPoint` chamada diretamente, fora
+ * do handler automático do MathLive) confirmou que ela é MUITO mais
+ * confiável que deixar o clique cru resolver sozinho (esse sim confirmado
+ * errático num round anterior desta mesma sessão: mesmo campo `x^2`,
+ * pontos a poucos pixels um do outro, resultado ora certo ora não).
+ *
+ * MAS: `getOffsetFromPoint` sozinha ainda devolve o último átomo REAL
+ * (com `bounds` própria) mais próximo — nunca o marcador de SAÍDA de um
+ * grupo (`bounds` indefinida, ex. offset logo depois de "x²" que
+ * representa "nível pai, depois da potência inteira"), porque esse
+ * marcador não tem hitbox própria pra competir. Confirmado no navegador
+ * real: em `x^2+3`, clicar no ESPAÇO VAZIO entre o "2" (bounds terminam
+ * em x≈70) e o "+" (começa em x≈76) — ex. x=72 — `getOffsetFromPoint`
+ * devolve o offset do PRÓPRIO "2" (dentro do expoente), não o offset
+ * seguinte (nível pai, depois da potência) que é visualmente idêntico
+ * mas semanticamente o que o usuário quer ao clicar à direita de uma
+ * estrutura já fechada. `preferGroupExitBeyondContent` (abaixo) cobre
+ * exatamente essa lacuna, de forma estrutural (nunca um offset fixo):
+ * só quando o clique cai VISUALMENTE à direita da bounding box própria
+ * do átomo que a API devolveu, E o offset seguinte é um marcador de
+ * saída (sem bounds própria) de profundidade MENOR (nível pai) — nunca
+ * se o clique ainda está dentro da bounding box do átomo (cobre "clique
+ * sobre o expoente"/"dentro do expoente" do item 5 do ticket) e nunca se
+ * o próximo offset não for genuinamente uma saída de grupo mais rasa.
+ * Cobre potência/fração/raiz/argumento de função/integral/limite/matriz
+ * igualmente, já que a checagem é só depth+bounds, nunca amarrada a um
+ * tipo de estrutura específico.
  */
-function cursorPointForOffset(
-  field: MathfieldElement,
-  offset: number,
-  memo: Map<number, OffsetPoint | null>
-): OffsetPoint | null {
-  if (memo.has(offset)) return memo.get(offset) ?? null;
+function preferGroupExitBeyondContent(field: MathfieldElement, offset: number, x: number): number {
   const info = field.getElementInfo(offset);
   const bounds = info?.bounds;
-  let point: OffsetPoint | null = null;
-  if (bounds) {
-    point =
-      info?.latex && bounds.width >= 0
-        ? { x: bounds.x + bounds.width, y: bounds.y + bounds.height / 2 }
-        : { x: bounds.x, y: bounds.y + bounds.height / 2 };
-  } else if (offset > 0) {
-    point = cursorPointForOffset(field, offset - 1, memo);
+  // Sem bounds própria (já é um marcador, ex. começo de célula vazia) ou
+  // o clique ainda cai dentro/antes da própria bounding box do átomo —
+  // nada a corrigir, a resposta da API já é a correta.
+  if (!bounds || bounds.width < 0 || x <= bounds.x + bounds.width) return offset;
+  const next = offset + 1;
+  if (next > field.lastOffset) return offset;
+  const nextInfo = field.getElementInfo(next);
+  const nextDepth = nextInfo?.depth ?? 0;
+  const currentDepth = info?.depth ?? 0;
+  if (nextInfo && !nextInfo.bounds && nextDepth < currentDepth) {
+    return next;
   }
-  memo.set(offset, point);
-  return point;
+  return offset;
 }
 
-/**
- * Hotfix — Cursor e navegação estrutural: escolhe, entre TODOS os offsets
- * do campo (0..`lastOffset`), o mais próximo do ponto clicado — usando o
- * ponto-cursor de `cursorPointForOffset` (que já inclui os offsets de
- * fim-de-grupo sem `bounds` próprio, via herança). Em caso de empate
- * (mesma distância — sempre acontece entre "dentro do grupo" e "fim do
- * grupo", já que o segundo herda o ponto do primeiro), o offset MAIOR
- * vence (`<=`, não `<`) — ou seja, o fim-de-grupo, nunca o interior —
- * confirmado no navegador real que essa é a interpretação que o usuário
- * espera ao clicar depois de uma expressão já completa.
- */
-function computeBestOffset(field: MathfieldElement, x: number, y: number): number | null {
-  const memo = new Map<number, OffsetPoint | null>();
-  let best: number | null = null;
-  let bestDistance = Infinity;
-  for (let offset = 0; offset <= field.lastOffset; offset++) {
-    const point = cursorPointForOffset(field, offset, memo);
-    if (!point) continue;
-    const dx = point.x - x;
-    const dy = point.y - y;
-    const distance = dx * dx + dy * dy;
-    if (distance <= bestDistance) {
-      bestDistance = distance;
-      best = offset;
-    }
+function resolveClickOffset(field: MathfieldElement, x: number, y: number): number | null {
+  const offset = field.getOffsetFromPoint(x, y);
+  if (typeof offset !== "number" || !Number.isFinite(offset) || offset < 0 || offset > field.lastOffset) {
+    return null;
   }
-  return best;
+  return preferGroupExitBeyondContent(field, offset, x);
 }
 
 /**
@@ -197,6 +203,17 @@ export function StructuredMathInput({
     field.style.fontSize = "1.125rem";
     field.style.padding = "0";
 
+    // Hotfix P0 (3ª rodada — nesting de expoente confirmado no navegador
+    // real): `true` só entre o momento em que a tecla "xⁿ" cria um
+    // expoente placeholder FRESCO e o primeiro caractere NÃO-dígito
+    // digitado depois — ver `handleKeyDown` (consome/decide) e
+    // `api.insert()` (liga) abaixo. Qualquer clique (`handleFieldClick`)
+    // ou tecla de controle/navegação (Backspace, setas, Tab...) desliga
+    // sem forçar saída — só um caractere imprimível não-dígito, digitado
+    // logo em seguida sem nenhuma navegação explícita no meio, aciona a
+    // saída automática (ver docstring completa em `handleKeyDown`).
+    let freshExponentPlaceholder = false;
+
     // Hotfix V3.0.2a — a barra de espaço, dentro do MathLive, faz o
     // cursor "pular" pra fora do `\begin{cases|bmatrix|pmatrix|matrix|
     // vmatrix}` INTEIRO em vez de só sair do nível mais interno (bug real
@@ -264,6 +281,60 @@ export function StructuredMathInput({
     // `false`), o Tab NÃO é interceptado — sai do campo normalmente
     // (acessibilidade padrão preservada).
     function handleKeyDown(event: KeyboardEvent) {
+      // Hotfix P0 (3ª rodada — nesting de expoente confirmado no
+      // navegador real): complementa o `smartSuperscript` do MathLive
+      // (que só cobre DÍGITO sozinho — confirmado lendo o código-fonte
+      // da própria biblioteca, `atom.parentBranch === "superscript" &&
+      // /\d/.test(c)` — nunca letras) sem tocar em `node_modules`. Regra
+      // 100% estrutural (nunca amarrada a "e" ou a qualquer caractere
+      // específico): enquanto `freshExponentPlaceholder` estiver ligado
+      // (só liga em `api.insert()` quando o LaTeX inserido é EXATAMENTE
+      // o template da tecla "xⁿ" — `SIMPLE_EXPONENT_PLACEHOLDER_TEMPLATE`
+      // — nunca fração/raiz/integral/matriz, cujos templates nunca batem
+      // essa string exata), o PRIMEIRO caractere imprimível digitado que
+      // NÃO seja dígito/ponto decimal aciona `moveToNextChar` ANTES de
+      // deixar o MathLive inserir esse caractere — fazendo `x²` seguido
+      // de "e"/"y"/"+"/"(" etc. produzir `x²e`/`x²y`/`x²+`/`x²(` (nível
+      // pai) em vez de `x^(2e)`/`x^(2y)`/... (aninhado). Dígitos/ponto
+      // NUNCA disparam a saída (mantém `freshExponentPlaceholder`
+      // ligado) — preserva `x^23` quando o usuário genuinamente quer um
+      // expoente de vários dígitos.
+      //
+      // Desligamento sem forçar saída: qualquer tecla de
+      // controle/navegação (Backspace, Delete, setas, Escape,
+      // Shift/Ctrl/Alt/Meta sozinhas, Tab, Enter, Espaço) só desliga a
+      // flag — nunca chama `moveToNextChar` — porque essas são
+      // justamente as ações que já representam uma decisão EXPLÍCITA do
+      // usuário sobre onde o cursor deve estar (ex. Backspace pra apagar
+      // o dígito, seta pra navegar manualmente); forçar uma saída por
+      // cima delas seria o mesmo tipo de "correção que atropela a
+      // intenção do usuário" que este hotfix inteiro existe pra
+      // eliminar. `handleFieldClick` (abaixo) desliga a flag do mesmo
+      // jeito pro caso de clique manual dentro do expoente — exatamente
+      // o "clicar manualmente no expoente e digitar e → x^(2e)" pedido
+      // explicitamente: depois de um clique a flag nunca mais liga
+      // sozinha, então o próximo caractere fica DENTRO, como esperado.
+      if (freshExponentPlaceholder) {
+        // Espaço fica de fora deliberadamente (tratado por completo à
+        // parte, mais abaixo, como no-op — Hotfix V3.0.2a): não muda
+        // esse comportamento já validado, só desliga a flag como
+        // qualquer outra tecla de controle.
+        const isPlainCharacterKey =
+          event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey && !event.altKey;
+        if (isPlainCharacterKey) {
+          if (!CONTINUES_SIMPLE_EXPONENT.test(event.key)) {
+            const info = field.getElementInfo(field.position);
+            if ((info?.depth ?? 0) > 0) {
+              field.executeCommand("moveToNextChar");
+            }
+            freshExponentPlaceholder = false;
+          }
+          // dígito/ponto: continua ligado, deixa acumular dentro do expoente.
+        } else {
+          freshExponentPlaceholder = false;
+        }
+      }
+
       if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
         const form = field.closest("form");
@@ -319,29 +390,36 @@ export function StructuredMathInput({
     // estreito DEMAIS: clicar perto (não só EM cima) de um expoente sem
     // mais nada depois (ex. campo só com "x²") ainda cai num elemento
     // COM classe própria (`ML__content`/`ML__caret`/`ML__container` —
-    // wrappers genéricos do MathLive, não o glifo em si) — e o
-    // `getOffsetFromPoint`/clique nativo do MathLive nesses pontos é
-    // realmente ERRÁTICO, não só "impreciso": o mesmo campo `x^2`,
-    // clicando em pontos a poucos pixels de distância um do outro,
-    // pousava ora certo (offset 4, fim de "x²"), ora dentro do expoente
-    // (offset 3), ora até no INÍCIO do campo inteiro (offset 0) —
-    // confirmado com clique genuíno despachado (`PointerEvent`/
-    // `MouseEvent` reais), não só chamando `getOffsetFromPoint` isolado.
-    // Um gate por classe CSS nunca capturaria esse caso (a classe está
-    // lá, só não é o glifo certo).
+    // wrappers genéricos do MathLive, não o glifo em si) — e o CLIQUE
+    // NATIVO do MathLive (o handler interno automático, dentro do shadow
+    // DOM) nesses pontos era realmente ERRÁTICO, não só "impreciso": o
+    // mesmo campo `x^2`, clicando em pontos a poucos pixels de distância
+    // um do outro, pousava ora certo (offset 4, fim de "x²"), ora dentro
+    // do expoente (offset 3), ora até no INÍCIO do campo inteiro (offset
+    // 0) — confirmado com clique genuíno despachado (`PointerEvent`/
+    // `MouseEvent` reais). Um gate por classe CSS nunca capturaria esse
+    // caso (a classe está lá, só não é o glifo certo).
     //
-    // Correção: SEMPRE recalcula via `computeBestOffset` pra todo clique
-    // dentro do campo (nunca mais um gate por classe) — só usa APIs
-    // públicas do MathLive (`getElementInfo`/`lastOffset`/`position`),
-    // nunca mede pixel do DOM renderizado. Validado que isso NUNCA piora
-    // um clique genuinamente normal: `computeBestOffset` já considera
-    // TODOS os offsets reais (com `bounds` própria) como candidatos —
-    // clicar em cima de "x"/"2"/qualquer glifo continua resolvendo pro
-    // MESMO offset que o clique nativo daria (testado ponto a ponto no
-    // navegador real, incluindo dentro de fração/matriz) — a única
-    // diferença é que agora os offsets de FIM-DE-GRUPO (sem `bounds`
-    // própria, ver `cursorPointForOffset`) também entram na disputa, o
-    // que é exatamente o que faltava.
+    // Hotfix P0 (2ª rodada — dump real do usuário) — a correção anterior
+    // (`computeBestOffset`, uma heurística própria de "offset mais
+    // próximo por distância euclidiana" sobre `getElementInfo`/`bounds`)
+    // sofreu 2 regressões reais nesta mesma hotfix e um dump capturado no
+    // navegador real do próprio usuário confirmou uma 3ª: clicar à
+    // direita de "x²" (dentro de `\int x^2e^2\,dx`) resolvia pro offset 2
+    // (`latex:"x"`, o NÓ BASE — antes até de entrar no expoente), não pro
+    // offset de saída da potência. Investigação (ver `resolveClickOffset`
+    // acima) confirmou que `field.getOffsetFromPoint(x, y)` — a API
+    // PÚBLICA do MathLive pra essa pergunta exata, chamada diretamente —
+    // resolve esse caso e o de fração/matriz corretamente, sem nenhuma
+    // heurística própria: é a implementação REAL de hit-test da árvore de
+    // átomos, a mesma coisa que o handler interno automático do MathLive
+    // deveria estar usando mas aparentemente não usa de forma consistente
+    // (daí a diferença entre "clique cru, deixado pro MathLive resolver
+    // sozinho" — ERRÁTICO, ver acima — e "clique interceptado aqui,
+    // resolvido chamando a API pública explicitamente" — confiável nos
+    // casos testados). Substitui `computeBestOffset` por completo — nunca
+    // mais um offset fixo ou heurística específica de um tipo de
+    // estrutura (potência/fração/etc.), a mesma chamada cobre todas.
     //
     // Registrado no PRÓPRIO `field` (nunca no wrapper) — achado real no
     // navegador: o handler interno de clique do MathLive chama
@@ -368,9 +446,17 @@ export function StructuredMathInput({
     // `detail:0`) — checar `=== 1` bloquearia SEMPRE, nunca deixando o
     // reparo acontecer.
     function handleFieldClick(event: MouseEvent) {
+      // Hotfix P0 (3ª rodada) — qualquer clique desliga
+      // `freshExponentPlaceholder`, mesmo que resolva pra dentro do
+      // MESMO expoente recém-criado: um clique é sempre uma decisão
+      // EXPLÍCITA do usuário sobre onde o cursor deve ficar — exatamente
+      // o "clicar manualmente no expoente e digitar e → x^(2e)" pedido
+      // explicitamente. Desligado incondicionalmente, mesmo na saída
+      // antecipada da seleção em andamento logo abaixo.
+      freshExponentPlaceholder = false;
       if (!field.selectionIsCollapsed) return;
-      const best = computeBestOffset(field, event.clientX, event.clientY);
-      if (best !== null) field.position = best;
+      const resolved = resolveClickOffset(field, event.clientX, event.clientY);
+      if (resolved !== null) field.position = resolved;
     }
     field.addEventListener("click", handleFieldClick);
 
@@ -393,6 +479,13 @@ export function StructuredMathInput({
     fieldRef.current = field;
     onReadyRef.current?.({
       insert(latex: string) {
+        // Hotfix P0 (3ª rodada) — liga `freshExponentPlaceholder` SÓ
+        // quando o LaTeX inserido é EXATAMENTE o template da tecla "xⁿ"
+        // (um expoente placeholder fresco, sozinho) — qualquer outra
+        // tecla (fração, raiz, integral, matriz, parênteses, x²/x³ com
+        // expoente FIXO, etc.) desliga, cobrindo o caso de clicar outra
+        // tecla entre o "xⁿ" e o próximo caractere digitado.
+        freshExponentPlaceholder = latex === SIMPLE_EXPONENT_PLACEHOLDER_TEMPLATE;
         field.insert(latex, { focus: true, selectionMode: "placeholder" });
         // `field.insert()` não passa pelo listener de `input` (ver
         // `repairFieldIfNeeded` acima) — chamado explicitamente aqui pra

@@ -42,7 +42,7 @@ from ..errors import ExpressionError
 from ..log_convention import LOCAL_DICT as _LOG_LOCAL_DICT
 from ..safe_parsing import extract_safe_symbols, safe_parse_expr
 from .derivatives import compute_derivative
-from .integrals import compute_definite_integral, compute_indefinite_integral
+from .integrals import compute_definite_integral, compute_indefinite_integral, verify_antiderivative
 from .limits import compute_limit
 
 _TRANSFORMATIONS = standard_transformations + (implicit_multiplication_application,)
@@ -308,7 +308,24 @@ def solve_calculus_text(expression: str) -> str:
         if len(partes) == 2:
             symbol = _parse_variable(partes[1])
             expr = _parse_fragment(partes[0], symbol)
-            resultado = canonicalize_euler_constant(compute_indefinite_integral(expr, symbol))
+            primitive = compute_indefinite_integral(expr, symbol)
+            # Hotfix P0 — hardening matemático: nunca apresenta uma
+            # antiderivada não verificada. Recalcula `d/dx(primitive)` e
+            # compara com o integrando original (`verify_antiderivative`,
+            # `calculus/integrals.py`) — fail-closed: se não bater
+            # (inclusive quando o próprio SymPy não consegue decidir),
+            # levanta erro amigável em vez de arriscar um resultado
+            # matematicamente errado. Só no ponto de saída final pro
+            # usuário (`/solve`) — a maquinária interna de passo a passo
+            # (substituição/frações parciais/integração por partes)
+            # continua chamando `compute_indefinite_integral` sem essa
+            # camada extra, sem risco de regressão na cobertura extensa
+            # já existente ali.
+            if not verify_antiderivative(primitive, expr, symbol):
+                raise ExpressionError(
+                    f"Não foi possível verificar a integral de {expr} nesta versão."
+                )
+            resultado = canonicalize_euler_constant(primitive)
             return _rename_natural_log(f"Integral: {resultado} + C")
         if len(partes) == 4:
             symbol = _parse_variable(partes[1])

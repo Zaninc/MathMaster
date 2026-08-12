@@ -297,6 +297,81 @@ def test_famous_limit_definition_of_e_renders_lowercase() -> None:
     assert _solve("lim x->oo (1+1/x)^x") == "Limite: e"
 
 
+# --- Hotfix P0 — hardening matemático: x²eˣ e classe correlata -----------
+#
+# Ticket relatava `integral(x**2*exp(x), x)` devolvendo `x³eˣ/3 + C`
+# (regra da potência aplicada erroneamente sobre `x²`, ignorando `eˣ`).
+# Investigação (ver relatório do hotfix) confirmou que esse bug específico
+# já não existe — `classify_polynomial_term`
+# (`math_engine/steps/formatting.py`) já rejeita corretamente qualquer
+# termo cujo fator dependente de `x` não seja um `Pow` puro de `x`. Estes 5
+# testes são os casos OBRIGATÓRIOS do ticket, fixados aqui como proteção
+# de regressão dedicada (nunca dependendo só da cobertura dispersa de
+# steps/derivadas que já existia) — todos no nível do dispatcher (`/solve`
+# de verdade, via `solve_expression`), a mesma função que serve a API.
+def test_hardening_integral_x_squared_times_exp_uses_integration_by_parts() -> None:
+    assert _solve("integral(x**2*exp(x), x)") == "Integral: (x² - 2x + 2)*exp(x) + C"
+
+
+def test_hardening_integral_x_times_exp_uses_integration_by_parts() -> None:
+    assert _solve("integral(x*exp(x), x)") == "Integral: (x - 1)*exp(x) + C"
+
+
+def test_hardening_integral_x_squared_times_sin_uses_integration_by_parts() -> None:
+    assert _solve("integral(x**2*sin(x), x)") == "Integral: -x²*cos(x) + 2x*sin(x) + 2*cos(x) + C"
+
+
+def test_hardening_integral_x_times_cos_uses_integration_by_parts() -> None:
+    assert _solve("integral(x*cos(x), x)") == "Integral: x*sin(x) + cos(x) + C"
+
+
+def test_hardening_integral_x_squared_alone_still_uses_power_rule() -> None:
+    assert _solve("integral(x**2, x)") == "Integral: x³/3 + C"
+
+
+# --- Hotfix P0 — verificação automática de antiderivada (fail-closed) ----
+
+
+def test_verify_antiderivative_accepts_correct_result() -> None:
+    from sympy import Symbol, cos, exp, sin
+
+    from app.math_engine.calculus.integrals import verify_antiderivative
+
+    x = Symbol("x")
+    primitive = (x**2 - 2 * x + 2) * exp(x)
+    assert verify_antiderivative(primitive, x**2 * exp(x), x) is True
+
+
+def test_verify_antiderivative_rejects_the_exact_reported_bug_pattern() -> None:
+    # A resposta ERRADA que o ticket relatou (regra da potência aplicada
+    # sobre x²eˣ como se eˣ fosse uma constante ignorável).
+    from sympy import Rational, Symbol, exp
+
+    from app.math_engine.calculus.integrals import verify_antiderivative
+
+    x = Symbol("x")
+    wrong_primitive = Rational(1, 3) * x**3 * exp(x)
+    assert verify_antiderivative(wrong_primitive, x**2 * exp(x), x) is False
+
+
+def test_dispatcher_indefinite_integral_rejects_unverified_primitive(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Substitui `compute_indefinite_integral` (o único ponto que o
+    # dispatcher chama pra integral indefinida — ver
+    # `calculus/dispatcher.py`) por uma versão que devolve DELIBERADAMENTE
+    # o padrão errado do ticket (regra da potência aplicada sobre x²eˣ) —
+    # prova que a verificação em `dispatcher.py` está genuinamente FIADA
+    # ao resultado real, não só testada isoladamente em `integrals.py`.
+    import app.math_engine.calculus.dispatcher as calc_dispatcher
+    from sympy import Rational, exp
+
+    def _wrong_integral(expr, symbol):
+        return Rational(1, 3) * symbol**3 * exp(symbol)
+
+    monkeypatch.setattr(calc_dispatcher, "compute_indefinite_integral", _wrong_integral)
+    with pytest.raises(ExpressionError):
+        solve_expression("integral(x**2*exp(x), x)")
+
+
 def test_famous_limit_definition_of_e_natural_notation_renders_lowercase() -> None:
     assert _solve("lim x→∞ (1+1/x)^x") == "Limite: e"
 

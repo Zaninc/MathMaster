@@ -64,14 +64,14 @@ vi.mock("mathlive", () => {
     }
 
     // Hotfix — Cursor e navegação estrutural: mocks mínimos das APIs reais
-    // usadas por `computeBestOffset`/`cursorPointForOffset` e pelos
-    // handlers de clique — nunca a lógica de layout real do MathLive (só
-    // testada no navegador real, ver relatório do hotfix). `mockBounds`
-    // deixa cada teste descrever a MESMA geometria capturada de verdade
-    // (`getElementInfo` real) sem depender de um layout engine.
+    // usadas pelos handlers de clique — nunca a lógica de layout real do
+    // MathLive (só testada no navegador real, ver relatório do hotfix).
     lastOffset = 0;
     selectionIsCollapsed = true;
-    mockBounds = new Map<number, { latex?: string; bounds: { x: number; y: number; width: number; height: number } | null }>();
+    mockBounds = new Map<
+      number,
+      { latex?: string; depth?: number; bounds: { x: number; y: number; width: number; height: number } | null }
+    >();
     positionSetCalls: number[] = [];
     private _position = 0;
 
@@ -86,6 +86,20 @@ vi.mock("mathlive", () => {
 
     getElementInfo(offset: number) {
       return this.mockBounds.get(offset);
+    }
+
+    // Hotfix P0 (2ª rodada) — `handleFieldClick` (`StructuredMathInput.tsx`)
+    // agora delega inteiramente a `field.getOffsetFromPoint(x, y)` (a API
+    // pública e nativa do MathLive) em vez de uma heurística própria — o
+    // mock só precisa devolver o offset configurado por cada teste,
+    // registrando os argumentos recebidos pra provar que as coordenadas
+    // do clique real chegaram até a API sem transformação.
+    getOffsetFromPointCalls: Array<{ x: number; y: number }> = [];
+    mockOffsetFromPoint: number | null = null;
+
+    getOffsetFromPoint(x: number, y: number): number {
+      this.getOffsetFromPointCalls.push({ x, y });
+      return this.mockOffsetFromPoint ?? -1;
     }
   }
   if (!customElements.get("math-field")) {
@@ -388,123 +402,168 @@ describe("StructuredMathInput", () => {
     expect(onChange).toHaveBeenLastCalledWith("\\sqrt{\\placeholder{}}");
   });
 
-  // --- Hotfix — Cursor e navegação estrutural ------------------------------
+  // --- Hotfix P0 (2ª rodada) — Cursor via API nativa do MathLive -----------
   //
-  // Geometria abaixo (bounds de cada offset) é a CAPTURADA de verdade no
-  // navegador real via `field.getElementInfo(offset)` pra
-  // `\begin{cases}x^2\\ \placeholder{}\end{cases}` — nunca valores
-  // idealizados. Offset 5 (`bounds: null`) é o marcador de fim-de-grupo do
-  // expoente (logo depois de "x²", ainda dentro da primeira linha do
-  // sistema) — a causa raiz real do bug: sem herança, nenhum candidato
-  // representa "o fim da linha", e o clique cai sempre dentro do "2"
-  // (offset 4). Clique real capturado (`math-field.value`/`position`
-  // antes/depois) confirmou exatamente isso no navegador antes do reparo.
+  // `handleFieldClick` agora delega inteiramente a
+  // `field.getOffsetFromPoint(x, y)` (API pública do MathLive) em vez de
+  // uma heurística própria de distância — os testes abaixo provam (a)
+  // que as coordenadas do clique chegam intactas até a API, (b) que o
+  // offset devolvido é aplicado a `field.position`, e (c) que devoluções
+  // inválidas (fora do intervalo, ou o `-1` que a própria API usa pra
+  // "nenhuma posição") nunca movem o cursor — nunca testa a geometria
+  // interna do MathLive em si (isso é do fornecedor, testado no navegador
+  // real, ver relatório do hotfix).
   type MockFieldWithClickSupport = MockFieldWithSetValue & {
     lastOffset: number;
     selectionIsCollapsed: boolean;
-    mockBounds: Map<number, { latex?: string; bounds: { x: number; y: number; width: number; height: number } | null }>;
     positionSetCalls: number[];
     position: number;
+    getOffsetFromPointCalls: Array<{ x: number; y: number }>;
+    mockOffsetFromPoint: number | null;
+    mockBounds: Map<
+      number,
+      { latex?: string; depth?: number; bounds: { x: number; y: number; width: number; height: number } | null }
+    >;
   };
 
-  function setCasesWithPowerGeometry(field: MockFieldWithClickSupport) {
-    field.value = "\\begin{cases}x^2\\\\ \\placeholder{}\\end{cases}";
-    field.lastOffset = 8;
-    field.mockBounds = new Map([
-      [0, { latex: "", bounds: { x: 54, y: 157, width: -1, height: 23 } }],
-      [1, { latex: "", bounds: { x: 69, y: 144, width: -1, height: 23 } }],
-      [2, { latex: "x", bounds: { x: 69, y: 149, width: 9, height: 17 } }],
-      [3, { latex: "", bounds: { x: 79, y: 143, width: -1, height: 17 } }],
-      [4, { latex: "2", bounds: { x: 79, y: 145, width: 6, height: 14 } }],
-      [5, { latex: "^2", bounds: null }],
-      [6, { latex: "", bounds: { x: 69, y: 170, width: -1, height: 23 } }],
-      [7, { latex: "\\placeholder{}", bounds: { x: 69, y: 172, width: 14, height: 21 } }],
-      [8, { latex: "\\begin{cases}x^2\\\\ \\placeholder{}\\end{cases}", bounds: { x: 54, y: 144, width: 52, height: 54 } }],
-    ]);
-  }
-
-  it("clique no espaço vazio à direita de 'x²' dentro de cases pousa no fim da linha, nunca dentro do expoente", () => {
+  it("clique dentro do campo delega pra field.getOffsetFromPoint com as coordenadas exatas do clique", () => {
     const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
     const field = getField(container) as unknown as MockFieldWithClickSupport;
-    setCasesWithPowerGeometry(field);
+    field.value = "x^2";
+    field.lastOffset = 4;
+    field.mockOffsetFromPoint = 4;
+
+    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 123, clientY: 45 }));
+
+    expect(field.getOffsetFromPointCalls).toEqual([{ x: 123, y: 45 }]);
+    expect(field.position).toBe(4);
+  });
+
+  // Hotfix P0 (2ª rodada — dump real do usuário) — reprodução do bug
+  // capturado no navegador real: em `\int x^2e^2\,dx`, um clique visado
+  // logo depois de "x²" (querendo continuar no nível principal) resolvia
+  // pro offset 2 (`latex:"x"`, o nó BASE — antes até do expoente),
+  // confirmado via `math-field.getElementInfo`/`.position` reais colados
+  // pelo usuário. Investigação (ver `resolveClickOffset` em
+  // `StructuredMathInput.tsx`) confirmou que `field.getOffsetFromPoint`
+  // chamada diretamente resolve esse caso corretamente pro offset da
+  // SAÍDA da potência (offset 4 pra `x^2`, `depth:0, latex:"^2"`) — este
+  // teste fixa que o componente CONFIA nesse retorno sem reprocessar ou
+  // sobrepor com uma heurística própria (a causa raiz do bug antigo).
+  it("REGRESSÃO (dump real) — clique à direita de x² nunca fica preso no nó base, usa o offset de saída que getOffsetFromPoint devolve", () => {
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
+    const field = getField(container) as unknown as MockFieldWithClickSupport;
+    field.value = "\\int x^2e^2\\,dx";
+    field.lastOffset = 9;
+    field.mockOffsetFromPoint = 4; // saída da potência, confirmada no navegador real
 
     field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 95, clientY: 150 }));
+
+    expect(field.position).toBe(4);
+    expect(field.position).not.toBe(2); // o offset do nó base — o bug real relatado
+  });
+
+  // Hotfix P0 (2ª rodada) — `preferGroupExitBeyondContent`: geometria
+  // real capturada no navegador (`getElementInfo`) pra
+  // `\frac{x^2-9}{x^2+1}` — clicar no espaço vazio entre o dígito "2" do
+  // expoente do numerador (offset 4, bounds reais terminam em x≈72.16) e
+  // o "-" seguinte (offset 6, começa em x≈78.17) fazia
+  // `field.getOffsetFromPoint` sozinha devolver o offset 4 (dentro do
+  // expoente) — confirmado no navegador real. A correção detecta que o
+  // clique (x=74) está À DIREITA da bounding box do offset 4 e que o
+  // offset seguinte (5, `^2`, sem bounds própria) é mais RASO (depth 1 <
+  // depth 2) — promove pro offset 5, o nível do numerador, exatamente
+  // onde `x²|` deveria ficar antes de "-9".
+  it("clique no espaço vazio depois do expoente do numerador de uma fração sai pro nível do numerador, não fica preso no expoente", () => {
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
+    const field = getField(container) as unknown as MockFieldWithClickSupport;
+    field.value = "\\frac{x^2-9}{x^2+1}";
+    field.lastOffset = 15;
+    field.mockBounds = new Map([
+      [4, { latex: "2", depth: 2, bounds: { x: 66.15625, y: 140.46875, width: 6, height: 14 } }],
+      [5, { latex: "^2", depth: 1, bounds: null }],
+      [6, { latex: "-", depth: 1, bounds: { x: 78.171875, y: 141.9375, width: 13, height: 21 } }],
+    ]);
+    field.mockOffsetFromPoint = 4;
+
+    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 74, clientY: 147 }));
 
     expect(field.position).toBe(5);
   });
 
-  // Hotfix (2ª rodada — "placeholders opcionais + navegação estrutural") —
-  // a versão anterior só recalculava quando o elemento clicado não tinha
-  // NENHUMA classe CSS (sinal de "espaço estrutural"). Investigação real
-  // no navegador revelou que esse gate não cobria um caso real: clicar
-  // perto (não em cima) de um expoente sem mais nada depois ainda cai num
-  // elemento COM classe própria (wrapper genérico do MathLive, não o
-  // glifo em si) — e o clique nativo nesses pontos é ERRÁTICO (mesmo
-  // campo, pontos a poucos pixels um do outro, resultados totalmente
-  // diferentes). Correção: SEMPRE recalcula via `computeBestOffset`,
-  // nunca mais um gate por classe CSS — por isso este teste agora
-  // verifica que um clique sobre um glifo real ainda resolve pro offset
-  // SEMANTICAMENTE correto (perto o bastante do glifo clicado), não mais
-  // que "nada acontece".
-  it("clique sobre um glifo real (ex. metade esquerda de 'x') resolve pro offset correto — nunca ignorado, mas também nunca arbitrário", () => {
+  // Confirma a guarda oposta: um clique AINDA dentro (ou antes) da
+  // bounding box do próprio dígito nunca promove pro nível pai — cobre o
+  // item 5 do ticket ("não aplicar isso se o clique for... sobre o
+  // expoente; dentro do expoente").
+  it("clique ainda dentro da bounding box do dígito do expoente nunca promove pro nível pai", () => {
     const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
     const field = getField(container) as unknown as MockFieldWithClickSupport;
-    setCasesWithPowerGeometry(field);
+    field.value = "\\frac{x^2-9}{x^2+1}";
+    field.lastOffset = 15;
+    field.mockBounds = new Map([
+      [4, { latex: "2", depth: 2, bounds: { x: 66.15625, y: 140.46875, width: 6, height: 14 } }],
+      [5, { latex: "^2", depth: 1, bounds: null }],
+    ]);
+    field.mockOffsetFromPoint = 4;
 
-    // (72,155) fica mais perto do marcador "antes de x" (offset 1, ponto
-    // (69,155.5)) do que de "depois de x" (offset 2, ponto (78,157.5)).
-    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 72, clientY: 155 }));
+    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 68, clientY: 147 }));
 
-    expect(field.position).toBe(1);
+    expect(field.position).toBe(4);
   });
 
-  it("clique na metade ESQUERDA do dígito do expoente continua posicionando dentro dele, nunca sai pro nível pai", () => {
+  // A promoção só acontece quando o offset seguinte é genuinamente uma
+  // SAÍDA de grupo (sem bounds própria E mais raso) — nunca quando o
+  // próximo offset é só outro átomo real normal (ex. fim do campo, sem
+  // mais nada estrutural pra sair).
+  it("clique à direita de um átomo comum (sem saída de grupo estrutural seguinte) não promove offset", () => {
     const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
     const field = getField(container) as unknown as MockFieldWithClickSupport;
-    setCasesWithPowerGeometry(field);
+    field.value = "x+3";
+    field.lastOffset = 3;
+    field.mockBounds = new Map([[3, { latex: "3", bounds: { x: 80, y: 140, width: 8, height: 17 } }]]);
+    field.mockOffsetFromPoint = 3;
 
-    // Metade esquerda do glifo "2" (offset 4: x=79,y=145,w=6,h=14) — a
-    // metade DIREITA empata geometricamente com o marcador de saída do
-    // grupo (offset 5, que herda o MESMO ponto de offset 4 — ver
-    // `cursorPointForOffset`), então clicar bem no fim do último caractere
-    // de um grupo de fato prefere sair — comportamento correto pro pedido
-    // do próprio ticket ("clique à direita do x² deve continuar depois
-    // dele"). A metade ESQUERDA nunca empata, sempre fica dentro.
-    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 80, clientY: 151 }));
+    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 200, clientY: 147 }));
 
     expect(field.position).toBe(3);
   });
 
-  it("seleção em andamento (arrasto do usuário) nunca é colapsada por um clique em espaço vazio", () => {
+  it("getOffsetFromPoint devolvendo -1 (nenhuma posição, sentinela da própria API) nunca move o cursor", () => {
     const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
     const field = getField(container) as unknown as MockFieldWithClickSupport;
-    setCasesWithPowerGeometry(field);
-    field.selectionIsCollapsed = false;
+    field.value = "x^2";
+    field.lastOffset = 4;
+    field.mockOffsetFromPoint = -1;
 
     field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 95, clientY: 150 }));
 
     expect(field.positionSetCalls).toHaveLength(0);
   });
 
-  it("clique dentro de uma matriz com potência numa célula (mesma assinatura estrutural) também pousa no fim da célula, não dentro do expoente", () => {
+  it("getOffsetFromPoint devolvendo um offset fora do intervalo válido (> lastOffset) nunca move o cursor", () => {
     const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
     const field = getField(container) as unknown as MockFieldWithClickSupport;
-    // Geometria real capturada pra `\begin{bmatrix}x^2&2\\3&4\end{bmatrix}`.
-    field.value = "\\begin{bmatrix}x^2&2\\\\3&4\\end{bmatrix}";
-    field.lastOffset = 12;
-    field.mockBounds = new Map([
-      [1, { latex: "", bounds: { x: 64, y: 140, width: -1, height: 23 } }],
-      [2, { latex: "x", bounds: { x: 64, y: 145, width: 9, height: 17 } }],
-      [3, { latex: "", bounds: { x: 74, y: 139, width: -1, height: 17 } }],
-      [4, { latex: "2", bounds: { x: 74, y: 141, width: 6, height: 14 } }],
-      [5, { latex: "^2", bounds: null }],
-      [6, { latex: "", bounds: { x: 100, y: 140, width: -1, height: 23 } }],
-      [7, { latex: "2", bounds: { x: 100, y: 142, width: 8, height: 21 } }],
-    ]);
+    field.value = "x^2";
+    field.lastOffset = 4;
+    field.mockOffsetFromPoint = 99;
 
-    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 90, clientY: 145 }));
+    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 95, clientY: 150 }));
 
-    expect(field.position).toBe(5);
+    expect(field.positionSetCalls).toHaveLength(0);
+  });
+
+  it("seleção em andamento (arrasto do usuário) nunca é colapsada por um clique — nem chama getOffsetFromPoint", () => {
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
+    const field = getField(container) as unknown as MockFieldWithClickSupport;
+    field.value = "x^2";
+    field.lastOffset = 4;
+    field.mockOffsetFromPoint = 4;
+    field.selectionIsCollapsed = false;
+
+    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 95, clientY: 150 }));
+
+    expect(field.positionSetCalls).toHaveLength(0);
+    expect(field.getOffsetFromPointCalls).toHaveLength(0);
   });
 
   it("clique no padding do wrapper externo (fora do retângulo real do campo) foca e manda o cursor pro fim via moveToMathfieldEnd", () => {
@@ -522,7 +581,9 @@ describe("StructuredMathInput", () => {
   it("clique cujo target já é o próprio campo (nunca o wrapper) não aciona moveToMathfieldEnd", () => {
     const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
     const field = getField(container) as unknown as MockFieldWithClickSupport;
-    setCasesWithPowerGeometry(field);
+    field.value = "x^2";
+    field.lastOffset = 4;
+    field.mockOffsetFromPoint = 1;
 
     field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 72, clientY: 155 }));
 
@@ -541,5 +602,130 @@ describe("StructuredMathInput", () => {
     expect(event.defaultPrevented).toBe(true);
     expect(field.value).toBe("\\begin{cases}x^2\\\\ \\placeholder{}\\end{cases}");
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // --- Hotfix P0 (3ª rodada) — expoente fresco não nasce letra dentro ------
+  //
+  // Bug real confirmado no navegador: `x` -> clicar "xⁿ" -> digitar "2"
+  // (fica dentro, esperado) -> digitar "e" SEM sair primeiro -> MathLive
+  // deixa "e" DENTRO do expoente (`x^{2e}`), porque `smartSuperscript` da
+  // própria biblioteca só cobre dígito sozinho (lido no código-fonte:
+  // `atom.parentBranch === "superscript" && /\d/.test(c)` — nunca letra).
+  // `handleKeyDown` (`StructuredMathInput.tsx`) complementa isso sem tocar
+  // em `node_modules`: liga uma flag SÓ quando `api.insert()` insere
+  // EXATAMENTE o template da tecla "xⁿ" (`^{\placeholder{}}`), e o
+  // primeiro caractere não-dígito digitado em seguida (sem clique/seta no
+  // meio) aciona `moveToNextChar` antes da inserção. Testado aqui via
+  // `executeCommand`/`getElementInfo`/`position` do mock — a inserção real
+  // do caractere em si é do MathLive de verdade, testada no navegador
+  // real (ver relatório do hotfix).
+  async function buildFreshExponentField(onReady = vi.fn()) {
+    const onChange = vi.fn();
+    const { container } = render(
+      <StructuredMathInput id="campo" value="" onChange={onChange} onReady={onReady} />
+    );
+    await waitFor(() => expect(onReady).toHaveBeenCalledTimes(1));
+    const api = onReady.mock.calls[0][0] as StructuredMathInputApi;
+    const field = getField(container) as unknown as MockFieldWithClickSupport;
+    return { api, field, onChange };
+  }
+
+  it("dígito seguido de letra, sem sair do expoente fresco antes: aciona moveToNextChar antes da letra", async () => {
+    const { api, field } = await buildFreshExponentField();
+    api.insert("^{\\placeholder{}}"); // clique na tecla "xⁿ"
+
+    field.lastOffset = 4;
+    field.mockBounds = new Map([
+      [3, { latex: "2", depth: 1, bounds: { x: 10, y: 10, width: 5, height: 10 } }],
+    ]);
+    field.position = 3; // dígito "2" já digitado, cursor ainda dentro (depth 1)
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "2", bubbles: true, cancelable: true }));
+    expect(field.lastExecutedCommand).toBeNull(); // dígito nunca força saída
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "e", bubbles: true, cancelable: true }));
+    expect(field.lastExecutedCommand).toBe("moveToNextChar");
+  });
+
+  it("dígito seguido de outro dígito continua acumulando dentro do expoente (preserva x^23)", async () => {
+    const { api, field } = await buildFreshExponentField();
+    api.insert("^{\\placeholder{}}");
+    field.lastOffset = 4;
+    field.mockBounds = new Map([[3, { latex: "2", depth: 1, bounds: { x: 10, y: 10, width: 5, height: 10 } }]]);
+    field.position = 3;
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "2", bubbles: true, cancelable: true }));
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "3", bubbles: true, cancelable: true }));
+
+    expect(field.lastExecutedCommand).toBeNull();
+  });
+
+  it("dígito seguido de operador (+) também aciona a saída (regra estrutural, não amarrada a letras)", async () => {
+    const { api, field } = await buildFreshExponentField();
+    api.insert("^{\\placeholder{}}");
+    field.lastOffset = 4;
+    field.mockBounds = new Map([[3, { latex: "2", depth: 1, bounds: { x: 10, y: 10, width: 5, height: 10 } }]]);
+    field.position = 3;
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "2", bubbles: true, cancelable: true }));
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "+", bubbles: true, cancelable: true }));
+
+    expect(field.lastExecutedCommand).toBe("moveToNextChar");
+  });
+
+  it("um clique entre o dígito e a letra desliga a saída automática — respeita a posição manual (x^(2e))", async () => {
+    const { api, field } = await buildFreshExponentField();
+    api.insert("^{\\placeholder{}}");
+    field.lastOffset = 4;
+    field.mockBounds = new Map([[3, { latex: "2", depth: 1, bounds: { x: 10, y: 10, width: 5, height: 10 } }]]);
+    field.position = 3;
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "2", bubbles: true, cancelable: true }));
+
+    field.mockOffsetFromPoint = 3; // clique manual resolve pro mesmo dígito
+    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 12, clientY: 15 }));
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "e", bubbles: true, cancelable: true }));
+    expect(field.lastExecutedCommand).toBeNull(); // nunca força saída depois de um clique
+  });
+
+  it("Backspace entre o dígito e a letra desliga a flag sem forçar saída (nunca atropela uma edição explícita)", async () => {
+    const { api, field } = await buildFreshExponentField();
+    api.insert("^{\\placeholder{}}");
+    field.lastOffset = 4;
+    field.mockBounds = new Map([[3, { latex: "2", depth: 1, bounds: { x: 10, y: 10, width: 5, height: 10 } }]]);
+    field.position = 3;
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "2", bubbles: true, cancelable: true }));
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true }));
+    expect(field.lastExecutedCommand).toBeNull();
+
+    // Flag já desligada — próxima letra nunca mais força saída sozinha.
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "e", bubbles: true, cancelable: true }));
+    expect(field.lastExecutedCommand).toBeNull();
+  });
+
+  it("template de fração nunca liga a flag — dígito seguido de letra no numerador nunca força saída", async () => {
+    const { api, field } = await buildFreshExponentField();
+    api.insert("\\frac{\\placeholder{}}{\\placeholder{}}"); // clique na tecla "Inserir fração"
+    field.lastOffset = 4;
+    field.mockBounds = new Map([[1, { latex: "2", depth: 1, bounds: { x: 10, y: 10, width: 5, height: 10 } }]]);
+    field.position = 1;
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "2", bubbles: true, cancelable: true }));
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "e", bubbles: true, cancelable: true }));
+
+    expect(field.lastExecutedCommand).toBeNull();
+  });
+
+  it("Espaço entre o dígito e a letra nunca aciona moveToNextChar (Hotfix V3.0.2a preservado — espaço continua no-op)", async () => {
+    const { api, field } = await buildFreshExponentField();
+    api.insert("^{\\placeholder{}}");
+    field.lastOffset = 4;
+    field.mockBounds = new Map([[3, { latex: "2", depth: 1, bounds: { x: 10, y: 10, width: 5, height: 10 } }]]);
+    field.position = 3;
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "2", bubbles: true, cancelable: true }));
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
+    expect(field.lastExecutedCommand).toBeNull();
   });
 });
