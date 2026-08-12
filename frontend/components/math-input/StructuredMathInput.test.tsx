@@ -72,7 +72,6 @@ vi.mock("mathlive", () => {
     lastOffset = 0;
     selectionIsCollapsed = true;
     mockBounds = new Map<number, { latex?: string; bounds: { x: number; y: number; width: number; height: number } | null }>();
-    mockShadowHit: { classListLength: number } | null = null;
     positionSetCalls: number[] = [];
     private _position = 0;
 
@@ -87,13 +86,6 @@ vi.mock("mathlive", () => {
 
     getElementInfo(offset: number) {
       return this.mockBounds.get(offset);
-    }
-
-    get shadowRoot() {
-      const hit = this.mockShadowHit;
-      return {
-        elementFromPoint: () => (hit ? ({ classList: { length: hit.classListLength } } as unknown as Element) : null),
-      } as unknown as ShadowRoot;
     }
   }
   if (!customElements.get("math-field")) {
@@ -411,7 +403,6 @@ describe("StructuredMathInput", () => {
     lastOffset: number;
     selectionIsCollapsed: boolean;
     mockBounds: Map<number, { latex?: string; bounds: { x: number; y: number; width: number; height: number } | null }>;
-    mockShadowHit: { classListLength: number } | null;
     positionSetCalls: number[];
     position: number;
   };
@@ -432,33 +423,62 @@ describe("StructuredMathInput", () => {
     ]);
   }
 
-  it("clique no espaço vazio à direita de 'x²' dentro de cases (elemento sem classe CSS — estrutural) pousa no fim da linha, nunca dentro do expoente", () => {
+  it("clique no espaço vazio à direita de 'x²' dentro de cases pousa no fim da linha, nunca dentro do expoente", () => {
     const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
     const field = getField(container) as unknown as MockFieldWithClickSupport;
     setCasesWithPowerGeometry(field);
-    field.mockShadowHit = { classListLength: 0 };
 
     field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 95, clientY: 150 }));
 
     expect(field.position).toBe(5);
   });
 
-  it("clique NORMAL sobre um glifo real (classe CSS presente) nunca aciona o recálculo — o MathLive continua 100% responsável", () => {
+  // Hotfix (2ª rodada — "placeholders opcionais + navegação estrutural") —
+  // a versão anterior só recalculava quando o elemento clicado não tinha
+  // NENHUMA classe CSS (sinal de "espaço estrutural"). Investigação real
+  // no navegador revelou que esse gate não cobria um caso real: clicar
+  // perto (não em cima) de um expoente sem mais nada depois ainda cai num
+  // elemento COM classe própria (wrapper genérico do MathLive, não o
+  // glifo em si) — e o clique nativo nesses pontos é ERRÁTICO (mesmo
+  // campo, pontos a poucos pixels um do outro, resultados totalmente
+  // diferentes). Correção: SEMPRE recalcula via `computeBestOffset`,
+  // nunca mais um gate por classe CSS — por isso este teste agora
+  // verifica que um clique sobre um glifo real ainda resolve pro offset
+  // SEMANTICAMENTE correto (perto o bastante do glifo clicado), não mais
+  // que "nada acontece".
+  it("clique sobre um glifo real (ex. metade esquerda de 'x') resolve pro offset correto — nunca ignorado, mas também nunca arbitrário", () => {
     const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
     const field = getField(container) as unknown as MockFieldWithClickSupport;
     setCasesWithPowerGeometry(field);
-    field.mockShadowHit = { classListLength: 1 };
 
+    // (72,155) fica mais perto do marcador "antes de x" (offset 1, ponto
+    // (69,155.5)) do que de "depois de x" (offset 2, ponto (78,157.5)).
     field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 72, clientY: 155 }));
 
-    expect(field.positionSetCalls).toHaveLength(0);
+    expect(field.position).toBe(1);
+  });
+
+  it("clique na metade ESQUERDA do dígito do expoente continua posicionando dentro dele, nunca sai pro nível pai", () => {
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
+    const field = getField(container) as unknown as MockFieldWithClickSupport;
+    setCasesWithPowerGeometry(field);
+
+    // Metade esquerda do glifo "2" (offset 4: x=79,y=145,w=6,h=14) — a
+    // metade DIREITA empata geometricamente com o marcador de saída do
+    // grupo (offset 5, que herda o MESMO ponto de offset 4 — ver
+    // `cursorPointForOffset`), então clicar bem no fim do último caractere
+    // de um grupo de fato prefere sair — comportamento correto pro pedido
+    // do próprio ticket ("clique à direita do x² deve continuar depois
+    // dele"). A metade ESQUERDA nunca empata, sempre fica dentro.
+    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 80, clientY: 151 }));
+
+    expect(field.position).toBe(3);
   });
 
   it("seleção em andamento (arrasto do usuário) nunca é colapsada por um clique em espaço vazio", () => {
     const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
     const field = getField(container) as unknown as MockFieldWithClickSupport;
     setCasesWithPowerGeometry(field);
-    field.mockShadowHit = { classListLength: 0 };
     field.selectionIsCollapsed = false;
 
     field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 95, clientY: 150 }));
@@ -481,7 +501,6 @@ describe("StructuredMathInput", () => {
       [6, { latex: "", bounds: { x: 100, y: 140, width: -1, height: 23 } }],
       [7, { latex: "2", bounds: { x: 100, y: 142, width: 8, height: 21 } }],
     ]);
-    field.mockShadowHit = { classListLength: 0 };
 
     field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 90, clientY: 145 }));
 
@@ -504,7 +523,6 @@ describe("StructuredMathInput", () => {
     const { container } = render(<StructuredMathInput id="campo" value="" onChange={vi.fn()} />);
     const field = getField(container) as unknown as MockFieldWithClickSupport;
     setCasesWithPowerGeometry(field);
-    field.mockShadowHit = { classListLength: 1 };
 
     field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 72, clientY: 155 }));
 

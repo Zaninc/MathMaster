@@ -944,4 +944,67 @@ describe("mathFieldLatexToBackendExpression", () => {
       });
     });
   });
+
+  // --- Hotfix "Placeholders opcionais + navegação estrutural" -------------
+  //
+  // Investigação real no navegador (capturando `math-field.value` a cada
+  // passo) NÃO encontrou nenhum caso, no catálogo atual de templates
+  // (fração, raiz, expoente, integral/integral definida/limite/somatório,
+  // matriz/sistema, inv/transpose/det), em que um `\placeholder{}` vazio
+  // sobra "órfão" — desconectado da árvore realmente avaliada — depois de
+  // uma composição normal via clique/Tab/digitação física. TODO
+  // `\placeholder{}` presente na string É, por construção, parte de um
+  // slot genuinamente necessário pro valor matemático da expressão (não
+  // existe hoje um placeholder "opcional"). O bloqueio relatado no ticket
+  // ("Preencha todos os espaços" aparecendo mesmo com conteúdo
+  // matemático suficiente") tinha causa raiz DIFERENTE: o bug de cursor
+  // preso em sub-estruturas (`StructuredMathInput.tsx`) impedia o
+  // usuário de navegar pra fora de um expoente/fração pra continuar
+  // construindo a expressão — depois de corrigido, o exemplo completo do
+  // ticket ("(x²-9)/x²+3 dentro de uma integral") resolve corretamente
+  // SEM nenhuma mudança no parser: o adapter já era semanticamente
+  // correto, só nunca era alcançado. Os testes abaixo travam essa
+  // conclusão como regressão: (1) confirmam que a expressão completa do
+  // "critério de sucesso" do ticket resolve sem bloqueio, usando o LaTeX
+  // EXATO capturado no navegador real (clique de correção + digitação
+  // física, não idealizado); (2) reconfirmam que os placeholders
+  // genuinamente obrigatórios (denominador de fração, célula de matriz,
+  // limites de integral definida) continuam bloqueando — nunca
+  // "sanitizados" às cegas.
+  describe('Hotfix "Placeholders opcionais + navegação estrutural" — validação semântica', () => {
+    it("critério de sucesso do ticket: (x²-9)/x²+3 dentro de uma integral resolve sem bloqueio (LaTeX real capturado após o reparo de clique)", () => {
+      expect(expr("\\int\\frac{x^2-9}{x^2}+3\\,dx")).toBe("integral((x²-9)/(x²)+3, x)");
+    });
+
+    it("x² seguido de +3 (fora de qualquer ambiente) nunca é bloqueado — não sobra nenhum placeholder residual", () => {
+      expect(expr("x^2+3")).toBe("x²+3");
+    });
+
+    it("fração seguida de +1, ambos os slots preenchidos, nunca é bloqueada", () => {
+      expect(expr("\\frac{x^2-9}{x^2}+1")).toBe("(x²-9)/(x²)+1");
+    });
+
+    it("raiz seguida de +3, slot preenchido, nunca é bloqueada", () => {
+      expect(expr("\\sqrt{x^2+1}+3")).toBe("√(x²+1)+3");
+    });
+
+    it("negativo obrigatório — denominador de fração genuinamente vazio continua incomplete, nunca sanitizado", () => {
+      expect(mathFieldLatexToBackendExpression("\\frac{x^2-9}{\\placeholder{}}+3")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+
+    it("negativo obrigatório — célula de matriz genuinamente vazia continua incomplete, mesmo com o resto da expressão completo", () => {
+      expect(
+        mathFieldLatexToBackendExpression("\\begin{bmatrix}1&2\\\\3&\\placeholder{}\\end{bmatrix}+1")
+      ).toEqual({ ok: false, reason: "incomplete" });
+    });
+
+    it("negativo obrigatório — integral definida sem limite inferior continua incomplete, mesmo com integrando completo", () => {
+      expect(
+        mathFieldLatexToBackendExpression("\\int_{\\placeholder{}}^{1}x^2+3\\,dx")
+      ).toEqual({ ok: false, reason: "incomplete" });
+    });
+  });
 });

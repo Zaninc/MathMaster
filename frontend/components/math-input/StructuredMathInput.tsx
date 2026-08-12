@@ -311,25 +311,37 @@ export function StructuredMathInput({
     // ANTES do tratamento interno do MathLive ter a chance de agir.
     field.addEventListener("keydown", handleKeyDown, true);
 
-    // Hotfix — Cursor e navegação estrutural: 2 falhas reais de clique,
-    // nenhuma delas corrigível via CSS/coordenada frágil — só APIs
-    // públicas do MathLive (`getElementInfo`, `position`,
-    // `executeCommand`) e um sinal do DOM real (classe CSS do elemento
-    // clicado, nunca cálculo de pixel pra decidir SE interfere).
+    // Hotfix — Cursor e navegação estrutural (2ª rodada): a 1ª versão só
+    // recalculava a posição quando o elemento clicado não tinha NENHUMA
+    // classe CSS (`classList.length === 0`) — sinal de "espaço puramente
+    // estrutural". Investigação mais funda (ticket "placeholders
+    // opcionais + navegação estrutural") revelou que esse gate era
+    // estreito DEMAIS: clicar perto (não só EM cima) de um expoente sem
+    // mais nada depois (ex. campo só com "x²") ainda cai num elemento
+    // COM classe própria (`ML__content`/`ML__caret`/`ML__container` —
+    // wrappers genéricos do MathLive, não o glifo em si) — e o
+    // `getOffsetFromPoint`/clique nativo do MathLive nesses pontos é
+    // realmente ERRÁTICO, não só "impreciso": o mesmo campo `x^2`,
+    // clicando em pontos a poucos pixels de distância um do outro,
+    // pousava ora certo (offset 4, fim de "x²"), ora dentro do expoente
+    // (offset 3), ora até no INÍCIO do campo inteiro (offset 0) —
+    // confirmado com clique genuíno despachado (`PointerEvent`/
+    // `MouseEvent` reais), não só chamando `getOffsetFromPoint` isolado.
+    // Um gate por classe CSS nunca capturaria esse caso (a classe está
+    // lá, só não é o glifo certo).
     //
-    // Cenário A — clique dentro do retângulo real do campo, mas em
-    // espaço visualmente vazio de uma estrutura (`cases`/matriz/potência
-    // — ver `cursorPointForOffset`). Distinguido de um clique NORMAL
-    // (sobre um glifo de verdade) por uma investigação real no
-    // navegador: TODO glifo renderizado pelo MathLive ganha uma classe
-    // CSS própria (`ML__mathit`, `ML__cmr`, `ML__vlist`...); um wrapper
-    // puramente estrutural (linha/tabela/ambiente inteiro) nunca ganha
-    // nenhuma (`classList.length === 0`) — confirmado comparando um
-    // clique sobre "x" (`ML__mathit`) contra o clique no espaço vazio
-    // (`classList.length === 0`, mesmo campo, mesma estrutura). Só
-    // recalcula a posição (`computeBestOffset`) quando esse sinal
-    // estrutural aparece — um clique normal nunca aciona isto, o
-    // MathLive continua 100% responsável por ele, exatamente como antes.
+    // Correção: SEMPRE recalcula via `computeBestOffset` pra todo clique
+    // dentro do campo (nunca mais um gate por classe) — só usa APIs
+    // públicas do MathLive (`getElementInfo`/`lastOffset`/`position`),
+    // nunca mede pixel do DOM renderizado. Validado que isso NUNCA piora
+    // um clique genuinamente normal: `computeBestOffset` já considera
+    // TODOS os offsets reais (com `bounds` própria) como candidatos —
+    // clicar em cima de "x"/"2"/qualquer glifo continua resolvendo pro
+    // MESMO offset que o clique nativo daria (testado ponto a ponto no
+    // navegador real, incluindo dentro de fração/matriz) — a única
+    // diferença é que agora os offsets de FIM-DE-GRUPO (sem `bounds`
+    // própria, ver `cursorPointForOffset`) também entram na disputa, o
+    // que é exatamente o que faltava.
     //
     // Registrado no PRÓPRIO `field` (nunca no wrapper) — achado real no
     // navegador: o handler interno de clique do MathLive chama
@@ -342,23 +354,21 @@ export function StructuredMathInput({
     // impede chegar no PRÓXIMO nó da árvore, nunca os do mesmo nó), só
     // não adianta esperar o evento subir até o wrapper.
     //
-    // `!field.selectionIsCollapsed` sai cedo em ambos os casos — nunca
-    // colapsa uma seleção que o usuário acabou de arrastar OU obtida por
-    // duplo/triplo clique (seleção de palavra/linha nativa do MathLive
-    // sempre deixa `selectionIsCollapsed === false`, cobrindo o mesmo caso
-    // que checar `event.detail` cobriria). `event.detail` NÃO é usado
-    // aqui deliberadamente — achado real no navegador: o clique que
-    // chega neste listener não é o eventoriginal do usuário, é um
-    // evento SINTETIZADO pelo próprio MathLive pra notificar listeners
-    // externos (confirmado: o clique original, despachado fundo no
-    // shadow DOM com `detail:1`, nunca chega aqui — o que chega é outro
-    // `click`, composed, disparado pelo MathLive diretamente no host,
-    // sempre com `detail:0`) — checar `=== 1` bloquearia SEMPRE, nunca
-    // deixando o reparo acontecer.
+    // `!field.selectionIsCollapsed` sai cedo — nunca colapsa uma seleção
+    // que o usuário acabou de arrastar OU obtida por duplo/triplo clique
+    // (seleção de palavra/linha nativa do MathLive sempre deixa
+    // `selectionIsCollapsed === false`, cobrindo o mesmo caso que checar
+    // `event.detail` cobriria). `event.detail` NÃO é usado aqui
+    // deliberadamente — achado real no navegador: o clique que chega
+    // neste listener não é o evento original do usuário, é um evento
+    // SINTETIZADO pelo próprio MathLive pra notificar listeners externos
+    // (confirmado: o clique original, despachado fundo no shadow DOM com
+    // `detail:1`, nunca chega aqui — o que chega é outro `click`,
+    // composed, disparado pelo MathLive diretamente no host, sempre com
+    // `detail:0`) — checar `=== 1` bloquearia SEMPRE, nunca deixando o
+    // reparo acontecer.
     function handleFieldClick(event: MouseEvent) {
       if (!field.selectionIsCollapsed) return;
-      const hit = field.shadowRoot?.elementFromPoint(event.clientX, event.clientY);
-      if (!hit || hit.classList.length > 0) return;
       const best = computeBestOffset(field, event.clientX, event.clientY);
       if (best !== null) field.position = best;
     }
