@@ -27,15 +27,22 @@ from .validation import (
 )
 
 
-def parse_equation_sides(text: str) -> tuple[Expr, Expr]:
+def parse_equation_sides(text: str, *, local_dict: dict | None = None) -> tuple[Expr, Expr]:
     """Ponto único de parsing de uma equação de um único "=" para o resto
     de `steps/` (Sprint V2.9.1: também usado por `linear_systems.py` e
     `quadratic_equations.py` — antes duplicado em `linear_systems.py` como
-    `_parse_equation_sides`, unificado aqui)."""
+    `_parse_equation_sides`, unificado aqui).
+
+    `local_dict` (Sprint "Exponenciais e Logaritmos", opcional, `None` por
+    padrão — nenhum chamador existente muda de comportamento) permite que
+    `exponential_equations.py`/`logarithmic_equations.py` passem a
+    convenção log/ln do produto (`log_convention.LOCAL_DICT`) — sem isso,
+    "log(x)" parsearia como log NATURAL do SymPy (o padrão nativo, que
+    este produto deliberadamente inverte), não base 10."""
     lhs_text, rhs_text = split_equation_sides(text)
     try:
-        lhs = safe_parse_expr(lhs_text)
-        rhs = safe_parse_expr(rhs_text)
+        lhs = safe_parse_expr(lhs_text, local_dict=local_dict)
+        rhs = safe_parse_expr(rhs_text, local_dict=local_dict)
     except ExpressionError:
         raise
     except Exception as exc:

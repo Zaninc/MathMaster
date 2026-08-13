@@ -7,6 +7,7 @@ from sympy.parsing.sympy_parser import (
     standard_transformations,
 )
 
+from ...canonical_constants import canonicalize_euler_constant
 from ..errors import ExpressionError
 from ..safe_parsing import safe_parse_expr
 
@@ -50,6 +51,18 @@ def solve_log_equation(text: str) -> str:
     if not isinstance(parsed, Eq):
         raise ExpressionError(f"Não foi possível interpretar a equação: {text}")
 
+    # Sprint "Exponenciais e Logaritmos" — causa raiz do bug relatado
+    # ("e^x=5" nunca resolvia): sem isto, o símbolo solto "e" (Euler) é
+    # indistinguível de qualquer outra variável livre de uma letra só —
+    # `Eq(e**x, 5)` tem 2 símbolos livres ("e" e "x"), rejeitado abaixo
+    # como "equação de mais de uma incógnita" mesmo a equação sendo,
+    # matematicamente, de uma incógnita só. Mesma função já usada por
+    # `dispatcher.py` (branch de expressão, não de equação) e por
+    # `calculus/dispatcher.py` — puramente sintática (`xreplace`, nunca
+    # `subs`/`simplify`), então nunca recalcula nada, só troca o símbolo
+    # pela constante real do SymPy ANTES de qualquer decisão de domínio.
+    parsed = canonicalize_euler_constant(parsed)
+
     symbols = list(parsed.free_symbols)
     if len(symbols) != 1:
         raise ExpressionError(
@@ -59,5 +72,21 @@ def solve_log_equation(text: str) -> str:
 
     _validate_exponential_base(parsed, symbol)
 
+    # Achado real (Sprint "Exponenciais e Logaritmos"): `sympy.solve()` para
+    # equações exponenciais transcendentais devolve TODOS os ramos
+    # complexos (ex. `e**(2x)=7` -> `[log(7)/2 + I*pi, log(7)/2]` — o
+    # primeiro é um ramo espúrio do logaritmo complexo, nunca uma solução
+    # real de verdade) — confirmado empiricamente, inclusive para
+    # `exp(2*x)=7` já alcançável ANTES desta sprint (bug pré-existente,
+    # nunca coberto por teste). `domain=S.Reals` no `solve()` NÃO filtra
+    # esses casos (testado, mesmo resultado com ou sem). Filtrar por
+    # `.is_real` (nunca `None`/indeterminado — fail-closed, mesmo espírito
+    # de `verify_antiderivative`) é o único jeito confirmado de manter só
+    # soluções genuinamente reais — equivalente pedagógico de "filtrar
+    # e^x>0"/"base>0" do lado de fora do `solve()` em vez de confiar que o
+    # SymPy já devolve só o que é fisicamente válido.
     solutions = solve(parsed, symbol)
-    return ", ".join(f"{symbol} = {solucao}" for solucao in solutions)
+    real_solutions = [solucao for solucao in solutions if solucao.is_real]
+    if not real_solutions:
+        raise ExpressionError("Esta equação não possui solução real.")
+    return ", ".join(f"{symbol} = {solucao}" for solucao in real_solutions)

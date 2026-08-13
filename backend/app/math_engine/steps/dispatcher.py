@@ -162,7 +162,26 @@ continua fora de escopo mesmo depois da divisão — `find_polynomial_
 division` devolve `None` nesse caso (nunca finge dividir só pela metade),
 caindo adiante na cascata até o fallback amigável genérico de
 `integrals.py`, exatamente como qualquer outra forma fora de escopo desde
-a V2.16."""
+a V2.16.
+
+Sprint "Exponenciais e Logaritmos" — antes da exclusão geral de domínio
+(`_NON_EQUATION_DOMAIN_CHECKS`, que hoje inclui `is_logarithm_domain_
+expression` e bloquearia TOTALMENTE qualquer equação exponencial/
+logarítmica), um texto que (a) parece uma equação (`looks_like_equation`)
+E (b) pertence ao domínio de log/exp (`is_logarithm_domain_expression`)
+é parseado UMA vez (`parse_equation_sides` + `canonicalize_euler_
+constant` nos dois lados — mesma canonicalização já usada por `/solve`)
+para decidir, por FORMA estrutural sobre a árvore já parseada (nunca
+regex), qual dos três motores novos resolve: `is_exponential_
+substitution_shape` (u=base**x, quadrática em u — ex. "e^(2x)-5e^x+6=0")
+é checado PRIMEIRO por ser o mais específico (uma soma de termos, nunca
+confundido com os outros dois, que exigem um único termo exponencial ou
+logarítmico isolado de um lado); depois `is_logarithmic_equation_shape`
+("ln(x)=2", "log(x)/log(2)=3"); por último `is_exponential_equation_
+shape` ("e^x=5", "2^x=8"). Se nenhum dos três casar, `UNSUPPORTED_
+EQUATION_MESSAGE` (nunca a mensagem genérica de domínio bloqueado — a
+equação até pertence ao domínio, só não tem o formato ainda suportado,
+ex. base simbólica ou expoente não-linear)."""
 from __future__ import annotations
 
 from sympy import degree, expand
@@ -180,9 +199,11 @@ from ..calculus.dispatcher import (
 )
 from ..combinatorics.dispatcher import is_combinatorics_domain_expression
 from ..complex.dispatcher import is_complex_domain_expression
+from ...canonical_constants import canonicalize_euler_constant
 from ..dispatcher import normalize_all
 from ..equations.dispatcher import (
     is_equation_domain_expression,
+    looks_like_equation,
     looks_like_inequality,
     split_equations,
 )
@@ -197,12 +218,18 @@ from ..trigonometry.dispatcher import is_trigonometry_domain_expression
 from .advanced_derivatives import generate_advanced_derivative_steps, is_product_or_chain_shape
 from .definite_integrals import generate_definite_integral_steps
 from .derivatives import generate_derivative_steps
+from .exponential_equations import generate_exponential_equation_steps, is_exponential_equation_shape
+from .exponential_substitution_equations import (
+    generate_exponential_substitution_steps,
+    is_exponential_substitution_shape,
+)
 from .integrals import generate_integral_steps
 from .integration_by_parts import find_integration_by_parts, generate_integration_by_parts_steps
 from .lhopital import generate_lhopital_steps, is_lhopital_shape
 from .limits import generate_limit_steps
 from .linear_equations import generate_linear_equation_steps, parse_equation_sides
 from .linear_systems import generate_linear_system_steps
+from .logarithmic_equations import generate_logarithmic_equation_steps, is_logarithmic_equation_shape
 from .models import MathStep
 from .partial_fractions import find_partial_fractions, generate_partial_fraction_steps
 from .polynomial_division import find_polynomial_division, generate_polynomial_division_steps
@@ -306,6 +333,22 @@ def generate_steps(expression: str) -> list[MathStep]:
         if is_lhopital_shape(expr, symbol, point):
             return generate_lhopital_steps(normalized)
         return generate_limit_steps(normalized)
+
+    if is_logarithm_domain_expression(normalized) and looks_like_equation(normalized):
+        lhs, rhs = parse_equation_sides(normalized)
+        lhs = canonicalize_euler_constant(lhs)
+        rhs = canonicalize_euler_constant(rhs)
+        symbols = lhs.free_symbols | rhs.free_symbols
+        require_single_symbol(symbols)
+        symbol = next(iter(symbols))
+
+        if is_exponential_substitution_shape(lhs, rhs, symbol):
+            return generate_exponential_substitution_steps(normalized)
+        if is_logarithmic_equation_shape(lhs, rhs, symbol):
+            return generate_logarithmic_equation_steps(normalized)
+        if is_exponential_equation_shape(lhs, rhs, symbol):
+            return generate_exponential_equation_steps(normalized)
+        raise ExpressionError(UNSUPPORTED_EQUATION_MESSAGE)
 
     if any(check(normalized) for check in _NON_EQUATION_DOMAIN_CHECKS):
         raise ExpressionError(UNSUPPORTED_DOMAIN_MESSAGE)

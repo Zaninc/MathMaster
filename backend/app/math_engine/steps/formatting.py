@@ -9,9 +9,10 @@ from __future__ import annotations
 import re
 from typing import Callable
 
+from sympy import E
 from sympy.core.expr import Expr
 
-from .models import TitleSegment
+from .models import MathStep, TitleSegment
 
 # --- Sprint V2.10.1 — compartilhado entre integrals.py e u_substitution.py --
 # (originalmente privado em integrals.py; promovido aqui na V2.14 para
@@ -184,6 +185,72 @@ def signed_terms_text(terms: list[Expr], formatter: Callable[[Expr], str] = str)
             sign = "-" if negative else "+"
         parts.append(f"{sign}{formatter(piece)}")
     return "".join(parts)
+
+
+# --- Sprint "Exponenciais e Logaritmos" — compartilhado entre -------------
+# exponential_equations.py, logarithmic_equations.py e
+# exponential_substitution_equations.py.
+
+_NATURAL_LOG_PATTERN = re.compile(r"\blog(?=\()")
+
+
+def rename_natural_log(text: str) -> str:
+    """Mesma convenção de `logarithms/dispatcher.py:_rename_natural_log`
+    (o log natural do SymPy sempre se auto-nomeia "log(" internamente; a
+    convenção do produto usa "ln(" para log natural, "log(" reservado para
+    base 10) — promovido aqui para os três módulos novos de passo a passo
+    reaproveitarem a MESMA conversão em vez de triplicá-la."""
+    return _NATURAL_LOG_PATTERN.sub("ln", text)
+
+
+def rename_natural_log_in_steps(steps: list[MathStep]) -> list[MathStep]:
+    """Aplica `rename_natural_log` ao `expression` de cada passo de uma
+    lista já pronta — necessário sempre que um motor GENÉRICO e alheio à
+    convenção log/ln (`linear_equations.reduce_to_value`, reaproveitado
+    por `exponential_equations.py`/`logarithmic_equations.py` para isolar
+    a incógnita depois que um `ln(...)` já apareceu do lado direito) gera
+    seus próprios passos: esses passos nunca passam pela renomeação
+    sozinhos, porque `reduce_to_value` não sabe (nem precisa saber) que
+    está lidando com log — só o módulo chamador sabe disso. `title`/
+    `title_segments`/`explanation` nunca contêm "log(" (vocabulário fixo
+    em português dos títulos de `linear_equations.py`), por isso só
+    `expression` precisa ser reconstruído."""
+    return [
+        MathStep(
+            expression=rename_natural_log(step.expression),
+            title=step.title,
+            title_segments=step.title_segments,
+            explanation=step.explanation,
+        )
+        for step in steps
+    ]
+
+
+def pow_text(base: Expr, exponent: Expr) -> str:
+    """"base**expoente" em texto puro, SEM deixar o SymPy avaliar a
+    potência quando base e expoente são ambos números literais (ex.
+    `Integer(2)**Integer(3)` avalia imediatamente para `8` — mesmo
+    problema já documentado em `quadratic_equations._bhaskara_steps`/
+    `substitute_symbol_text` acima: qualquer concatenação manual de uma
+    substituição precisa ser feita em texto, nunca via aritmética real do
+    SymPy, para preservar a forma "não calculada" no passo pedagógico).
+
+    Base igual a `E` usa sempre a forma canônica "exp(expoente)" do
+    produto (nunca "E**x" cru — não é vocabulário que `to-latex.ts`
+    reconheça; `exp(` já é especialmente tratado lá, renderizando como
+    "e" elevado, confirmado em `to-latex.ts`).
+
+    Expoente composto (soma OU produto, ex. "x + 1", "2*x") SEMPRE ganha
+    parênteses: "**" tem precedência maior que "*" ao reler o texto, então
+    "3**x + 1" leria como "(3**x) + 1", nunca "3**(x + 1)" — o mesmo
+    problema que `wrap_if_sum` resolve para outros módulos, mas aqui
+    precisa cobrir produtos também (`2*x`), não só somas."""
+    if base == E:
+        return f"exp({exponent})"
+    exponent_text = str(exponent)
+    if not (exponent.is_Symbol or exponent.is_Number):
+        exponent_text = f"({exponent_text})"
+    return f"{base}**{exponent_text}"
 
 
 def linear_combination_expression(terms: list[Expr], symbol: Expr, operation: str) -> str:

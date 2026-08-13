@@ -1160,3 +1160,78 @@ def test_solve_steps_pure_product_rule_without_quotient_still_works(client: Test
     assert response.status_code == 200
     titles = [step["title"] for step in response.json()["steps"]]
     assert "Identificando um quociente" not in titles
+
+
+# --- Sprint "Exponenciais e Logaritmos" -------------------------------------
+
+
+def test_solve_steps_exponential_equation_euler_base(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "e^x=5"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "x = ln(5)"
+    assert body["steps"][0]["title"] == "Equação inicial"
+    assert body["steps"][-1]["expression"] == "x=ln(5)"
+
+
+def test_solve_steps_exponential_equation_numeric_base_same_base_method(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "2^x=8"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "x = 3"
+    titles = [step["title"] for step in body["steps"]]
+    assert any("bases são iguais" in (title or "") for title in titles)
+
+
+def test_solve_steps_exponential_equation_no_real_solution_returns_400(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "e^x=-5"})
+    assert response.status_code == 400
+    assert "não possui solução real" in response.json()["detail"]
+
+
+def test_solve_steps_logarithmic_equation_natural(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "ln(x+1)=3"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "x = -1 + exp(3)"
+    assert body["steps"][-1]["expression"] == "x=-1 + exp(3)"
+
+
+def test_solve_steps_logarithmic_equation_base_10(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "log(x)=2"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "x = 100"
+    assert body["steps"][-1]["expression"] == "x=100"
+
+
+def test_solve_steps_logarithmic_equation_arbitrary_base_change_of_base(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "log(x)/log(2)=3"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] == "x = 8"
+    assert body["steps"][-1]["expression"] == "x=8"
+
+
+def test_solve_steps_exponential_substitution_equation(client: TestClient) -> None:
+    response = client.post("/solve/steps", json={"expression": "e^(2x)-5e^x+6=0"})
+    assert response.status_code == 200
+    body = response.json()
+    expressions = {step["expression"] for step in body["steps"]}
+    assert {"x=ln(2)", "x=ln(3)"} <= expressions
+    titles = [step["title"] for step in body["steps"]]
+    assert any("substituição" in (title or "") for title in titles)
+
+
+def test_solve_steps_exponential_and_logarithmic_never_leak_raw_log(client: TestClient) -> None:
+    for expression in ["e^x=5", "e^(2x)=7", "ln(x)=2", "log(x)=2", "log(x)/log(2)=3"]:
+        response = client.post("/solve/steps", json={"expression": expression})
+        assert response.status_code == 200
+        for step in response.json()["steps"]:
+            assert "log(" not in step["expression"]
+
+
+def test_solve_endpoint_contract_unchanged_for_exponential_equations(client: TestClient) -> None:
+    response = client.post("/solve", json={"expression": "e^x=5"})
+    assert response.status_code == 200
+    assert response.json() == {"expression": "e^x=5", "result": "x = ln(5)", "approx": None}

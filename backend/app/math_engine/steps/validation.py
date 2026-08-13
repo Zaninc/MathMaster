@@ -45,6 +45,14 @@ UNSUPPORTED_INTEGRATION_BY_PARTS_MULTIPLE_APPLICATIONS_MESSAGE = (
     "Esta integral requer aplicações sucessivas de integração por partes, que "
     "ainda não fazem parte desta versão."
 )
+# Sprint "Exponenciais e Logaritmos" — usada por `exponential_equations.py` e
+# `exponential_substitution_equations.py`: uma potência de base real positiva
+# nunca resulta em um valor negativo ou nulo, então uma equação como "e^x=-5"
+# (ou, após a substituição u=e^x, nenhuma raiz de u sendo positiva) é
+# matematicamente válida de se propor mas não tem solução real nenhuma —
+# situação distinta de "fora do escopo desta versão" (`UNSUPPORTED_EQUATION_
+# MESSAGE`), por isso uma mensagem dedicada.
+NO_REAL_SOLUTION_MESSAGE = "Esta equação não possui solução real."
 
 
 def require_single_symbol(symbols: set) -> None:
