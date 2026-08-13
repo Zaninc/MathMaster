@@ -11,6 +11,13 @@ import type { ExerciseDraft } from "./types";
  * `discriminante-002`), e ganham prefixo novo só quando a técnica é
  * realmente distinta (ex.: `primeiro-grau-parenteses`, `primeiro-grau-fracoes`,
  * `segundo-grau-incompleta`).
+ *
+ * Sprint "KaTeX em alternativas" — alternativas de valor único ("x = 3")
+ * ganharam `{content, format: "math"}`. Alternativas que juntam DUAS
+ * soluções com "e"/"ou" em português ("x = 2 e x = 3", "k = 3 ou
+ * k = -3") ficaram como texto puro — são exatamente o caso "texto
+ * misturado com matemática" que o ticket pediu para NÃO tentar
+ * renderizar sem suporte a segmentos (ver `ExerciseChoiceContent.tsx`).
  */
 export const EQUACOES_EXERCISES: ExerciseDraft[] = [
   {
@@ -20,7 +27,12 @@ export const EQUACOES_EXERCISES: ExerciseDraft[] = [
     position: 1,
     statement: "Resolva a equação:",
     statementLatex: String.raw`2x + 6 = 0`,
-    choices: ["x = 3", "x = -3", "x = -6", "x = 6"],
+    choices: [
+      { content: "x = 3", format: "math" },
+      { content: "x = -3", format: "math" },
+      { content: "x = -6", format: "math" },
+      { content: "x = 6", format: "math" },
+    ],
     correctIndex: 1,
     explanation: "2x = −6, logo x = −3.",
   },
@@ -42,7 +54,12 @@ export const EQUACOES_EXERCISES: ExerciseDraft[] = [
     position: 3,
     statement: "Para qual valor de k a equação tem exatamente uma raiz real?",
     statementLatex: String.raw`x^2 + kx + 9 = 0`,
-    choices: ["k = 3 ou k = -3", "k = 9", "k = 6 ou k = -6", "k = 0"],
+    choices: [
+      "k = 3 ou k = -3",
+      { content: "k = 9", format: "math" },
+      "k = 6 ou k = -6",
+      { content: "k = 0", format: "math" },
+    ],
     correctIndex: 2,
     explanation: "Uma raiz real exige Δ = 0: k² − 36 = 0, logo k = ±6.",
   },
@@ -53,7 +70,12 @@ export const EQUACOES_EXERCISES: ExerciseDraft[] = [
     position: 4,
     statement: "Resolva a equação:",
     statementLatex: String.raw`3x - 9 = 0`,
-    choices: ["x = 3", "x = -3", "x = 9", "x = 6"],
+    choices: [
+      { content: "x = 3", format: "math" },
+      { content: "x = -3", format: "math" },
+      { content: "x = 9", format: "math" },
+      { content: "x = 6", format: "math" },
+    ],
     correctIndex: 0,
     explanation: "3x = 9, logo x = 9/3 = 3.",
   },
@@ -64,7 +86,12 @@ export const EQUACOES_EXERCISES: ExerciseDraft[] = [
     position: 5,
     statement: "Resolva a equação:",
     statementLatex: String.raw`2(x + 3) = 10`,
-    choices: ["x = 2", "x = 4", "x = -2", "x = 5"],
+    choices: [
+      { content: "x = 2", format: "math" },
+      { content: "x = 4", format: "math" },
+      { content: "x = -2", format: "math" },
+      { content: "x = 5", format: "math" },
+    ],
     correctIndex: 0,
     explanation: "Aplique a propriedade distributiva: 2(x+3) = 2x + 6. A equação fica 2x + 6 = 10. Isole x: 2x = 10 − 6 = 4, logo x = 4/2 = 2.",
   },
@@ -75,7 +102,12 @@ export const EQUACOES_EXERCISES: ExerciseDraft[] = [
     position: 6,
     statement: "Resolva a equação:",
     statementLatex: String.raw`\dfrac{x}{2} + 3 = 7`,
-    choices: ["x = 8", "x = 4", "x = 14", "x = 2"],
+    choices: [
+      { content: "x = 8", format: "math" },
+      { content: "x = 4", format: "math" },
+      { content: "x = 14", format: "math" },
+      { content: "x = 2", format: "math" },
+    ],
     correctIndex: 0,
     explanation: "Isole o termo com x: x/2 = 7 − 3 = 4. Multiplique os dois lados por 2: x = 4 · 2 = 8.",
   },
@@ -86,7 +118,12 @@ export const EQUACOES_EXERCISES: ExerciseDraft[] = [
     position: 7,
     statement: "Resolva a equação:",
     statementLatex: String.raw`x^2 - 16 = 0`,
-    choices: ["x = 4 ou x = -4", "x = 16", "x = 8 ou x = -8", "x = 4"],
+    choices: [
+      "x = 4 ou x = -4",
+      { content: "x = 16", format: "math" },
+      "x = 8 ou x = -8",
+      { content: "x = 4", format: "math" },
+    ],
     correctIndex: 0,
     explanation: "Isole x²: x² = 16. Como não há termo em x (equação incompleta), extraia a raiz quadrada dos dois lados, considerando as duas soluções: x = ±√16 = ±4.",
   },
@@ -108,7 +145,12 @@ export const EQUACOES_EXERCISES: ExerciseDraft[] = [
     position: 9,
     statement: "Para quais valores de k a equação tem duas raízes reais e distintas?",
     statementLatex: String.raw`x^2 - 4x + k = 0`,
-    choices: ["k < 4", "k > 4", "k = 4", "k ≤ 4"],
+    choices: [
+      { content: "k < 4", format: "math" },
+      { content: "k > 4", format: "math" },
+      { content: "k = 4", format: "math" },
+      { content: "k ≤ 4", format: "math" },
+    ],
     correctIndex: 0,
     explanation: "Duas raízes reais e distintas exigem Δ > 0. Δ = (−4)² − 4·1·k = 16 − 4k. A condição 16 − 4k > 0 dá k < 4.",
   },

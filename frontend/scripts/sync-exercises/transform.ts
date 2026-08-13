@@ -1,13 +1,13 @@
-import type { ExerciseDraft } from "../../data/exercises/types";
+import type { ExerciseChoiceDraft, ExerciseDraft } from "../../data/exercises/types";
 
-/** Formato exato da tabela `exercises` (supabase/migrations/0002_topics_exercises.sql + 0004_exercises_slug.sql). Nunca inclui `id` — em conflito de slug, o upsert preserva o id existente. */
+/** Formato exato da tabela `exercises` (supabase/migrations/0002_topics_exercises.sql + 0004_exercises_slug.sql). Nunca inclui `id` — em conflito de slug, o upsert preserva o id existente. `choices` aceita `string | {content, format}` desde a Sprint "KaTeX em alternativas" — a constraint `jsonb` do banco só valida a forma do array, nunca o tipo de cada elemento, então nenhuma migração foi necessária. */
 export interface ExerciseRow {
   slug: string;
   topic_id: string;
   difficulty: string;
   statement: string;
   statement_latex: string | null;
-  choices: string[];
+  choices: ExerciseChoiceDraft[];
   correct_index: number;
   explanation: string;
   position: number;

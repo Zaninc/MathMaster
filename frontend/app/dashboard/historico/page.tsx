@@ -7,7 +7,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { AttemptList, type AttemptView } from "@/components/learning/AttemptList";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import type { ExerciseDifficulty } from "@/lib/supabase/types";
+import { exerciseChoiceContent, type ExerciseChoice, type ExerciseDifficulty } from "@/lib/supabase/types";
 
 export const metadata: Metadata = {
   title: "Histórico",
@@ -25,7 +25,7 @@ interface AttemptRow {
   exercises: {
     statement: string;
     difficulty: ExerciseDifficulty;
-    choices: string[];
+    choices: ExerciseChoice[];
     topics: { title: string } | null;
   } | null;
 }
@@ -68,7 +68,10 @@ export default async function HistoricoPage() {
       statement: row.exercises!.statement,
       topicTitle: row.exercises!.topics?.title ?? "—",
       difficulty: row.exercises!.difficulty,
-      selectedChoice: row.exercises!.choices[row.selected_index] ?? "—",
+      selectedChoice:
+        row.exercises!.choices[row.selected_index] !== undefined
+          ? exerciseChoiceContent(row.exercises!.choices[row.selected_index])
+          : "—",
       isCorrect: row.is_correct,
       createdAt: row.created_at,
     }));

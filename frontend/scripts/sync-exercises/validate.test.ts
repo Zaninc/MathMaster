@@ -114,6 +114,60 @@ describe("validateCatalog — regras individuais", () => {
   });
 });
 
+describe("validateCatalog — alternativas ricas (Sprint 'KaTeX em alternativas')", () => {
+  it("aceita um catálogo misturando string bare e {content, format}", () => {
+    const errors = validateCatalog([
+      makeExercise({
+        choices: [
+          { content: "x = 3", format: "math" },
+          { content: "x = -3", format: "math" },
+          "Não possui solução real",
+          { content: "Nenhuma das anteriores", format: "text" },
+        ],
+      }),
+    ]);
+    expect(errors).toEqual([]);
+  });
+
+  it("format inválido gera erro", () => {
+    const errors = validateCatalog([
+      makeExercise({
+        // @ts-expect-error format inválido de propósito
+        choices: [{ content: "x = 3", format: "latex" }, "b", "c", "d"],
+      }),
+    ]);
+    expect(errors.some((e) => e.message.includes("format inválido"))).toBe(true);
+  });
+
+  it("content ausente/vazio num objeto gera erro", () => {
+    const errors = validateCatalog([
+      makeExercise({
+        choices: [{ content: "", format: "math" }, "b", "c", "d"],
+      }),
+    ]);
+    expect(errors.some((e) => e.message.includes("content ausente ou vazio"))).toBe(true);
+  });
+
+  it("forma completamente inválida (nem string nem objeto) gera erro dedicado", () => {
+    const errors = validateCatalog([
+      makeExercise({
+        // @ts-expect-error forma inválida de propósito
+        choices: [42, "b", "c", "d"],
+      }),
+    ]);
+    expect(errors.some((e) => e.message.includes("formato inválido"))).toBe(true);
+  });
+
+  it("duplicidade é detectada pelo TEXTO de exibição, independente do formato", () => {
+    const errors = validateCatalog([
+      makeExercise({
+        choices: [{ content: "x = 3", format: "math" }, "x = 3", "c", "d"],
+      }),
+    ]);
+    expect(errors.some((e) => e.message.includes("alternativas duplicadas"))).toBe(true);
+  });
+});
+
 describe("validateTopicReferences", () => {
   it("aceita quando o tópico existe no conjunto conhecido", () => {
     const errors = validateTopicReferences([makeExercise({ topicSlug: "algebra-basica" })], new Set(["algebra-basica"]));

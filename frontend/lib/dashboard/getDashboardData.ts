@@ -2,7 +2,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { AttemptView } from "@/components/learning/AttemptList";
 import { buildRecommendations, computeTopicMetrics, type AttemptInput } from "@/lib/learning/metrics";
-import type { Exercise, ExerciseDifficulty, Profile, Topic } from "@/lib/supabase/types";
+import {
+  exerciseChoiceContent,
+  type Exercise,
+  type ExerciseChoice,
+  type ExerciseDifficulty,
+  type Profile,
+  type Topic,
+} from "@/lib/supabase/types";
 
 import {
   attachTopicMetricSlugs,
@@ -36,7 +43,7 @@ interface RecentAttemptRow {
   exercises: {
     statement: string;
     difficulty: ExerciseDifficulty;
-    choices: string[];
+    choices: ExerciseChoice[];
     topics: { title: string } | null;
   } | null;
 }
@@ -107,7 +114,10 @@ export async function getDashboardData(supabase: SupabaseClient, userId: string)
       statement: row.exercises!.statement,
       topicTitle: row.exercises!.topics?.title ?? "—",
       difficulty: row.exercises!.difficulty,
-      selectedChoice: row.exercises!.choices[row.selected_index] ?? "—",
+      selectedChoice:
+        row.exercises!.choices[row.selected_index] !== undefined
+          ? exerciseChoiceContent(row.exercises!.choices[row.selected_index])
+          : "—",
       isCorrect: row.is_correct,
       createdAt: row.created_at,
     }));

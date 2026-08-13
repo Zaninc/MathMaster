@@ -7,7 +7,7 @@ vi.mock("@/lib/supabase/client", () => ({
   getSupabaseBrowserClient: () => getSupabaseBrowserClientMock(),
 }));
 
-import type { Exercise } from "@/lib/supabase/types";
+import { exerciseChoiceContent, type Exercise } from "@/lib/supabase/types";
 
 import { ExerciseCard } from "./ExerciseCard";
 
@@ -39,7 +39,7 @@ describe("ExerciseCard", () => {
     expect(screen.getByText("Resolva a equação:")).toBeInTheDocument();
     expect(screen.getByText("Fácil")).toBeInTheDocument();
     for (const choice of EXERCISE.choices) {
-      expect(screen.getByRole("button", { name: choice })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: exerciseChoiceContent(choice) })).toBeInTheDocument();
     }
   });
 
@@ -59,7 +59,7 @@ describe("ExerciseCard", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("Resposta incorreta");
     for (const choice of EXERCISE.choices) {
-      expect(screen.getByRole("button", { name: choice })).toBeDisabled();
+      expect(screen.getByRole("button", { name: exerciseChoiceContent(choice) })).toBeDisabled();
     }
   });
 
@@ -96,5 +96,50 @@ describe("ExerciseCard", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("Resposta correta!");
     expect(insertMock).not.toHaveBeenCalled();
+  });
+
+  describe("Sprint 'KaTeX em alternativas' — alternativas com format: math", () => {
+    const MATH_EXERCISE: Exercise = {
+      ...EXERCISE,
+      slug: "equacoes-primeiro-grau-teste-math",
+      choices: [
+        { content: "x = 3", format: "math" },
+        { content: "x = -3", format: "math" },
+        { content: "x = -6", format: "math" },
+        { content: "x = 6", format: "math" },
+      ],
+    };
+
+    it("o nome acessível do botão continua o texto puro da alternativa, mesmo renderizada em KaTeX", () => {
+      render(<ExerciseCard exercise={MATH_EXERCISE} />);
+
+      // aria-label força o nome acessível ao content original — o mesmo
+      // contrato de getByRole com string bare, independente do que o
+      // KaTeX injeta visualmente dentro do botão.
+      for (const choice of MATH_EXERCISE.choices) {
+        const content = typeof choice === "string" ? choice : choice.content;
+        expect(screen.getByRole("button", { name: content })).toBeInTheDocument();
+      }
+    });
+
+    it("seleção e feedback de correto/incorreto continuam funcionando com alternativas em KaTeX", () => {
+      render(<ExerciseCard exercise={MATH_EXERCISE} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "x = -3" }));
+
+      expect(screen.getByRole("status")).toHaveTextContent("Resposta correta!");
+    });
+
+    it("resposta errada com alternativas em KaTeX desabilita e destaca corretamente", () => {
+      render(<ExerciseCard exercise={MATH_EXERCISE} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "x = 3" }));
+
+      expect(screen.getByRole("status")).toHaveTextContent("Resposta incorreta");
+      for (const choice of MATH_EXERCISE.choices) {
+        const content = typeof choice === "string" ? choice : choice.content;
+        expect(screen.getByRole("button", { name: content })).toBeDisabled();
+      }
+    });
   });
 });

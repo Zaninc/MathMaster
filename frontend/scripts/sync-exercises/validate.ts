@@ -1,4 +1,4 @@
-import type { ExerciseDraft } from "../../data/exercises/types";
+import type { ExerciseChoiceDraft, ExerciseDraft } from "../../data/exercises/types";
 
 /**
  * Validação do catálogo — 100% pura e local, sem tocar no Supabase
@@ -30,6 +30,47 @@ const ALLOWED_KEYS = new Set([
 
 function fileFor(exercise: Partial<ExerciseDraft>): string {
   return exercise.topicSlug ? `data/exercises/${exercise.topicSlug}.ts` : "data/exercises/(topicSlug ausente)";
+}
+
+const VALID_CHOICE_FORMATS = new Set<string>(["text", "math"]);
+
+/**
+ * Sprint "KaTeX em alternativas" — `choice` pode ser uma `string` (o
+ * formato original, sempre válido se não-vazia) ou `{content, format}`
+ * (aditivo). Devolve o texto de exibição para checagens de duplicidade/
+ * vazio (independente do formato) e `null` quando a FORMA em si já é
+ * inválida (nem string nem objeto reconhecível) — nesse caso o chamador
+ * registra o erro estrutural em vez de tentar extrair texto de algo
+ * malformado.
+ */
+function choiceDisplayText(choice: unknown): string | null {
+  if (typeof choice === "string") return choice;
+  if (
+    typeof choice === "object" &&
+    choice !== null &&
+    "content" in choice &&
+    typeof (choice as { content: unknown }).content === "string"
+  ) {
+    return (choice as { content: string }).content;
+  }
+  return null;
+}
+
+function validateChoiceShape(choice: unknown): string | null {
+  if (typeof choice === "string") {
+    return choice.trim() === "" ? "alternativa vazia" : null;
+  }
+  if (typeof choice !== "object" || choice === null) {
+    return `alternativa em formato inválido (esperado string ou {content, format}): ${JSON.stringify(choice)}`;
+  }
+  const candidate = choice as Partial<ExerciseChoiceDraft & { content: unknown; format: unknown }>;
+  if (typeof candidate.content !== "string" || candidate.content.trim() === "") {
+    return "alternativa com content ausente ou vazio";
+  }
+  if (typeof candidate.format !== "string" || !VALID_CHOICE_FORMATS.has(candidate.format)) {
+    return `alternativa com format inválido: "${String(candidate.format)}" (esperado "text" ou "math")`;
+  }
+  return null;
 }
 
 /** Validações estruturais de UM exercício — chamado por `validateCatalog` para cada item do catálogo. */
@@ -66,11 +107,14 @@ function validateOne(exercise: ExerciseDraft): ValidationError[] {
       message: `quantidade inválida de alternativas: esperado 4, recebido ${Array.isArray(exercise.choices) ? exercise.choices.length : "não é array"}`,
     });
   } else {
-    const hasEmpty = exercise.choices.some((choice) => typeof choice !== "string" || choice.trim() === "");
-    if (hasEmpty) errors.push({ file, slug, message: "alternativa vazia" });
+    for (const choice of exercise.choices) {
+      const shapeError = validateChoiceShape(choice);
+      if (shapeError) errors.push({ file, slug, message: shapeError });
+    }
 
-    const uniqueChoices = new Set(exercise.choices.map((choice) => choice?.trim()));
-    if (uniqueChoices.size !== exercise.choices.length) {
+    const displayTexts = exercise.choices.map(choiceDisplayText).filter((text): text is string => text !== null);
+    const uniqueChoices = new Set(displayTexts.map((text) => text.trim()));
+    if (uniqueChoices.size !== displayTexts.length) {
       errors.push({ file, slug, message: "alternativas duplicadas" });
     }
 

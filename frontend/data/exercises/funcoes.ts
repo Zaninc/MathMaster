@@ -11,6 +11,12 @@ import type { ExerciseDraft } from "./types";
  * `avaliacao-002`, `dominio-002`, `composicao-002`), e ganham prefixo
  * novo só quando o conceito é realmente distinto (ex.: `imagem`, `zero`,
  * `quadratica`).
+ *
+ * Sprint "KaTeX em alternativas" — números soltos e equações simples
+ * ganharam `{content, format: "math"}`. Frases em português ("Todos os
+ * reais exceto x = 4") ficaram como texto puro — não são matemática
+ * "pura", são uma descrição textual que embute um valor, o mesmo tipo de
+ * caso que o ticket pediu para manter como texto.
  */
 export const FUNCOES_EXERCISES: ExerciseDraft[] = [
   {
@@ -19,7 +25,12 @@ export const FUNCOES_EXERCISES: ExerciseDraft[] = [
     difficulty: "facil",
     position: 1,
     statement: "Se f(x) = 2x + 1, quanto vale f(3)?",
-    choices: ["6", "5", "7", "9"],
+    choices: [
+      { content: "6", format: "math" },
+      { content: "5", format: "math" },
+      { content: "7", format: "math" },
+      { content: "9", format: "math" },
+    ],
     correctIndex: 2,
     explanation: "f(3) = 2·3 + 1 = 7.",
   },
@@ -30,7 +41,12 @@ export const FUNCOES_EXERCISES: ExerciseDraft[] = [
     position: 2,
     statement: "Qual é o domínio da função?",
     statementLatex: String.raw`f(x) = \dfrac{1}{x - 4}`,
-    choices: ["x > 4", "Todos os reais", "Todos os reais exceto 0", "Todos os reais exceto 4"],
+    choices: [
+      { content: "x > 4", format: "math" },
+      "Todos os reais",
+      "Todos os reais exceto 0",
+      "Todos os reais exceto 4",
+    ],
     correctIndex: 3,
     explanation: "O denominador não pode ser zero: x − 4 ≠ 0, logo x ≠ 4.",
   },
@@ -40,7 +56,12 @@ export const FUNCOES_EXERCISES: ExerciseDraft[] = [
     difficulty: "dificil",
     position: 3,
     statement: "Se f(x) = x² e g(x) = x + 1, qual é f(g(2))?",
-    choices: ["5", "6", "3", "9"],
+    choices: [
+      { content: "5", format: "math" },
+      { content: "6", format: "math" },
+      { content: "3", format: "math" },
+      { content: "9", format: "math" },
+    ],
     correctIndex: 3,
     explanation: "g(2) = 3 e f(3) = 3² = 9.",
   },
@@ -50,7 +71,12 @@ export const FUNCOES_EXERCISES: ExerciseDraft[] = [
     difficulty: "facil",
     position: 4,
     statement: "Se f(x) = 3x - 2, quanto vale f(4)?",
-    choices: ["10", "12", "14", "9"],
+    choices: [
+      { content: "10", format: "math" },
+      { content: "12", format: "math" },
+      { content: "14", format: "math" },
+      { content: "9", format: "math" },
+    ],
     correctIndex: 0,
     explanation: "f(4) = 3·4 − 2 = 12 − 2 = 10.",
   },
@@ -60,7 +86,12 @@ export const FUNCOES_EXERCISES: ExerciseDraft[] = [
     difficulty: "facil",
     position: 5,
     statement: "Qual é a imagem de x = -2 pela função f(x) = x² + 1?",
-    choices: ["5", "4", "-3", "3"],
+    choices: [
+      { content: "5", format: "math" },
+      { content: "4", format: "math" },
+      { content: "-3", format: "math" },
+      { content: "3", format: "math" },
+    ],
     correctIndex: 0,
     explanation: "A imagem de x = −2 pela função f é f(−2). Calcule: f(−2) = (−2)² + 1 = 4 + 1 = 5.",
   },
@@ -71,7 +102,12 @@ export const FUNCOES_EXERCISES: ExerciseDraft[] = [
     position: 6,
     statement: "Qual é o zero da função afim?",
     statementLatex: String.raw`f(x) = 3x - 12`,
-    choices: ["x = 4", "x = -4", "x = 12", "x = 36"],
+    choices: [
+      { content: "x = 4", format: "math" },
+      { content: "x = -4", format: "math" },
+      { content: "x = 12", format: "math" },
+      { content: "x = 36", format: "math" },
+    ],
     correctIndex: 0,
     explanation: "O zero da função é o valor de x para o qual f(x) = 0. Resolva 3x − 12 = 0: 3x = 12, logo x = 4.",
   },
@@ -81,7 +117,12 @@ export const FUNCOES_EXERCISES: ExerciseDraft[] = [
     difficulty: "medio",
     position: 7,
     statement: "Se f(x) = x + 3 e g(x) = 2x, qual é o valor de g(f(1))?",
-    choices: ["8", "5", "4", "6"],
+    choices: [
+      { content: "8", format: "math" },
+      { content: "5", format: "math" },
+      { content: "4", format: "math" },
+      { content: "6", format: "math" },
+    ],
     correctIndex: 0,
     explanation: "Calcule de dentro para fora: primeiro f(1) = 1 + 3 = 4. Depois aplique g ao resultado: g(4) = 2·4 = 8.",
   },
@@ -103,7 +144,12 @@ export const FUNCOES_EXERCISES: ExerciseDraft[] = [
     position: 9,
     statement: "Qual é o valor mínimo da função?",
     statementLatex: String.raw`f(x) = x^2 - 6x + 5`,
-    choices: ["-4", "5", "3", "-9"],
+    choices: [
+      { content: "-4", format: "math" },
+      { content: "5", format: "math" },
+      { content: "3", format: "math" },
+      { content: "-9", format: "math" },
+    ],
     correctIndex: 0,
     explanation: "Como a = 1 > 0, a parábola tem concavidade para cima, então o vértice é o ponto de valor mínimo. A coordenada x do vértice é x = −b/2a = 6/2 = 3. O valor mínimo é f(3) = 3² − 6·3 + 5 = 9 − 18 + 5 = −4.",
   },

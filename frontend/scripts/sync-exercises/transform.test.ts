@@ -47,4 +47,23 @@ describe("toExerciseRow", () => {
   it("lança quando o topicSlug não foi resolvido", () => {
     expect(() => toExerciseRow(DRAFT, new Map())).toThrow(/Tópico "algebra-basica" não encontrado/);
   });
+
+  it("Sprint 'KaTeX em alternativas' — alternativas ricas ({content, format}) passam intactas para a linha", () => {
+    const draftWithRichChoices: ExerciseDraft = {
+      ...DRAFT,
+      choices: [
+        { content: "5x", format: "math" },
+        { content: "4x", format: "math" },
+        "Nenhuma das anteriores",
+        { content: "6x", format: "math" },
+      ],
+    };
+    const row = toExerciseRow(draftWithRichChoices, new Map([["algebra-basica", "topic-uuid-123"]]));
+    expect(row.choices).toEqual([
+      { content: "5x", format: "math" },
+      { content: "4x", format: "math" },
+      "Nenhuma das anteriores",
+      { content: "6x", format: "math" },
+    ]);
+  });
 });

@@ -12,6 +12,24 @@ import type { ExerciseDraft } from "./types";
  * `fatoracao-002`), e ganham prefixo novo só quando a técnica é
  * realmente distinta (ex.: `distributiva`, `produto-notavel`,
  * `fator-comum`).
+ *
+ * Sprint "KaTeX em alternativas" — alternativas claramente matemáticas
+ * ganharam `{content, format: "math"}` (renderizadas em KaTeX via
+ * `previewLatex`, `ExerciseChoiceContent.tsx`); verificado empiricamente
+ * contra o conversor real antes de marcar cada uma. Duas exceções
+ * documentadas:
+ * - `algebra-basica-fatoracao-001`, 4ª alternativa ("x(x−9)"): um
+ *   identificador de uma letra imediatamente seguido de "(" é
+ *   interpretado por `to-latex.ts` (via mathjs) como CHAMADA DE FUNÇÃO,
+ *   não multiplicação — renderiza como "\mathrm{x}(x-9)", com o "x" em
+ *   texto reto, ambíguo com "aplicar a função x" -- deixado como texto
+ *   puro; as outras 3 alternativas do mesmo exercício não têm esse
+ *   padrão e foram convertidas.
+ * - `algebra-basica-fator-comum-001`: 3 das 4 alternativas têm o MESMO
+ *   padrão "x(...)"/"3x(...)" (só "3(2x²+3x)" escapa, por começar com um
+ *   número) — convertê-la sozinha deixaria 1 alternativa em KaTeX e 3 em
+ *   texto no mesmo exercício, inconsistente; o exercício inteiro ficou
+ *   como texto.
  */
 export const ALGEBRA_BASICA_EXERCISES: ExerciseDraft[] = [
   {
@@ -21,7 +39,12 @@ export const ALGEBRA_BASICA_EXERCISES: ExerciseDraft[] = [
     position: 1,
     statement: "Simplifique a expressão:",
     statementLatex: String.raw`3x + 2x - x`,
-    choices: ["5x", "4x", "6x", "x"],
+    choices: [
+      { content: "5x", format: "math" },
+      { content: "4x", format: "math" },
+      { content: "6x", format: "math" },
+      { content: "x", format: "math" },
+    ],
     correctIndex: 1,
     explanation: "3x + 2x - x = (3 + 2 - 1)x = 4x.",
   },
@@ -32,7 +55,12 @@ export const ALGEBRA_BASICA_EXERCISES: ExerciseDraft[] = [
     position: 2,
     statement: "Fatore completamente:",
     statementLatex: String.raw`x^2 - 9`,
-    choices: ["(x−3)(x+3)", "(x−9)(x+1)", "(x−3)²", "x(x−9)"],
+    choices: [
+      { content: "(x−3)(x+3)", format: "math" },
+      { content: "(x−9)(x+1)", format: "math" },
+      { content: "(x−3)²", format: "math" },
+      "x(x−9)",
+    ],
     correctIndex: 0,
     explanation: "Diferença de quadrados: x² − 9 = x² − 3² = (x−3)(x+3).",
   },
@@ -43,7 +71,12 @@ export const ALGEBRA_BASICA_EXERCISES: ExerciseDraft[] = [
     position: 3,
     statement: "Qual é o valor da expressão quando x = 2?",
     statementLatex: String.raw`\dfrac{x^3 - 8}{x - 2}`,
-    choices: ["0", "12", "8", "indefinido"],
+    choices: [
+      { content: "0", format: "math" },
+      { content: "12", format: "math" },
+      { content: "8", format: "math" },
+      "indefinido",
+    ],
     correctIndex: 1,
     explanation: "x³ − 8 = (x−2)(x² + 2x + 4); cancelando (x−2), sobra x² + 2x + 4 = 4 + 4 + 4 = 12.",
   },
@@ -54,7 +87,12 @@ export const ALGEBRA_BASICA_EXERCISES: ExerciseDraft[] = [
     position: 4,
     statement: "Simplifique a expressão:",
     statementLatex: String.raw`8x - 3x + x`,
-    choices: ["6x", "5x", "4x", "12x"],
+    choices: [
+      { content: "6x", format: "math" },
+      { content: "5x", format: "math" },
+      { content: "4x", format: "math" },
+      { content: "12x", format: "math" },
+    ],
     correctIndex: 0,
     explanation: "Agrupe os termos semelhantes (mesmo x): 8x − 3x + x = (8 − 3 + 1)x. Some os coeficientes: 8 − 3 + 1 = 6. Logo, 8x − 3x + x = 6x.",
   },
@@ -65,7 +103,12 @@ export const ALGEBRA_BASICA_EXERCISES: ExerciseDraft[] = [
     position: 5,
     statement: "Aplique a propriedade distributiva e simplifique:",
     statementLatex: String.raw`2(x + 5)`,
-    choices: ["2x + 10", "2x + 5", "x + 10", "2x + 7"],
+    choices: [
+      { content: "2x + 10", format: "math" },
+      { content: "2x + 5", format: "math" },
+      { content: "x + 10", format: "math" },
+      { content: "2x + 7", format: "math" },
+    ],
     correctIndex: 0,
     explanation: "Propriedade distributiva: multiplique 2 por cada termo dentro dos parênteses. 2·x + 2·5 = 2x + 10.",
   },
@@ -76,7 +119,12 @@ export const ALGEBRA_BASICA_EXERCISES: ExerciseDraft[] = [
     position: 6,
     statement: "Desenvolva o produto notável:",
     statementLatex: String.raw`(x + 4)^2`,
-    choices: ["x² + 8x + 16", "x² + 16", "x² + 4x + 16", "x² + 8x + 8"],
+    choices: [
+      { content: "x² + 8x + 16", format: "math" },
+      { content: "x² + 16", format: "math" },
+      { content: "x² + 4x + 16", format: "math" },
+      { content: "x² + 8x + 8", format: "math" },
+    ],
     correctIndex: 0,
     explanation: "Quadrado da soma: (a+b)² = a² + 2ab + b², com a = x e b = 4. x² + 2·x·4 + 4² = x² + 8x + 16.",
   },
@@ -98,7 +146,12 @@ export const ALGEBRA_BASICA_EXERCISES: ExerciseDraft[] = [
     position: 8,
     statement: "Simplifique a expressão, para x ≠ 2:",
     statementLatex: String.raw`\dfrac{x^2 - 4}{x - 2}`,
-    choices: ["x + 2", "x - 2", "x² - 2", "2"],
+    choices: [
+      { content: "x + 2", format: "math" },
+      { content: "x - 2", format: "math" },
+      { content: "x² - 2", format: "math" },
+      { content: "2", format: "math" },
+    ],
     correctIndex: 0,
     explanation: "Fatore o numerador como diferença de quadrados: x² − 4 = (x−2)(x+2). Cancele o fator comum (x−2), válido pois x ≠ 2: (x−2)(x+2)/(x−2) = x + 2.",
   },
@@ -109,7 +162,12 @@ export const ALGEBRA_BASICA_EXERCISES: ExerciseDraft[] = [
     position: 9,
     statement: "Fatore a expressão x² − 25 e use a fatoração para calcular seu valor quando x = 6:",
     statementLatex: String.raw`x^2 - 25`,
-    choices: ["11", "1", "36", "61"],
+    choices: [
+      { content: "11", format: "math" },
+      { content: "1", format: "math" },
+      { content: "36", format: "math" },
+      { content: "61", format: "math" },
+    ],
     correctIndex: 0,
     explanation: "Fatore por diferença de quadrados: x² − 25 = x² − 5² = (x−5)(x+5). Substitua x = 6: (6−5)(6+5) = (1)(11) = 11.",
   },

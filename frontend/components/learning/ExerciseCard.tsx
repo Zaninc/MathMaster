@@ -5,8 +5,10 @@ import { useState } from "react";
 import { Button } from "@/components/shared/Button";
 import { MathFormula } from "@/components/shared/MathFormula";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { exerciseChoiceContent, type Exercise, type ExerciseDifficulty } from "@/lib/supabase/types";
 import { cn } from "@/lib/utils/cn";
-import type { Exercise, ExerciseDifficulty } from "@/lib/supabase/types";
+
+import { ExerciseChoiceContent } from "./ExerciseChoiceContent";
 
 export const DIFFICULTY_LABELS: Record<ExerciseDifficulty, string> = {
   facil: "Fácil",
@@ -84,6 +86,7 @@ export function ExerciseCard({ exercise }: ExerciseCardProps) {
               disabled={answered}
               onClick={() => handleAnswer(index)}
               aria-pressed={isSelected}
+              aria-label={exerciseChoiceContent(choice)}
               className={cn(
                 "rounded-md border px-3 py-2 text-left text-sm transition-colors duration-(--motion-fast)",
                 !answered &&
@@ -93,7 +96,7 @@ export function ExerciseCard({ exercise }: ExerciseCardProps) {
                 answered && !isSelected && !isCorrectChoice && "border-border text-text-muted opacity-60"
               )}
             >
-              {choice}
+              <ExerciseChoiceContent choice={choice} />
             </button>
           );
         })}
