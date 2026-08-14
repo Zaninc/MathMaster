@@ -236,15 +236,16 @@ describe("CalculatorWorkspace", () => {
     });
   });
 
-  it("teclado mostra Básico, Cálculo, Álgebra e Funções nesta página (Trigonometria/Geometria/Combinatória/Probabilidade/Símbolos ficam fora até serem migradas)", async () => {
+  it("teclado mostra Básico, Cálculo, Álgebra, Funções e Trigonometria nesta página (Geometria/Combinatória/Probabilidade/Símbolos ficam fora até serem migradas)", async () => {
     vi.mocked(apiClient.getHistory).mockResolvedValue([]);
     render(<CalculatorWorkspace />);
 
-    expect(screen.getAllByRole("tab")).toHaveLength(4);
+    expect(screen.getAllByRole("tab")).toHaveLength(5);
     expect(screen.getByRole("tab", { name: "Básico" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Cálculo" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Álgebra" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Funções" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Trigonometria" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Símbolos" })).not.toBeInTheDocument();
   });
 

@@ -1142,4 +1142,281 @@ describe("mathFieldLatexToBackendExpression", () => {
       ).toEqual({ ok: false, reason: "incomplete" });
     });
   });
+
+  // --- Sprint V3.0.4 (Structured Trigonometry Input) ------------------------
+  //
+  // Suporte real confirmado ANTES de implementar (nunca assumido): o
+  // parser real do backend (`safe_parsing.py`) só reconhece os nomes
+  // ingleses `sin`/`cos`/`tan`/`asin`/`acos`/`atan` — "sen"/"tg" só
+  // funcionam porque `parser/normalize.py:_apply_aliases` os reescreve
+  // ANTES do parse; "arcsen" NÃO existe em lugar nenhum do produto. A
+  // bridge entrega direto a forma final que o backend espera, nunca
+  // depende dessa reescrita textual do lado do backend.
+
+  describe("Sprint V3.0.4 — funções principais (sen/cos/tg, nativas e \\operatorname)", () => {
+    it("\\sin/\\cos/\\tan nativos -> sin(x)/cos(x)/tan(x)", () => {
+      expect(expr("\\sin\\left(x\\right)")).toBe("sin(x)");
+      expect(expr("\\cos\\left(x\\right)")).toBe("cos(x)");
+      expect(expr("\\tan\\left(x\\right)")).toBe("tan(x)");
+    });
+
+    it("\\operatorname{sen}/\\operatorname{tg} (grafia pt-BR do produto) -> sin(x)/tan(x)", () => {
+      expect(expr("\\operatorname{sen}\\left(x\\right)")).toBe("sin(x)");
+      expect(expr("\\operatorname{tg}\\left(x\\right)")).toBe("tan(x)");
+    });
+
+    it("Hotfix V3.0.2c — grafia \\operatorname{\\mathrm{name}} (MathLive às vezes reescreve assim) também reconhecida", () => {
+      expect(expr("\\operatorname{\\mathrm{sen}}\\left(x\\right)")).toBe("sin(x)");
+      expect(expr("\\mathrm{tg}\\left(x\\right)")).toBe("tan(x)");
+    });
+
+    it("sen( vazio -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\operatorname{sen}\\left(\\placeholder{}\\right)")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+      expect(mathFieldLatexToBackendExpression("\\cos\\left(\\placeholder{}\\right)")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+  });
+
+  describe("Sprint V3.0.4 — funções inversas (arcsin/arccos/arctan)", () => {
+    it("\\arcsin/\\arccos/\\arctan (comandos LaTeX nativos do MathLive) -> asin(x)/acos(x)/atan(x)", () => {
+      expect(expr("\\arcsin\\left(x\\right)")).toBe("asin(x)");
+      expect(expr("\\arccos\\left(x\\right)")).toBe("acos(x)");
+      expect(expr("\\arctan\\left(x\\right)")).toBe("atan(x)");
+    });
+
+    it("arcsin( vazio -> incomplete", () => {
+      expect(mathFieldLatexToBackendExpression("\\arcsin\\left(\\placeholder{}\\right)")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+
+    it("regressão de semântica — arcsin(x), 1/sin(x) e sin(x)^(-1) produzem payloads DIFERENTES, nunca canonicalizados pra mesma árvore", () => {
+      const inversa = expr("\\arcsin\\left(x\\right)");
+      const reciproca1 = expr("\\frac{1}{\\sin\\left(x\\right)}");
+      const reciproca2 = expr("\\sin\\left(x\\right)^{-1}");
+      expect(inversa).toBe("asin(x)");
+      expect(reciproca1).toBe("1/(sin(x))");
+      expect(reciproca2).toBe("sin(x)^(-1)");
+      expect(inversa).not.toBe(reciproca1);
+      expect(inversa).not.toBe(reciproca2);
+      expect(reciproca1).not.toBe(reciproca2.replace(/\^\(-1\)/, ""));
+    });
+  });
+
+  describe("Sprint V3.0.4 — π dentro do novo fluxo", () => {
+    it("sen(π), sen(π/2), cos(0), cos(π), tan(0), tan(π/4)", () => {
+      expect(expr("\\operatorname{sen}\\left(\\pi\\right)")).toBe("sin(π)");
+      expect(expr("\\operatorname{sen}\\left(\\frac{\\pi}{2}\\right)")).toBe("sin(π/2)");
+      expect(expr("\\cos\\left(0\\right)")).toBe("cos(0)");
+      expect(expr("\\cos\\left(\\pi\\right)")).toBe("cos(π)");
+      expect(expr("\\tan\\left(0\\right)")).toBe("tan(0)");
+      expect(expr("\\tan\\left(\\frac{\\pi}{4}\\right)")).toBe("tan(π/4)");
+    });
+  });
+
+  describe("Sprint V3.0.4 — argumentos compostos (mesmo parser recursivo, nenhum parser novo)", () => {
+    it("sen(2x), cos(x+π), tan(x/2), sen(x²), cos(√x), sen((x+1)/x)", () => {
+      expect(expr("\\operatorname{sen}\\left(2x\\right)")).toBe("sin(2x)");
+      expect(expr("\\cos\\left(x+\\pi\\right)")).toBe("cos(x+π)");
+      expect(expr("\\tan\\left(\\frac{x}{2}\\right)")).toBe("tan(x/2)");
+      expect(expr("\\operatorname{sen}\\left(x^2\\right)")).toBe("sin(x²)");
+      expect(expr("\\cos\\left(\\sqrt{x}\\right)")).toBe("cos(√(x))");
+      expect(expr("\\operatorname{sen}\\left(\\frac{x+1}{x}\\right)")).toBe("sin((x+1)/x)");
+    });
+  });
+
+  describe("Sprint V3.0.4 — regressão crítica: sen²(x) ≠ sen(x²)", () => {
+    it("potência DEPOIS da chamada inteira (fluxo mais comum: digitar argumento, sair, clicar x²) — sin(x)^2 -> sin(x)²", () => {
+      expect(expr("\\sin\\left(x\\right)^2")).toBe("sin(x)²");
+    });
+
+    it("potência ENTRE o nome e o argumento (notação de livro didático, ex. LaTeX colado) — \\sin^2(x) -> sin(x)² (MESMO resultado da forma acima)", () => {
+      expect(expr("\\sin^2\\left(x\\right)")).toBe("sin(x)²");
+    });
+
+    it("expoente DENTRO do argumento — sin(x²) é uma estrutura DIFERENTE, nunca confundida com as duas de cima", () => {
+      expect(expr("\\sin\\left(x^2\\right)")).toBe("sin(x²)");
+    });
+
+    it("as duas formas de sin²(x) e a forma de sin(x²) nunca colidem", () => {
+      const depois = expr("\\sin\\left(x\\right)^2");
+      const entre = expr("\\sin^2\\left(x\\right)");
+      const dentro = expr("\\sin\\left(x^2\\right)");
+      expect(depois).toBe(entre);
+      expect(depois).not.toBe(dentro);
+    });
+
+    it("generaliza pra expoentes maiores que 2 (cos³(x), tan(x)^3)", () => {
+      expect(expr("\\cos^3\\left(x\\right)")).toBe("cos(x)³");
+      expect(expr("\\tan\\left(x\\right)^3")).toBe("tan(x)³");
+    });
+
+    it("caso extremo real: clicar x² com o cursor ainda dentro do argumento vazio produz LaTeX malformado do MathLive (\\sin\\left(^2\\right), confirmado no navegador real) — falha limpo como unsupported, nunca crasha", () => {
+      expect(mathFieldLatexToBackendExpression("\\sin\\left(^2\\right)")).toEqual({
+        ok: false,
+        reason: "unsupported",
+      });
+    });
+  });
+
+  describe("Sprint V3.0.4 — funções aninhadas (parser recursivo comum)", () => {
+    it("sen(cos(x)), cos(sen(x)), sen(sen(x))", () => {
+      expect(expr("\\operatorname{sen}\\left(\\cos\\left(x\\right)\\right)")).toBe("sin(cos(x))");
+      expect(expr("\\cos\\left(\\operatorname{sen}\\left(x\\right)\\right)")).toBe("cos(sin(x))");
+      expect(expr("\\operatorname{sen}\\left(\\operatorname{sen}\\left(x\\right)\\right)")).toBe("sin(sin(x))");
+    });
+
+    it("arcsin(sin(x)) e sin(arcsin(x)) — estruturalmente distintas, nenhuma simplificação prematura na bridge (isso é trabalho do SymPy no /solve, nunca do adapter)", () => {
+      expect(expr("\\arcsin\\left(\\sin\\left(x\\right)\\right)")).toBe("asin(sin(x))");
+      expect(expr("\\sin\\left(\\arcsin\\left(x\\right)\\right)")).toBe("sin(asin(x))");
+    });
+  });
+
+  describe("Sprint V3.0.4 — composição com Log/Exp (V3.0.3, sem regressão)", () => {
+    it("sen(e^x), cos(ln(x)), e^(sen(x)), ln(cos(x))", () => {
+      expect(expr("\\operatorname{sen}\\left(\\exponentialE^{x}\\right)")).toBe("sin(exp(x))");
+      expect(expr("\\cos\\left(\\ln\\left(x\\right)\\right)")).toBe("cos(ln(x))");
+      expect(expr("\\exponentialE^{\\operatorname{sen}\\left(x\\right)}")).toBe("exp(sin(x))");
+      expect(expr("\\ln\\left(\\cos\\left(x\\right)\\right)")).toBe("ln(cos(x))");
+    });
+
+    it("sen(log_2(x)) e log_2(sen(x)) — composição nos dois sentidos", () => {
+      expect(expr("\\operatorname{sen}\\left(\\log_{2}\\left(x\\right)\\right)")).toBe("sin(log(x)/log(2))");
+      expect(expr("\\log_{2}\\left(\\operatorname{sen}\\left(x\\right)\\right)")).toBe("log(sin(x))/log(2)");
+    });
+  });
+
+  describe("Sprint V3.0.4 — composição com Cálculo (V3.0.1, sem regressão)", () => {
+    it("d/dx(sen(x)), d/dx(cos(x)), d/dx(tan(x))", () => {
+      expect(expr("\\frac{d}{dx}\\left(\\operatorname{sen}\\left(x\\right)\\right)")).toBe("derivada(sin(x), x)");
+      expect(expr("\\frac{d}{dx}\\left(\\cos\\left(x\\right)\\right)")).toBe("derivada(cos(x), x)");
+      expect(expr("\\frac{d}{dx}\\left(\\tan\\left(x\\right)\\right)")).toBe("derivada(tan(x), x)");
+    });
+
+    it("d/dx(sen(x²)), d/dx(sen(2x)) — argumento composto", () => {
+      expect(expr("\\frac{d}{dx}\\left(\\operatorname{sen}\\left(x^2\\right)\\right)")).toBe(
+        "derivada(sin(x²), x)"
+      );
+      expect(expr("\\frac{d}{dx}\\left(\\operatorname{sen}\\left(2x\\right)\\right)")).toBe(
+        "derivada(sin(2x), x)"
+      );
+    });
+
+    it("d/dx(e^x sen(x)), d/dx(ln(x) cos(x)) — multiplicação implícita dentro da derivada", () => {
+      expect(expr("\\frac{d}{dx}\\left(\\exponentialE^{x}\\operatorname{sen}\\left(x\\right)\\right)")).toBe(
+        "derivada(exp(x)sin(x), x)"
+      );
+      expect(expr("\\frac{d}{dx}\\left(\\ln\\left(x\\right)\\cos\\left(x\\right)\\right)")).toBe(
+        "derivada(ln(x)cos(x), x)"
+      );
+    });
+
+    it("∫sen(x)dx, ∫cos(x)dx, ∫tan(x)dx", () => {
+      expect(expr("\\int \\operatorname{sen}\\left(x\\right)\\,dx")).toBe("integral(sin(x), x)");
+      expect(expr("\\int \\cos\\left(x\\right)\\,dx")).toBe("integral(cos(x), x)");
+      expect(expr("\\int \\tan\\left(x\\right)\\,dx")).toBe("integral(tan(x), x)");
+    });
+
+    it("regressão importante — ∫x sen(x)dx, ∫x cos(x)dx (integração por partes, já suportada antes desta sprint) continuam corretas — 'x' termina em letra, exige '*' explícito (mesma regra de identificador ambíguo)", () => {
+      expect(expr("\\int x\\operatorname{sen}\\left(x\\right)\\,dx")).toBe("integral(x*sin(x), x)");
+      expect(expr("\\int x\\cos\\left(x\\right)\\,dx")).toBe("integral(x*cos(x), x)");
+    });
+
+    it("∫e^x sen(x)dx — composição com exponencial", () => {
+      expect(expr("\\int \\exponentialE^{x}\\operatorname{sen}\\left(x\\right)\\,dx")).toBe(
+        "integral(exp(x)sin(x), x)"
+      );
+    });
+
+    it("lim x->0 sen(x)/x, tan(x)/x, (1-cos(x))/x²", () => {
+      expect(expr("\\lim_{x\\to0}\\frac{\\operatorname{sen}\\left(x\\right)}{x}")).toBe("limite((sin(x))/x, x, 0)");
+      expect(expr("\\lim_{x\\to0}\\frac{\\tan\\left(x\\right)}{x}")).toBe("limite((tan(x))/x, x, 0)");
+      expect(expr("\\lim_{x\\to0}\\frac{1-\\cos\\left(x\\right)}{x^2}")).toBe("limite((1-cos(x))/(x²), x, 0)");
+    });
+  });
+
+  describe("Sprint V3.0.4 — multiplicação implícita", () => {
+    it("2sen(x), 3cos(x) — dígito precedente, nunca precisa de * explícito", () => {
+      expect(expr("2\\operatorname{sen}\\left(x\\right)")).toBe("2sin(x)");
+      expect(expr("3\\cos\\left(x\\right)")).toBe("3cos(x)");
+    });
+
+    it("xsen(x) — letra precedente, precisa de * explícito (mesmo bug de identificador ambíguo já corrigido pra ln/log/exp na V3.0.3)", () => {
+      expect(expr("x\\operatorname{sen}\\left(x\\right)")).toBe("x*sin(x)");
+    });
+
+    it("x²sen(x) — superescrito precedente, nunca precisa de * explícito (mesma regra de x²sin(x) já testada)", () => {
+      expect(expr("x^2\\operatorname{sen}\\left(x\\right)")).toBe("x²sin(x)");
+    });
+
+    it("e^x sen(x) — chamada de função precedente (termina em ')', nunca letra), implícita sem *", () => {
+      expect(expr("\\exponentialE^{x}\\operatorname{sen}\\left(x\\right)")).toBe("exp(x)sin(x)");
+    });
+
+    it("sen(x)cos(x) — duas chamadas de função adjacentes, implícita sem *", () => {
+      expect(expr("\\operatorname{sen}\\left(x\\right)\\cos\\left(x\\right)")).toBe("sin(x)cos(x)");
+    });
+
+    it("2sen(x)cos(x) — cadeia de 3 fatores implícitos", () => {
+      expect(expr("2\\operatorname{sen}\\left(x\\right)\\cos\\left(x\\right)")).toBe("2sin(x)cos(x)");
+    });
+  });
+
+  describe("Sprint V3.0.4 — equações trigonométricas (mecanismo genérico de '=', nenhum código novo de equação)", () => {
+    it("sen(x)=0, cos(x)=1, tan(x)=0, sen(x)=1/2, cos(x)=1/2", () => {
+      expect(expr("\\operatorname{sen}\\left(x\\right)=0")).toBe("sin(x)=0");
+      expect(expr("\\cos\\left(x\\right)=1")).toBe("cos(x)=1");
+      expect(expr("\\tan\\left(x\\right)=0")).toBe("tan(x)=0");
+      expect(expr("\\operatorname{sen}\\left(x\\right)=\\frac{1}{2}")).toBe("sin(x)=1/2");
+      expect(expr("\\cos\\left(x\\right)=\\frac{1}{2}")).toBe("cos(x)=1/2");
+    });
+  });
+
+  describe("Sprint V3.0.4 — matriz com célula trigonométrica (regressão/composição, nenhuma feature matricial nova)", () => {
+    it("[[sen(x),1],[0,cos(x)]] — cada célula passa pelo MESMO parseSubExpression recursivo", () => {
+      expect(
+        expr(
+          "\\begin{bmatrix}\\operatorname{sen}\\left(x\\right)&1\\\\0&\\cos\\left(x\\right)\\end{bmatrix}"
+        )
+      ).toBe("[[sin(x),1],[0,cos(x)]]");
+    });
+  });
+
+  describe("Sprint V3.0.4 — integração real: previewLatex(texto) -> adapter aceita, pros exemplos rápidos de Trigonometria", () => {
+    it.each([
+      ["sen(π/2)", "sin(π/2)"],
+      ["cos(π)", "cos(π)"],
+      ["tan(π/4)", "tan(π/4)"],
+      ["d/dx(sen(x))", "derivada(sin(x), x)"],
+      ["∫cos(x)dx", "integral(cos(x), x)"],
+      ["sen(x)=0", "sin(x)=0"],
+    ])("%s -> previewLatex -> adapter -> %s", async (text, expected) => {
+      const latex = await previewLatex(text);
+      expect(latex, text).not.toBeNull();
+      expect(expr(latex!)).toBe(expected);
+    });
+
+    it("regressão crítica via previewLatex real: sen(x)² e sen(x²) continuam DISTINTOS depois do round-trip completo (texto -> LaTeX -> bridge)", async () => {
+      const quadrado = await previewLatex("sen(x)²");
+      const argumentoAoQuadrado = await previewLatex("sen(x²)");
+      expect(quadrado).not.toBeNull();
+      expect(argumentoAoQuadrado).not.toBeNull();
+      expect(expr(quadrado!)).toBe("sin(x)²");
+      expect(expr(argumentoAoQuadrado!)).toBe("sin(x²)");
+      expect(expr(quadrado!)).not.toBe(expr(argumentoAoQuadrado!));
+    });
+
+    it("previewLatex('arcsen(x)') NUNCA produz uma forma reconhecida pela bridge — 'arcsen' não é uma grafia real do produto, confirmado antes desta sprint", async () => {
+      const latex = await previewLatex("arcsen(x)");
+      expect(latex).not.toBeNull();
+      const result = mathFieldLatexToBackendExpression(latex!);
+      expect(result.ok).toBe(false);
+    });
+  });
 });

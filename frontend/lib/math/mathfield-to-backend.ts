@@ -115,6 +115,60 @@ const SUPERSCRIPT_DIGITS: Record<string, string> = {
 const STRUCTURED_ENVIRONMENTS = ["cases", "bmatrix", "pmatrix", "matrix", "vmatrix"] as const;
 
 /**
+ * Sprint V3.0.4 (Structured Trigonometry Input) — comandos LaTeX NATIVOS
+ * (sem `\operatorname`) para as 6 funções trigonométricas com nome
+ * IDÊNTICO em português e inglês, ou onde o produto já usa o nome em
+ * inglês nas raízes calculadas (`asin`/`acos`/`atan`, nunca "arcsen" —
+ * confirmado em `to-latex.ts`: "não existe nenhum precedente de 'arcsen'
+ * em nenhum lugar do código", `\operatorname{arcsin}` é a convenção OFICIAL
+ * já testada). `\arcsin`/`\arccos`/`\arctan` são comandos LaTeX nativos
+ * (confirmado no MathLive real — não precisam de `\operatorname`, ao
+ * contrário do que `to-latex.ts` usa por limitação do renderizador padrão
+ * do mathjs, um problema diferente que não se aplica aqui).
+ */
+const TRIG_NATIVE_FUNCTIONS: readonly [string, string][] = [
+  ["\\sin", "sin"],
+  ["\\cos", "cos"],
+  ["\\tan", "tan"],
+  ["\\arcsin", "asin"],
+  ["\\arccos", "acos"],
+  ["\\arctan", "atan"],
+];
+
+/**
+ * "sen"/"tg" são a notação pt-BR legítima do produto (mesma convenção de
+ * `to-latex.ts`: `sen: "\\operatorname{sen}"`, `tg: "\\operatorname{tg}"`
+ * — preservada no ECHO, nunca "traduzida" para sin/tan na tela). A tecla
+ * estruturada "sen(□)"/"tg(□)" insere `\operatorname{sen}`/`\operatorname{tg}`
+ * (LaTeX padrão, nenhum macro customizado necessário) para que o campo
+ * MOSTRE "sen"/"tg" — a bridge converte para a sintaxe REAL do backend
+ * (`sin(`/`tan(`, confirmado em `parser/normalize.py`: só "sin"/"cos"/
+ * "tan"/"asin"/"acos"/"atan" existem no dicionário seguro do parser; "sen"/
+ * "tg" só funcionam porque `_apply_aliases` os reescreve ANTES do parse —
+ * a bridge já entrega a forma final, nunca depende dessa reescrita).
+ */
+const TRIG_OPERATORNAME_FUNCTIONS: readonly [string, string][] = [
+  ["sen", "sin"],
+  ["tg", "tan"],
+];
+
+/**
+ * Todos os tokens de ABERTURA de uma função trigonométrica (nativos +
+ * `\operatorname{name}` nas 3 grafias que o MathLive pode emitir — ver
+ * `consumeFunctionName`) — usado por `parseTerm()` para decidir
+ * multiplicação implícita ("2sen(x)") e quando exigir "*" explícito
+ * ("xsen(x)"), sem duplicar a lista em dois lugares.
+ */
+const TRIG_FUNCTION_START_TOKENS: readonly string[] = [
+  ...TRIG_NATIVE_FUNCTIONS.map(([latex]) => latex),
+  ...TRIG_OPERATORNAME_FUNCTIONS.flatMap(([name]) => [
+    `\\operatorname{${name}}`,
+    `\\operatorname{\\mathrm{${name}}}`,
+    `\\mathrm{${name}}`,
+  ]),
+];
+
+/**
  * Casa um trecho FINAL de `\placeholder{}` vazios consecutivos (cada um
  * opcionalmente precedido por um separador de célula/linha — `&`/`\\` — e
  * espaço em volta) no fim de uma string — exatamente os placeholders que o
@@ -435,6 +489,24 @@ class LatexParser {
     );
   }
 
+  /**
+   * Sprint V3.0.4 — consome o nome de UMA das 6 funções trigonométricas
+   * suportadas, em qualquer grafia que o MathLive emita (nativa ou
+   * `\operatorname{}`), devolvendo o nome CANÔNICO do backend
+   * (sin/cos/tan/asin/acos/atan — nunca "sen"/"tg"/"arcsin" como TEXTO,
+   * só como aparência visual do campo). `null` se a posição atual não
+   * começa com nenhuma delas — nunca "chuta".
+   */
+  private consumeTrigFunctionName(): string | null {
+    for (const [latex, name] of TRIG_NATIVE_FUNCTIONS) {
+      if (this.consume(latex)) return name;
+    }
+    for (const [alias, name] of TRIG_OPERATORNAME_FUNCTIONS) {
+      if (this.consumeFunctionName(alias)) return name;
+    }
+    return null;
+  }
+
   /** Lê o conteúdo de um grupo `{...}` já sabendo que o `{` está no cursor. */
   private readGroup(): string {
     this.expect("{");
@@ -664,11 +736,17 @@ class LatexParser {
       // por não ter tecla nenhuma ligada a eles ainda). Restrito a "letra
       // precedente" — nunca incondicional — pra não regredir
       // `x² sin(x) -> x²sin(x)` (já testado, já funciona sem "*").
+      //
+      // Sprint V3.0.4 — `TRIG_FUNCTION_START_TOKENS` estende a mesma lista
+      // pras 6 funções trigonométricas em QUALQUER grafia (nativa ou
+      // `\operatorname{}`, ver a constante) — "xsen(x)" tem exatamente o
+      // mesmo risco de identificador ambíguo que "xsin(x)" já tinha, já
+      // que a bridge emite "sin(" pras duas formas de entrada.
       const next = this.peek();
       const matrixEnvironment = ["\\begin{bmatrix}", "\\begin{pmatrix}", "\\begin{matrix}", "\\begin{vmatrix}"].find(
         (token) => this.src.startsWith(token, this.pos)
       );
-      const functionName = ["\\sin", "\\cos", "\\tan", "\\ln", "\\log", "\\exponentialE"].find((token) =>
+      const functionName = ["\\ln", "\\log", "\\exponentialE", ...TRIG_FUNCTION_START_TOKENS].find((token) =>
         this.src.startsWith(token, this.pos)
       );
       const precedingIsLetter = /[a-zA-Z]/.test(result[result.length - 1] ?? "");
@@ -815,14 +893,35 @@ class LatexParser {
 
     if (this.consume("\\infty")) return "∞";
 
-    for (const [command, name] of [
-      ["\\sin", "sin"],
-      ["\\cos", "cos"],
-      ["\\tan", "tan"],
-    ] as const) {
-      if (this.consume(command)) {
+    // --- Sprint V3.0.4 (Structured Trigonometry Input) ----------------------
+    //
+    // 6 funções (sin/cos/tan/asin/acos/atan — nomes REAIS do backend,
+    // confirmado em `safe_parsing.py` e `parser/normalize.py`; "arcsen"
+    // não existe em lugar nenhum do produto). Suporta as DUAS formas de
+    // potência que o MathLive produz para "seno ao quadrado" (confirmado
+    // empiricamente, ambas convergem pro MESMO texto final "sin(x)²" —
+    // nunca duas sintaxes diferentes pro mesmo resultado):
+    // `\sin\left(x\right)^2` (expoente DEPOIS da chamada inteira — fluxo
+    // mais comum: digitar o argumento, sair da função, clicar "x²") já
+    // funcionava sozinho via o tratamento GENÉRICO de potência de
+    // `parseFactor()`/`applyPower()` (nenhum código extra necessário aqui
+    // pra essa forma); `\sin^2\left(x\right)` (expoente ENTRE o nome e o
+    // argumento, a notação de livro didático "sen²(x)" — alcançável
+    // digitando/colando LaTeX manualmente) precisa ser reconhecida
+    // explicitamente ANTES do argumento, porque nenhum parêntese/chave a
+    // delimita — sem isto, "^" logo após o nome da função seria um
+    // caractere não reconhecido (`Unsupported`).
+    {
+      const trigName = this.consumeTrigFunctionName();
+      if (trigName !== null) {
+        this.skipSpace();
+        if (this.consume("^")) {
+          const expText = this.peek() === "{" ? this.readGroup() : this.parseAtom();
+          const arg = this.parseParenthesizedOrAtom();
+          return this.applyPower(`${trigName}(${arg})`, expText);
+        }
         const arg = this.parseParenthesizedOrAtom();
-        return `${name}(${arg})`;
+        return `${trigName}(${arg})`;
       }
     }
 

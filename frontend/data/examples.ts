@@ -162,6 +162,16 @@ export const QUICK_EXAMPLES: QuickExample[] = [
  * `previewLatex` real antes de decidir não incluir. A exponencial de
  * Euler só é alcançável estruturalmente pela tecla dedicada "eˣ" nesta
  * sprint, nunca por um exemplo de texto carregado.
+ *
+ * Sprint V3.0.4 (Structured Trigonometry Input) — 6 exemplos acrescentados
+ * (20 → 26), a lista sugerida pelo próprio ticket. "sen"/"cos"/"tan" em
+ * português funcionam AGORA (diferente da V3.0.1: `previewLatex` já
+ * convertia "sen(...)" pra `\operatorname{sen}(...)`, mas o adapter só
+ * reconhecia `\sin`/`\cos`/`\tan` nativos até esta sprint — confirmado
+ * empiricamente contra `previewLatex` real + o adapter + o backend real
+ * rodando que os 6 abaixo funcionam ponta a ponta, incluindo a equação
+ * (`sen(x)=0` resolve via `solveset`, formatado como "x = 2π·k ou
+ * x = 2π·k + π, k ∈ ℤ").
  */
 export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "x² - 4 = 0", expression: "x² - 4 = 0" },
@@ -184,6 +194,12 @@ export const CALCULATOR_QUICK_EXAMPLES: QuickExample[] = [
   { label: "2^x=8", expression: "2^x=8" },
   { label: "ln(x)=2", expression: "ln(x)=2" },
   { label: "log₂(8)", expression: "log(8)/log(2)" },
+  { label: "sen(π/2)", expression: "sen(π/2)" },
+  { label: "cos(π)", expression: "cos(π)" },
+  { label: "tan(π/4)", expression: "tan(π/4)" },
+  { label: "d/dx(sen(x))", expression: "d/dx(sen(x))" },
+  { label: "∫cos(x)dx", expression: "∫cos(x)dx" },
+  { label: "sen(x)=0", expression: "sen(x)=0" },
 ];
 
 export interface QuickShortcut {

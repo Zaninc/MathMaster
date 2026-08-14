@@ -423,13 +423,83 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
     ],
   },
   {
+    // Sprint V3.0.4 (Structured Trigonometry Input) — as 7 teclas ganham
+    // `mathLiveInsert` e a categoria volta a aparecer na Calculadora.
+    // "sen"/"tg" continuam a notação pt-BR legítima do produto (mesma
+    // convenção de `to-latex.ts`: `sen: "\\operatorname{sen}"`, nunca
+    // "traduzida" pra sin/tan na tela) — a tecla insere `\operatorname{sen}`/
+    // `\operatorname{tg}` (LaTeX padrão, sem macro customizado) pra que o
+    // campo estruturado MOSTRE "sen"/"tg"; a bridge
+    // (`mathfield-to-backend.ts`) converte pra sintaxe real do backend
+    // (`sin(`/`tan(` — confirmado em `parser/normalize.py`/`safe_parsing.py`:
+    // só sin/cos/tan/asin/acos/atan existem no parser real). "cos" não
+    // precisa dessa distinção (grafia idêntica em português e inglês) —
+    // usa o comando LaTeX nativo `\cos`.
+    //
+    // Inversas: rótulo "arcsin"/"arccos"/"arctan" (NUNCA "sen⁻¹" — notação
+    // ambígua com 1/sen(x), NUNCA "arcsen" — confirmado em `to-latex.ts`
+    // que não existe nenhum precedente dessa grafia em lugar nenhum do
+    // produto; `asin`/`acos`/`atan` — os nomes REAIS que o SymPy devolve —
+    // já renderizam como `\operatorname{arcsin}` etc. em todo resultado
+    // calculado, esta tecla só torna esse mesmo vocabulário digitável).
+    // `\arcsin`/`\arccos`/`\arctan` são comandos LaTeX NATIVOS do MathLive
+    // (confirmado no navegador real — nenhum `\operatorname` necessário).
     id: "trigonometria",
     label: "Trigonometria",
     keys: [
-      { label: "sen", insert: "sen()", cursorOffset: 4, ariaLabel: "Inserir seno" },
-      { label: "cos", insert: "cos()", cursorOffset: 4, ariaLabel: "Inserir cosseno" },
-      { label: "tg", insert: "tg()", cursorOffset: 3, ariaLabel: "Inserir tangente" },
-      { label: "π", insert: "π", cursorOffset: 1, ariaLabel: "Inserir pi", latex: "\\pi" },
+      {
+        label: "sen",
+        insert: "sen()",
+        cursorOffset: 4,
+        ariaLabel: "Inserir seno",
+        mathLiveInsert: "\\operatorname{sen}\\left(\\placeholder{}\\right)",
+      },
+      {
+        label: "cos",
+        insert: "cos()",
+        cursorOffset: 4,
+        ariaLabel: "Inserir cosseno",
+        mathLiveInsert: "\\cos\\left(\\placeholder{}\\right)",
+      },
+      {
+        label: "tg",
+        insert: "tg()",
+        cursorOffset: 3,
+        ariaLabel: "Inserir tangente",
+        mathLiveInsert: "\\operatorname{tg}\\left(\\placeholder{}\\right)",
+      },
+      {
+        label: "arcsin",
+        insert: "asin()",
+        cursorOffset: 6,
+        ariaLabel: "Inserir arco-seno",
+        latex: "\\arcsin(x)",
+        mathLiveInsert: "\\arcsin\\left(\\placeholder{}\\right)",
+      },
+      {
+        label: "arccos",
+        insert: "acos()",
+        cursorOffset: 6,
+        ariaLabel: "Inserir arco-cosseno",
+        latex: "\\arccos(x)",
+        mathLiveInsert: "\\arccos\\left(\\placeholder{}\\right)",
+      },
+      {
+        label: "arctan",
+        insert: "atan()",
+        cursorOffset: 6,
+        ariaLabel: "Inserir arco-tangente",
+        latex: "\\arctan(x)",
+        mathLiveInsert: "\\arctan\\left(\\placeholder{}\\right)",
+      },
+      {
+        label: "π",
+        insert: "π",
+        cursorOffset: 1,
+        ariaLabel: "Inserir pi",
+        latex: "\\pi",
+        mathLiveInsert: "\\pi",
+      },
     ],
   },
   {

@@ -468,9 +468,9 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(key!.ariaLabel).toBeDefined();
   });
 
-  it("teclas fora de Básico/Cálculo/Álgebra/Funções ainda não têm mathLiveInsert (fora de escopo até serem migradas)", () => {
+  it("teclas fora de Básico/Cálculo/Álgebra/Funções/Trigonometria ainda não têm mathLiveInsert (fora de escopo até serem migradas)", () => {
     for (const category of KEYBOARD_CATEGORIES) {
-      if (["basico", "calculo", "algebra", "funcoes"].includes(category.id)) continue;
+      if (["basico", "calculo", "algebra", "funcoes", "trigonometria"].includes(category.id)) continue;
       for (const key of category.keys) {
         expect(key.mathLiveInsert, `${category.id}/${key.label}`).toBeUndefined();
       }
@@ -599,5 +599,37 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(byLabel.get("ln")?.mathLiveInsert).toBe("\\ln\\left(\\placeholder{}\\right)");
     expect(byLabel.get("logₐ")?.mathLiveInsert).toBe("\\log_{\\placeholder{}}\\left(\\placeholder{}\\right)");
     expect(byLabel.get("eˣ")?.mathLiveInsert).toBe("\\exponentialE^{\\placeholder{}}");
+  });
+
+  // --- Sprint V3.0.4 (Structured Trigonometry Input) ------------------------
+
+  it("dentro de Trigonometria, as 7 teclas (sen, cos, tg, arcsin, arccos, arctan, π) têm mathLiveInsert", () => {
+    const trigonometria = KEYBOARD_CATEGORIES.find((category) => category.id === "trigonometria");
+    const migrated = new Set(["sen", "cos", "tg", "arcsin", "arccos", "arctan", "π"]);
+    const withMathLiveInsert = new Set(
+      (trigonometria?.keys ?? []).filter((key) => key.mathLiveInsert !== undefined).map((key) => key.label)
+    );
+    expect(withMathLiveInsert).toEqual(migrated);
+  });
+
+  it("as 7 teclas de Trigonometria usam os templates LaTeX reais confirmados contra o MathLive", () => {
+    const trigonometria = KEYBOARD_CATEGORIES.find((category) => category.id === "trigonometria");
+    const byLabel = new Map(trigonometria?.keys.map((key) => [key.label, key]));
+
+    expect(byLabel.get("sen")?.mathLiveInsert).toBe("\\operatorname{sen}\\left(\\placeholder{}\\right)");
+    expect(byLabel.get("cos")?.mathLiveInsert).toBe("\\cos\\left(\\placeholder{}\\right)");
+    expect(byLabel.get("tg")?.mathLiveInsert).toBe("\\operatorname{tg}\\left(\\placeholder{}\\right)");
+    expect(byLabel.get("arcsin")?.mathLiveInsert).toBe("\\arcsin\\left(\\placeholder{}\\right)");
+    expect(byLabel.get("arccos")?.mathLiveInsert).toBe("\\arccos\\left(\\placeholder{}\\right)");
+    expect(byLabel.get("arctan")?.mathLiveInsert).toBe("\\arctan\\left(\\placeholder{}\\right)");
+    expect(byLabel.get("π")?.mathLiveInsert).toBe("\\pi");
+  });
+
+  it("nenhuma tecla de Trigonometria usa o rótulo ambíguo 'sen⁻¹' ou a grafia inexistente 'arcsen'", () => {
+    const trigonometria = KEYBOARD_CATEGORIES.find((category) => category.id === "trigonometria");
+    for (const key of trigonometria?.keys ?? []) {
+      expect(key.label).not.toContain("⁻¹");
+      expect(key.label.toLowerCase()).not.toContain("arcsen");
+    }
   });
 });
