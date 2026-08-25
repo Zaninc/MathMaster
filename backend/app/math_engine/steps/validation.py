@@ -37,9 +37,25 @@ UNSUPPORTED_INTEGRAL_MESSAGE = (
 UNSUPPORTED_LIMIT_MESSAGE = (
     "O passo a passo para este tipo de limite ainda não foi implementado nesta versão."
 )
-UNSUPPORTED_LHOPITAL_MULTIPLE_APPLICATIONS_MESSAGE = (
-    "Este limite requer aplicações sucessivas da Regra de L'Hôpital, que ainda não "
-    "fazem parte desta versão."
+# Sprint "L'Hôpital com Aplicações Sucessivas" — substitui a antiga
+# UNSUPPORTED_LHOPITAL_MULTIPLE_APPLICATIONS_MESSAGE (que rejeitava
+# QUALQUER segunda aplicação): agora aplicações sucessivas são suportadas
+# até um teto defensivo (`lhopital.MAX_LHOPITAL_APPLICATIONS`); só as
+# duas situações abaixo (teto atingido, ciclo detectado) interrompem o
+# passo a passo, nunca um loop infinito nem um resultado inventado.
+LHOPITAL_MAX_APPLICATIONS_MESSAGE = (
+    "A Regra de L'Hôpital foi aplicada o número máximo de vezes permitido "
+    "nesta versão sem eliminar a indeterminação — o passo a passo foi "
+    "interrompido por segurança."
+)
+LHOPITAL_CYCLE_DETECTED_MESSAGE = (
+    "A Regra de L'Hôpital entrou em um ciclo (a mesma expressão reapareceu "
+    "após uma aplicação) sem eliminar a indeterminação — o passo a passo foi "
+    "interrompido por segurança nesta versão."
+)
+LHOPITAL_UNDEFINED_DERIVATIVE_MESSAGE = (
+    "A derivada do denominador é identicamente zero — não é possível "
+    "continuar aplicando a Regra de L'Hôpital com segurança."
 )
 UNSUPPORTED_INTEGRATION_BY_PARTS_MULTIPLE_APPLICATIONS_MESSAGE = (
     "Esta integral requer aplicações sucessivas de integração por partes, que "

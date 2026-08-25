@@ -126,15 +126,16 @@ def test_x_over_exp_x_matches_ticket_example() -> None:
     assert steps[-1].expression == "0"
 
 
-# --- Caso 4: exige aplicações sucessivas — fora de escopo ----------------------
+# --- Caso 4: agora resolvido com 2 aplicações sucessivas (ver Sprint -----
+# "L'Hôpital com Aplicações Sucessivas" — cobertura completa em
+# test_steps_lhopital_successive.py) --------------------------------------
 
 
-def test_x_squared_over_exp_x_requires_multiple_applications() -> None:
-    with pytest.raises(
-        ExpressionError,
-        match="requer aplicações sucessivas",
-    ):
-        generate_steps("limite(x**2/exp(x), x, oo)")
+def test_x_squared_over_exp_x_now_resolved_with_two_applications() -> None:
+    steps = generate_steps("limite(x**2/exp(x), x, oo)")
+    applications = [s for s in steps if s.title == "Aplicando a Regra de L'Hôpital (novo limite)"]
+    assert len(applications) == 2
+    assert steps[-1].expression == "0"
 
 
 def test_x_squared_over_exp_x_still_works_via_solve() -> None:
