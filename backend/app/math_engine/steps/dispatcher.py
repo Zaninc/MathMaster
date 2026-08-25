@@ -181,7 +181,20 @@ logarítmico isolado de um lado); depois `is_logarithmic_equation_shape`
 shape` ("e^x=5", "2^x=8"). Se nenhum dos três casar, `UNSUPPORTED_
 EQUATION_MESSAGE` (nunca a mensagem genérica de domínio bloqueado — a
 equação até pertence ao domínio, só não tem o formato ainda suportado,
-ex. base simbólica ou expoente não-linear)."""
+ex. base simbólica ou expoente não-linear).
+
+Sprint "Derivação Implícita" — dentro de uma chamada `derivada(...)` já
+confirmada (`is_derivative_call`), uma checagem NOVA e mais específica
+(`is_implicit_differentiation_call`, sobre o TEXTO do primeiro argumento,
+antes de qualquer parse — precisa vir ANTES de `parse_derivative_call`
+porque este rejeitaria um "=" com um erro genérico) decide se o primeiro
+argumento é uma EQUAÇÃO (`x²+y²=25`) em vez de uma expressão comum
+(`x²+3x`): se for, delega inteiramente para
+`implicit_differentiation.py`, que tem sua própria cascata interna de
+decisões (variável dependente única, isolamento de `dy/dx`, verificação
+contra o oráculo `sympy.idiff`) — nunca chega a `parse_derivative_call`/
+`is_product_or_chain_shape`/`is_quotient_shape` abaixo, que continuam
+100% intocados para o caso normal (`derivada(x²+3x, x)`)."""
 from __future__ import annotations
 
 from sympy import degree, expand
@@ -222,6 +235,10 @@ from .exponential_equations import generate_exponential_equation_steps, is_expon
 from .exponential_substitution_equations import (
     generate_exponential_substitution_steps,
     is_exponential_substitution_shape,
+)
+from .implicit_differentiation import (
+    generate_implicit_differentiation_steps,
+    is_implicit_differentiation_call,
 )
 from .integrals import generate_integral_steps
 from .integration_by_parts import find_integration_by_parts, generate_integration_by_parts_steps
@@ -300,6 +317,20 @@ def generate_steps(expression: str) -> list[MathStep]:
     normalized = normalize_all(expression)
 
     if is_derivative_call(normalized):
+        # Hotfix "Derivação Implícita" — achado empírico ao testar
+        # `derivada(x²+y²<25, x)`: sem esta guarda, `parse_derivative_call`
+        # devolve um `StrictLessThan` (SymPy parseia "<" livremente) que
+        # `is_product_or_chain_shape` então chama `.as_numer_denom()` nele
+        # e explode com `AttributeError` cru — bug PRÉ-EXISTENTE (não
+        # introduzido por esta sprint, mas encontrado ao lado do código
+        # tocado aqui, corrigido no mesmo espírito de `_generate_single_
+        # equation_steps`, que já faz esta MESMA checagem para o caminho
+        # de equações). Nenhuma inequação é uma derivação (implícita ou
+        # não) válida nesta versão.
+        if looks_like_inequality(normalized):
+            raise ExpressionError(UNSUPPORTED_INEQUALITY_MESSAGE)
+        if is_implicit_differentiation_call(normalized):
+            return generate_implicit_differentiation_steps(normalized)
         expr, symbol = parse_derivative_call(normalized)
         if is_product_or_chain_shape(expr, symbol):
             return generate_advanced_derivative_steps(normalized)

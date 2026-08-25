@@ -53,6 +53,24 @@ UNSUPPORTED_INTEGRATION_BY_PARTS_MULTIPLE_APPLICATIONS_MESSAGE = (
 # situação distinta de "fora do escopo desta versão" (`UNSUPPORTED_EQUATION_
 # MESSAGE`), por isso uma mensagem dedicada.
 NO_REAL_SOLUTION_MESSAGE = "Esta equação não possui solução real."
+# Sprint "Derivação Implícita" — `derivada(EQUAÇÃO, x)` só é derivação
+# implícita quando a equação depende de exatamente UMA variável além de
+# x (ver `implicit_differentiation.py`). Zero variáveis extras ("x**2=4")
+# não é implícito nenhum, e mais de uma ("x**2+y**2+z**2=1") está fora do
+# escopo desta versão (só x independente/y dependente, ver ticket) —
+# mensagens distintas para cada caso, nunca fingindo suporte.
+NO_DEPENDENT_VARIABLE_MESSAGE = (
+    "Esta equação não depende de nenhuma outra variável além de x — não há "
+    "derivação implícita a fazer aqui."
+)
+MULTIPLE_DEPENDENT_VARIABLES_MESSAGE = (
+    "Derivação implícita com mais de uma variável dependente ainda não é "
+    "suportada nesta versão."
+)
+UNSUPPORTED_IMPLICIT_DIFFERENTIATION_MESSAGE = (
+    "O passo a passo para esta derivação implícita ainda não foi implementado "
+    "nesta versão."
+)
 
 
 def require_single_symbol(symbols: set) -> None:

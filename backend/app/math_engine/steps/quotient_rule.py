@@ -77,7 +77,17 @@ def _mul_text(a: Expr, b: Expr) -> str:
     return f"{wrap_if_sum(a)}*{wrap_if_sum(b)}"
 
 
-def _quotient_rule_steps(expr: Expr, numer: Expr, denom: Expr, symbol: Symbol) -> list[MathStep]:
+def quotient_rule_steps(
+    expr: Expr, numer: Expr, denom: Expr, symbol: Symbol
+) -> tuple[Expr, list[MathStep]]:
+    """Sprint "Derivação Implícita" — promovida de `_quotient_rule_steps`
+    (privada) para pública, devolvendo agora `(derivada, passos)` — mesmo
+    contrato de `advanced_derivatives.factor_derivative_steps` — para que
+    `implicit_differentiation.py` reaproveite a regra do quociente completa
+    num TERMO qualquer de uma equação implícita, sem duplicar nada desta
+    função. `generate_quotient_rule_steps` abaixo continua o único
+    consumidor do `/solve/steps` normal; comportamento dela é 100%
+    preservado (só passou a descartar o valor de retorno extra)."""
     steps = [
         MathStep(
             title="Identificando um quociente",
@@ -114,7 +124,7 @@ def _quotient_rule_steps(expr: Expr, numer: Expr, denom: Expr, symbol: Symbol) -
 
     total = compute_derivative(expr, symbol)
     steps.append(MathStep(title="Simplificando", expression=_rename_natural_log(str(total))))
-    return steps
+    return total, steps
 
 
 def generate_quotient_rule_steps(text: str) -> list[MathStep]:
@@ -134,5 +144,6 @@ def generate_quotient_rule_steps(text: str) -> list[MathStep]:
         raise ExpressionError(UNSUPPORTED_DERIVATIVE_MESSAGE)
 
     numer, denom = quotient
-    steps.extend(_quotient_rule_steps(expr, numer, denom, symbol))
+    _, quotient_steps = quotient_rule_steps(expr, numer, denom, symbol)
+    steps.extend(quotient_steps)
     return steps
