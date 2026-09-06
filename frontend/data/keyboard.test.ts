@@ -566,6 +566,19 @@ describe("KEYBOARD_CATEGORIES", () => {
     expect(byLabel.get("∞")?.mathLiveInsert).toBe("\\infty");
   });
 
+  // --- Hardening "Derivação Implícita — Roteamento" -------------------------
+
+  it("categoria Cálculo tem a tecla dedicada de derivação implícita (dy/dx)", () => {
+    const calculo = KEYBOARD_CATEGORIES.find((category) => category.id === "calculo");
+    const key = calculo?.keys.find((candidate) => candidate.label === "dy/dx");
+    expect(key).toBeDefined();
+    expect(key!.mathLiveInsert).toBe(
+      "\\frac{d}{dx}\\left(\\placeholder{}=\\placeholder{}\\right)"
+    );
+    expect(key!.latex).toBe("\\dfrac{dy}{dx}");
+    expect(key!.ariaLabel).toBeDefined();
+  });
+
   it("categoria Cálculo tem a nova tecla de integral definida (∫ₐᵇ dx), inexistente no teclado legado", () => {
     const calculo = KEYBOARD_CATEGORIES.find((category) => category.id === "calculo");
     const key = calculo?.keys.find((candidate) => candidate.label === "∫ₐᵇ dx");

@@ -52,29 +52,43 @@ nó de 2 argumentos `derivada(corpo, variável)` e o renderiza como
 derivada já existente no produto — por isso a notação escolhida aqui é
 `derivada(y, x)` (equivalente matemático da notação de Leibniz, mesma
 biblioteca de renderização já testada em produção, zero mudança no
-frontend)."""
+frontend).
+
+Hardening Global — a detecção da variável dependente e o parsing da
+equação (`parse_implicit_equation`) e o cálculo/verificação do valor
+final (`compute_implicit_derivative`) foram promovidos para `calculus/
+implicit_differentiation.py`, reaproveitados aqui E por `calculus/
+dispatcher.py` (que passou a suportar `derivada(EQUAÇÃO, x)` em `/solve`
+nesta mesma rodada — antes só `/solve/steps` sabia lidar com isso, bug
+real encontrado testando a nova tecla "dy/dx" no navegador). Este módulo
+continua com sua própria maquinária de PASSOS (diferenciação termo a
+termo com `factor_derivative_steps`/`quotient_rule_steps`, isolamento via
+`_isolate_derivative`) — o valor final é sempre conferido contra
+`compute_implicit_derivative` (que já verifica contra `sympy.idiff`
+internamente) antes de devolver, nunca duas implementações divergentes
+do mesmo cálculo."""
 from __future__ import annotations
 
 import re
 
-from sympy import Derivative, Function, Symbol, expand, idiff, simplify
+from sympy import Derivative, Function, Symbol, expand, simplify
 from sympy.core.expr import Expr
 
-from ...canonical_constants import canonicalize_euler_constant
 from ..calculus.derivatives import compute_derivative
-from ..equations.dispatcher import looks_like_equation, looks_like_inequality, split_equation_sides
+from ..calculus.implicit_differentiation import (
+    NO_DEPENDENT_VARIABLE_MESSAGE,
+    compute_implicit_derivative,
+    looks_like_implicit_derivative_argument,
+    parse_implicit_equation,
+    rename_implicit_derivative_text,
+)
+from ..equations.dispatcher import looks_like_inequality
 from ..errors import ExpressionError
-from ..safe_parsing import extract_safe_symbols, safe_parse_expr
 from .advanced_derivatives import factor_derivative_steps
 from .formatting import eq_text, linear_combination_expression
 from .models import MathStep
 from .quotient_rule import is_quotient_shape, quotient_rule_steps
-from .validation import (
-    MULTIPLE_DEPENDENT_VARIABLES_MESSAGE,
-    NO_DEPENDENT_VARIABLE_MESSAGE,
-    UNSUPPORTED_IMPLICIT_DIFFERENTIATION_MESSAGE,
-    UNSUPPORTED_INEQUALITY_MESSAGE,
-)
+from .validation import UNSUPPORTED_IMPLICIT_DIFFERENTIATION_MESSAGE, UNSUPPORTED_INEQUALITY_MESSAGE
 
 # Mesma técnica de regex/bracket-counting de `calculus/dispatcher.py`
 # (`_CALL_PATTERN`/`_split_top_level_args`/`_parse_variable`), duplicada
@@ -84,15 +98,6 @@ from .validation import (
 # operação "derivada" (nunca "integral"/"limite" — fora de escopo aqui).
 _CALL_PATTERN = re.compile(r"^\s*derivada\s*\((.*)\)\s*$", re.DOTALL)
 _VARIABLE_PATTERN = re.compile(r"^[a-zA-Z_]\w*$")
-
-# "e" nunca conta como candidato a variável dependente: é o símbolo que o
-# usuário digita para a constante de Euler ANTES de `canonicalize_euler_
-# constant` resolvê-lo (mesma ambiguidade documentada em
-# `canonical_constants.py`) — sem esta exclusão, "exp(y)=x" continuaria
-# seguro (não usa "e" solto), mas "e**y=x" veria "e" E "y" como duas
-# variáveis dependentes e rejeitaria com MULTIPLE_DEPENDENT_VARIABLES_
-# MESSAGE em vez de reconhecer a derivação implícita de verdade.
-_RESERVED_NAMES = frozenset({"e"})
 
 
 def _split_derivative_call(text: str) -> tuple[str, str] | None:
@@ -141,16 +146,7 @@ def is_implicit_differentiation_call(text: str) -> bool:
     if parts is None:
         return False
     expr_text, _ = parts
-    return looks_like_equation(expr_text)
-
-
-def _dependent_symbol_name(lhs_text: str, rhs_text: str, x_name: str) -> str:
-    candidates = extract_safe_symbols(f"{lhs_text}+{rhs_text}", exclude={x_name, *_RESERVED_NAMES})
-    if not candidates:
-        raise ExpressionError(NO_DEPENDENT_VARIABLE_MESSAGE)
-    if len(candidates) > 1:
-        raise ExpressionError(MULTIPLE_DEPENDENT_VARIABLES_MESSAGE)
-    return next(iter(candidates))
+    return looks_like_implicit_derivative_argument(expr_text)
 
 
 def _term_derivative_steps(
@@ -247,27 +243,16 @@ def _isolate_derivative(
     return isolated, steps
 
 
-def _rename_implicit_text(text: str, y_name: str, x_name: str) -> str:
-    """"Derivative(y(x), x)" -> "derivada(y, x)" (renderiza como
-    \\frac{d}{dx}(y) — ver docstring do módulo), e qualquer "y(x)" que
-    sobrar (ex. dentro de sen(y(x))) -> "y". A ORDEM importa: o padrão de
-    `Derivative` precisa casar ANTES do padrão solto de `y(x)`, senão o
-    "y(x)" de dentro de "Derivative(y(x), x)" seria consumido primeiro e
-    quebraria o casamento do padrão maior."""
-    derivative_pattern = re.compile(
-        rf"Derivative\({re.escape(y_name)}\({re.escape(x_name)}\),\s*{re.escape(x_name)}\)"
-    )
-    text = derivative_pattern.sub(f"derivada({y_name}, {x_name})", text)
-    function_pattern = re.compile(rf"\b{re.escape(y_name)}\({re.escape(x_name)}\)")
-    return function_pattern.sub(y_name, text)
-
-
 def _rename_implicit_steps(steps: list[MathStep], y_name: str, x_name: str) -> list[MathStep]:
     return [
         MathStep(
-            title=_rename_implicit_text(step.title, y_name, x_name) if step.title else step.title,
+            title=(
+                rename_implicit_derivative_text(step.title, y_name, x_name)
+                if step.title
+                else step.title
+            ),
             title_segments=step.title_segments,
-            expression=_rename_implicit_text(step.expression, y_name, x_name),
+            expression=rename_implicit_derivative_text(step.expression, y_name, x_name),
             explanation=step.explanation,
         )
         for step in steps
@@ -283,24 +268,11 @@ def generate_implicit_differentiation_steps(text: str) -> list[MathStep]:
 
     if looks_like_inequality(expr_text):
         raise ExpressionError(UNSUPPORTED_INEQUALITY_MESSAGE)
-    if not looks_like_equation(expr_text):
+    if not looks_like_implicit_derivative_argument(expr_text):
         raise ExpressionError(UNSUPPORTED_IMPLICIT_DIFFERENTIATION_MESSAGE)
 
-    lhs_text, rhs_text = split_equation_sides(expr_text)
-    y_name = _dependent_symbol_name(lhs_text, rhs_text, x_symbol.name)
+    lhs, rhs, y_name = parse_implicit_equation(expr_text, x_symbol)
     y_func = Function(y_name)(x_symbol)
-    local_dict = {x_symbol.name: x_symbol, y_name: y_func}
-
-    lhs = canonicalize_euler_constant(safe_parse_expr(lhs_text, local_dict=local_dict))
-    rhs = canonicalize_euler_constant(safe_parse_expr(rhs_text, local_dict=local_dict))
-
-    if not (lhs.has(y_func) or rhs.has(y_func)):
-        # "e" foi excluído da detecção de variável dependente, mas nada
-        # impede um segundo símbolo livre de aparecer só depois do parse
-        # completo (ex. função desconhecida rejeitada antes) — defesa,
-        # nunca deveria disparar no fluxo normal já que `_dependent_
-        # symbol_name` confirmou a presença textual de `y_name` antes.
-        raise ExpressionError(NO_DEPENDENT_VARIABLE_MESSAGE)
 
     steps = [MathStep(title="Equação original", expression=eq_text(lhs, rhs))]
     steps.append(
@@ -322,28 +294,17 @@ def generate_implicit_differentiation_steps(text: str) -> list[MathStep]:
     isolated, isolation_steps = _isolate_derivative(dlhs, drhs, derivative, x_symbol)
     steps.extend(isolation_steps)
 
-    if not _verify_against_oracle(isolated, lhs, rhs, y_func, x_symbol):
+    # Verificação final: `compute_implicit_derivative` (o MESMO núcleo que
+    # `/solve` usa, `calculus/implicit_differentiation.py`) já confere
+    # contra o oráculo `sympy.idiff` internamente e levanta `Expression
+    # Error` fail-closed se discordar; comparar `isolated` (calculado aqui
+    # de forma independente, termo a termo, só para os PASSOS) contra o
+    # valor autoritativo garante que a apresentação nunca diverge do
+    # resultado — nunca duas implementações do mesmo cálculo.
+    authoritative = compute_implicit_derivative(lhs, rhs, y_name, x_symbol)
+    if simplify(isolated - authoritative) != 0:
         raise ExpressionError(
             f"Não foi possível verificar a derivação implícita de {lhs}={rhs} nesta versão."
         )
 
     return _rename_implicit_steps(steps, y_name, x_symbol.name)
-
-
-def _verify_against_oracle(
-    isolated: Expr, lhs: Expr, rhs: Expr, y_func: Expr, x_symbol: Symbol
-) -> bool:
-    """Hardening matemático (mesmo espírito de `calculus.integrals.
-    verify_antiderivative`, já usado por `/solve` para integrais): nunca
-    apresenta uma derivada implícita não verificada. `sympy.idiff` aqui é
-    ORÁCULO DE VALIDAÇÃO, nunca gerador de passos (ver seção "Não usar
-    solve() como caixa-preta" do ticket) — os passos acima já foram
-    construídos inteiramente por transformações algébricas reais antes
-    desta chamada; se o oráculo discordar (ou não conseguir decidir),
-    fail-closed: mensagem amigável em vez de um resultado potencialmente
-    errado."""
-    try:
-        oracle = idiff(lhs - rhs, y_func, x_symbol)
-        return bool(simplify(isolated - oracle) == 0)
-    except Exception:
-        return False

@@ -42,6 +42,12 @@ from ..errors import ExpressionError
 from ..log_convention import LOCAL_DICT as _LOG_LOCAL_DICT
 from ..safe_parsing import extract_safe_symbols, safe_parse_expr
 from .derivatives import compute_derivative
+from .implicit_differentiation import (
+    compute_implicit_derivative,
+    looks_like_implicit_derivative_argument,
+    parse_implicit_equation,
+    rename_implicit_derivative_text,
+)
 from .integrals import compute_definite_integral, compute_indefinite_integral, verify_antiderivative
 from .limits import compute_limit
 
@@ -289,7 +295,24 @@ def solve_calculus_text(expression: str) -> str:
                 "derivada(...) espera exatamente 2 argumentos: expressão e variável."
             )
         symbol = _parse_variable(partes[1])
-        expr = _parse_fragment(partes[0], symbol)
+
+        # Hardening Global — achado testando a nova tecla "dy/dx" no
+        # navegador: `derivada(EQUAÇÃO, x)` já funcionava em `/solve/steps`
+        # (sprint anterior) mas nunca em `/solve` — `_parse_fragment`
+        # (parser de expressão comum) sempre rejeitava o "=" com um erro
+        # cru. `compute_implicit_derivative`/`parse_implicit_equation`
+        # (`calculus/implicit_differentiation.py`) são o MESMO núcleo
+        # reaproveitado por `steps/implicit_differentiation.py` — nenhuma
+        # regra de derivada duplicada, só o valor final aqui (sem passos).
+        if looks_like_implicit_derivative_argument(partes[0]):
+            lhs, rhs, y_name = parse_implicit_equation(partes[0], symbol)
+            resultado = canonicalize_euler_constant(
+                compute_implicit_derivative(lhs, rhs, y_name, symbol)
+            )
+            texto = rename_implicit_derivative_text(str(resultado), y_name, symbol.name)
+            return _rename_natural_log(f"Derivada: {texto}")
+
+        expr = canonicalize_euler_constant(_parse_fragment(partes[0], symbol))
         resultado = canonicalize_euler_constant(compute_derivative(expr, symbol))
         return _rename_natural_log(f"Derivada: {resultado}")
 
@@ -299,15 +322,26 @@ def solve_calculus_text(expression: str) -> str:
                 "limite(...) espera exatamente 3 argumentos: expressão, variável e ponto."
             )
         symbol = _parse_variable(partes[1])
-        expr = _parse_fragment(partes[0], symbol)
-        ponto = _parse_fragment(partes[2], symbol)
+        # Hardening Global — achado testando L'Hôpital sucessivo no
+        # navegador: `limite((e^x-1-x)/x², x, 0)` digitado com "e" solto
+        # (não pelo botão dedicado "eˣ") devolvia um erro CONFUSO ("os
+        # limites laterais são diferentes") em vez de "1/2" — `compute_
+        # limit` calcula os dois lados separadamente e um `Symbol('e')`
+        # sem sinal definido produz resultados inconsistentes entre eles.
+        # A canonicalização já existia, mas só no RESULTADO (pós-cálculo,
+        # Hotfix V2.15.1 original) — nunca na ENTRADA aqui em `/solve`
+        # (só os `parse_*_call` de `steps/` ganhavam isso). Movida para
+        # ANTES do cálculo, mesma posição já usada pelos 4 `parse_*_call`
+        # que `steps/` consome.
+        expr = canonicalize_euler_constant(_parse_fragment(partes[0], symbol))
+        ponto = canonicalize_euler_constant(_parse_fragment(partes[2], symbol))
         resultado = canonicalize_euler_constant(compute_limit(expr, symbol, ponto))
         return _rename_natural_log(f"Limite: {resultado}")
 
     if operacao == "integral":
         if len(partes) == 2:
             symbol = _parse_variable(partes[1])
-            expr = _parse_fragment(partes[0], symbol)
+            expr = canonicalize_euler_constant(_parse_fragment(partes[0], symbol))
             primitive = compute_indefinite_integral(expr, symbol)
             # Hotfix P0 — hardening matemático: nunca apresenta uma
             # antiderivada não verificada. Recalcula `d/dx(primitive)` e
@@ -329,9 +363,9 @@ def solve_calculus_text(expression: str) -> str:
             return _rename_natural_log(f"Integral: {resultado} + C")
         if len(partes) == 4:
             symbol = _parse_variable(partes[1])
-            expr = _parse_fragment(partes[0], symbol)
-            inferior = _parse_fragment(partes[2], symbol)
-            superior = _parse_fragment(partes[3], symbol)
+            expr = canonicalize_euler_constant(_parse_fragment(partes[0], symbol))
+            inferior = canonicalize_euler_constant(_parse_fragment(partes[2], symbol))
+            superior = canonicalize_euler_constant(_parse_fragment(partes[3], symbol))
             resultado = canonicalize_euler_constant(compute_definite_integral(expr, symbol, inferior, superior))
             return _rename_natural_log(f"Integral definida: {resultado}")
         raise ExpressionError(

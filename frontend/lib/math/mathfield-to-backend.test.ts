@@ -229,6 +229,55 @@ describe("mathFieldLatexToBackendExpression", () => {
     });
   });
 
+  // --- Hardening "Derivação Implícita — Roteamento" -------------------------
+  //
+  // Bug concreto encontrado nesta rodada de hardening: a engine de
+  // derivação implícita do backend (`derivada(EQUAÇÃO, x)`, sprint
+  // anterior) nunca era alcançável pela Calculadora estruturada — o slot
+  // de `d/dx(...)` só sabia ler uma EXPRESSÃO (`parseParenthesizedOrAtom`,
+  // que usa `parseExpression()`), nunca uma equação com "=". Corrigido com
+  // `parseDerivativeArgument` — mesma técnica de `parseEquation()` (o
+  // único outro lugar do parser que já reconhecia "="), usada SÓ pelo
+  // argumento de `d/dx(...)`. `sin(...)`/`cos(...)`/etc. continuam usando
+  // `parseParenthesizedOrAtom` sem nenhuma mudança — "=" dentro deles
+  // continua rejeitado, como sempre foi.
+  describe("Hardening — Derivação Implícita dentro de d/dx(...)", () => {
+    it("d/dx(x²+y²=25) -> derivada(x²+y²=25, x)", () => {
+      expect(expr("\\frac{d}{dx}\\left(x^2+y^2=25\\right)")).toBe("derivada(x²+y²=25, x)");
+    });
+
+    it("d/dx(x³+y³=6xy) -> derivada(x³+y³=6xy, x) — coeficiente composto preservado", () => {
+      expect(expr("\\frac{d}{dx}\\left(x^3+y^3=6xy\\right)")).toBe("derivada(x³+y³=6xy, x)");
+    });
+
+    it("d/dx(sen(y)=x) -> derivada(sin(y)=x, x) — composição com Trigonometria (V3.0.4), sem regressão", () => {
+      expect(
+        expr("\\frac{d}{dx}\\left(\\operatorname{sen}\\left(y\\right)=x\\right)")
+      ).toBe("derivada(sin(y)=x, x)");
+    });
+
+    it("d/dx(y=x) numa variável diferente de x continua genérico (d/dy)", () => {
+      expect(expr("\\frac{d}{dy}\\left(x^2+z^2=1\\right)")).toBe("derivada(x²+z²=1, y)");
+    });
+
+    it("d/dx(x²+3x) sem '=' continua funcionando exatamente como antes (regressão)", () => {
+      expect(expr("\\frac{d}{dx}\\left(x^2+3x\\right)")).toBe("derivada(x²+3x, x)");
+    });
+
+    it("sen(x)=1 (função, não d/dx) continua rejeitando '=' dentro do argumento — só o slot de derivada ganhou essa capacidade", () => {
+      expect(mathFieldLatexToBackendExpression("\\sin\\left(x=1\\right)")).toEqual({
+        ok: false,
+        reason: "unsupported",
+      });
+    });
+
+    it("d/dx com equação malformada (sobra conteúdo depois do '=') -> unsupported, nunca crash", () => {
+      expect(
+        mathFieldLatexToBackendExpression("\\frac{d}{dx}\\left(x=1=2\\right)")
+      ).toEqual({ ok: false, reason: "unsupported" });
+    });
+  });
+
   describe("Sprint V3.0.1 — Integral indefinida (\\int ... dx)", () => {
     it("∫x² dx -> integral(x², x)", () => {
       expect(expr("\\int x^2\\,dx")).toBe("integral(x², x)");

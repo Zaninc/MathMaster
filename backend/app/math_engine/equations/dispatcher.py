@@ -2,6 +2,7 @@ import re
 
 from sympy import Abs, Eq, degree
 from sympy.core.relational import Relational
+from sympy.logic.boolalg import BooleanFalse, BooleanTrue
 from sympy.parsing.sympy_parser import (
     convert_equals_signs,
     implicit_multiplication_application,
@@ -75,6 +76,36 @@ def _parse_equation(text: str) -> Eq:
     return parsed
 
 
+def _parse_single_equation_or_verdict(text: str) -> Eq | bool:
+    """Hardening Global — mesmo parsing de `_parse_equation`, mas só para
+    uma equação ISOLADA (nunca uma parte de um sistema — ver `solve_
+    equation_text`, que só chama isto quando `len(parts) == 1`): quando o
+    SymPy já consegue PROVAR que a igualdade é sempre verdadeira ou sempre
+    falsa independente da incógnita (ex. "2x+1=2x+1"/"2x+1=2x+3"),
+    `convert_equals_signs` devolve `BooleanTrue`/`BooleanFalse` em vez de
+    um `Eq` — o MESMO comportamento que `split_equation_sides` já
+    documentava desde a Sprint V2.9 como motivo de `steps/linear_
+    equations.py` nunca construir um `Eq()` para esses casos. Só que
+    `/solve` (esta função) sempre rejeitava aqui com "não foi possível
+    interpretar a equação" em vez de tratar o veredito — divergência real
+    entre `/solve` e `/solve/steps` para exatamente essas duas entradas,
+    encontrada nesta rodada de hardening. Devolve `True`/`False` para o
+    veredito, ou o `Eq` normal para qualquer outra equação (comportamento
+    idêntico a `_parse_equation` no caso comum)."""
+    try:
+        parsed = safe_parse_expr(text, transformations=_TRANSFORMATIONS)
+    except Exception as exc:
+        raise ExpressionError(f"Não foi possível interpretar a equação: {text}") from exc
+
+    if isinstance(parsed, (BooleanTrue, BooleanFalse)):
+        return bool(parsed)
+
+    if not isinstance(parsed, Eq):
+        raise ExpressionError(f"Não foi possível interpretar a equação: {text}")
+
+    return parsed
+
+
 def _solve_single_inequality(text: str) -> str:
     try:
         parsed = safe_parse_expr(text, transformations=_TRANSFORMATIONS)
@@ -98,9 +129,21 @@ def solve_equation_text(expression: str) -> str:
         return _solve_single_inequality(expression)
 
     parts = split_equations(expression)
-    equations = [_parse_equation(part) for part in parts]
 
-    if len(equations) > 1:
+    if len(parts) == 1:
+        verdict = _parse_single_equation_or_verdict(parts[0])
+        if isinstance(verdict, bool):
+            # Mesma frase já usada por `steps/linear_equations.py` para o
+            # passo final destes dois casos — `/solve` e `/solve/steps`
+            # agora concordam, em vez de `/solve` rejeitar com um erro.
+            return (
+                "Equação verdadeira para qualquer valor real de x — infinitas soluções"
+                if verdict
+                else "Equação falsa para qualquer valor — a equação não tem solução"
+            )
+        equation = verdict
+    else:
+        equations = [_parse_equation(part) for part in parts]
         symbols = sorted(
             {symbol for equation in equations for symbol in equation.free_symbols},
             key=str,
@@ -115,7 +158,6 @@ def solve_equation_text(expression: str) -> str:
             return solve_linear_system(equations, symbols)
         return solve_nonlinear_system(equations, symbols)
 
-    equation = equations[0]
     symbols = list(equation.free_symbols)
     if len(symbols) != 1:
         raise ExpressionError(

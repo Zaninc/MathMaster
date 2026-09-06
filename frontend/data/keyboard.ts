@@ -529,6 +529,23 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
         mathLiveInsert: "\\frac{d}{dx}\\left(\\placeholder{}\\right)",
       },
       {
+        // Hardening "Derivação Implícita — Roteamento" — tecla dedicada
+        // para o caso que `d/dx` sozinho não deixava claro: uma EQUAÇÃO
+        // (dois placeholders, lado esquerdo e lado direito) dentro do
+        // slot de derivada. `mathfield-to-backend.ts:parseDerivativeArgument`
+        // já sabe converter isso para `derivada(LHS=RHS, x)` — sintaxe que
+        // a engine de derivação implícita do backend já suporta desde a
+        // sprint anterior. Sem esta tecla, o usuário teria que digitar o
+        // "=" manualmente dentro do slot de `d/dx` — funciona, mas não é
+        // descoberto sozinho.
+        label: "dy/dx",
+        insert: "d/dx(=)",
+        cursorOffset: 5,
+        ariaLabel: "Inserir derivação implícita",
+        latex: "\\dfrac{dy}{dx}",
+        mathLiveInsert: "\\frac{d}{dx}\\left(\\placeholder{}=\\placeholder{}\\right)",
+      },
+      {
         label: "∫ dx",
         insert: "∫() dx",
         cursorOffset: 2,

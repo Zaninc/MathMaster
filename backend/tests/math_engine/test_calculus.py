@@ -63,6 +63,72 @@ def test_limit_with_bare_e_power_never_shows_ln_of_e() -> None:
     assert _solve("limite((e**(2*x)-1)/x, x, 0)") == "Limite: 2"
 
 
+def test_limit_with_bare_e_power_never_gives_false_sides_differ_error() -> None:
+    # Hardening Global — achado testando L'Hôpital sucessivo no navegador:
+    # digitar "e^x" com um "e" solto (não pelo botão dedicado "eˣ") num
+    # limite fazia `compute_limit` calcular os lados esquerdo/direito
+    # separadamente sobre `Symbol('e')` sem sinal definido, produzindo
+    # "os limites laterais são diferentes" em vez do resultado correto —
+    # a canonicalização de "e" existia só no RESULTADO, nunca na entrada,
+    # em `solve_calculus_text` (diferente dos `parse_*_call` de `steps/`,
+    # que já canonicalizavam a entrada desde o Hotfix V2.15.1).
+    assert _solve("limite((e**x-1-x)/x**2, x, 0)") == "Limite: 1/2"
+
+
+# --- Hardening Global — /solve agora também suporta derivação implícita ---
+#
+# Bug real encontrado testando a nova tecla "dy/dx" no navegador: o botão
+# "Resolver" (que chama `/solve`) devolvia 400 para `derivada(EQUAÇÃO, x)`
+# — só `/solve/steps` sabia lidar com isso (sprint anterior). Corrigido
+# promovendo o núcleo de parsing/cálculo/verificação para `calculus/
+# implicit_differentiation.py`, reaproveitado por `solve_calculus_text`
+# (aqui) E por `steps/implicit_differentiation.py` — mesmo motor, nunca
+# duas implementações do mesmo cálculo.
+
+
+def test_implicit_derivative_circle() -> None:
+    assert _solve("derivada(x**2+y**2=25, x)") == "Derivada: -x/y"
+
+
+def test_implicit_derivative_mixed_powers() -> None:
+    assert _solve("derivada(x**3+y**3=6*x*y, x)") == "Derivada: (x² - 2y)/(2x - y²)"
+
+
+def test_implicit_derivative_composed_exp_product_sin() -> None:
+    assert _solve("derivada(exp(x*y)+x**2*y+sin(y)=x**3, x)") == (
+        "Derivada: (3x² - 2x*y - y*exp(x*y))/(x² + x*exp(x*y) + cos(y))"
+    )
+
+
+def test_implicit_derivative_never_leaks_y_of_x_notation() -> None:
+    # Achado real: a primeira versão desta correção devolvia
+    # "Derivada: -x/y(x)" em vez de "Derivada: -x/y" — a notação interna
+    # (y como Function(x)) vazava porque `/solve` não tinha o mesmo passo
+    # de renomeação que `/solve/steps` já aplicava a cada `MathStep`.
+    result = solve_expression("derivada(x**2+y**2=25, x)")
+    assert "y(x)" not in result
+    assert "Function" not in result
+
+
+def test_implicit_derivative_without_dependent_variable_raises_cleanly() -> None:
+    with pytest.raises(ExpressionError, match="não depende de nenhuma outra variável"):
+        solve_expression("derivada(x**2=4, x)")
+
+
+def test_implicit_derivative_with_multiple_dependent_variables_raises_cleanly() -> None:
+    with pytest.raises(ExpressionError, match="mais de uma variável dependente"):
+        solve_expression("derivada(x**2+y**2+z**2=1, x)")
+
+
+def test_implicit_derivative_matches_steps_engine_final_value() -> None:
+    # /solve e /solve/steps nunca podem divergir para a mesma entrada.
+    from app.math_engine.steps import generate_steps
+
+    solve_result = solve_expression("derivada(x**2+y**2=25, x)")
+    steps_result = generate_steps("derivada(x**2+y**2=25, x)")[-1].expression
+    assert solve_result == f"Derivada: {steps_result.split('=', 1)[1]}"
+
+
 # --- Hotfix V2.15.1: paridade de Euler entre /solve e /solve/steps -------
 #
 # `/solve` (`solve_calculus_text`, acima) já canonicalizava "e" via

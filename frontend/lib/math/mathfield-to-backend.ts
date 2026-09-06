@@ -556,6 +556,38 @@ class LatexParser {
   }
 
   /**
+   * Hardening "Derivação Implícita — Roteamento" — mesma forma de
+   * `parseParenthesizedOrAtom`, mas usada SÓ pelo argumento de `d/dx(...)`:
+   * depois de ler o conteúdo entre parênteses, verifica um "=" de nível
+   * raiz (mesmo padrão de `parseEquation()`, o único outro lugar do
+   * parser que reconhece "="). Sem isto, `d/dx(x²+y²=25)` nunca conseguia
+   * ser digitado pela Calculadora — a engine de derivação implícita já
+   * existia no backend (`derivada(EQUAÇÃO, x)`), mas o adapter sempre
+   * rejeitava como "Unsupported" antes mesmo de tentar, porque
+   * `parseParenthesizedOrAtom` só sabia ler uma EXPRESSÃO, nunca uma
+   * equação, dentro do argumento — bug de roteamento puramente do
+   * frontend, motor intocado. `sin(...)`/`cos(...)`/etc. continuam
+   * usando `parseParenthesizedOrAtom` (sem "="), então nada muda pra
+   * eles — "=" dentro de uma função trigonométrica continua rejeitado,
+   * como sempre foi.
+   */
+  private parseDerivativeArgument(): string {
+    this.skipSpace();
+    if (this.consume("(")) {
+      const lhs = this.parseExpression();
+      this.skipSpace();
+      if (this.consume("=")) {
+        const rhs = this.parseExpression();
+        this.expect(")");
+        return `${lhs}=${rhs}`;
+      }
+      this.expect(")");
+      return lhs;
+    }
+    return this.parseAtom();
+  }
+
+  /**
    * Sprint V3.0.1 — captura o restante do escopo ATUAL como texto CRU (sem
    * converter ainda), parando no fim da string ou num fechamento `)`/`}`
    * que pertence a um grupo MAIS EXTERNO (nunca aberto por este método) —
@@ -823,7 +855,7 @@ class LatexParser {
       const derivativeMatch = numerator === "d" ? /^d([a-zA-Z])$/.exec(denominator) : null;
       if (derivativeMatch) {
         const variable = derivativeMatch[1];
-        const expr = this.parseParenthesizedOrAtom();
+        const expr = this.parseDerivativeArgument();
         return `derivada(${expr}, ${variable})`;
       }
       return `${this.wrap(numerator)}/${this.wrap(denominator)}`;

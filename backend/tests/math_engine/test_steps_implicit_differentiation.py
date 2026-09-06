@@ -207,14 +207,16 @@ def test_hardening_cases_match_oracle(call: str, lhs_text: str, rhs_text: str) -
 # --- /solve continua 100% intocado ------------------------------------------
 
 
-def test_solve_endpoint_contract_untouched_for_implicit_style_input() -> None:
+def test_solve_endpoint_now_also_supports_implicit_differentiation() -> None:
+    # Hardening Global — encontrado testando a nova tecla "dy/dx" no
+    # navegador: o botão "Resolver" (que chama `/solve`) devolvia 400 para
+    # `derivada(EQUAÇÃO, x)`, já que só `/solve/steps` sabia lidar com
+    # isso. Corrigido promovendo o núcleo de cálculo/verificação para
+    # `calculus/implicit_differentiation.py`, reaproveitado por `calculus/
+    # dispatcher.py:solve_calculus_text` — mesmo motor, nenhuma duplicação.
     from app.math_engine.dispatcher import solve_expression
 
-    # `/solve` nunca teve (e continua sem ter) suporte a equação dentro de
-    # `derivada(...)` — só `/solve/steps` ganhou esta sprint. Confirma que
-    # nenhuma mudança em `steps/` vazou para o dispatcher principal.
-    with pytest.raises(ExpressionError):
-        solve_expression("derivada(x**2+y**2=25, x)")
+    assert solve_expression("derivada(x**2+y**2=25, x)") == "Derivada: -x/y"
 
 
 def test_solve_endpoint_regression_for_plain_derivative() -> None:

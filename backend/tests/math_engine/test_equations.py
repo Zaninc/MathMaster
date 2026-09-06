@@ -29,12 +29,49 @@ def test_system_separated_by_newlines_instead_of_semicolons() -> None:
     assert _solve("x+y=5\nx-y=1") == "x = 3, y = 2"
 
 
-def test_degenerate_zero_coefficient_equation_raises() -> None:
-    # "0*x=5" não é uma equação de verdade (sem incógnita de fato) — o
-    # parser rejeita antes mesmo de chegar ao cálculo de grau. Documentado
-    # aqui como o comportamento real observado, não assumido.
-    with pytest.raises(ExpressionError):
-        _solve("0*x=5")
+# --- Hardening Global — /solve e /solve/steps concordam em identidade/ ------
+# contradição (bug real encontrado: /solve rejeitava com "não foi possível
+# interpretar a equação", /solve/steps já sabia lidar corretamente).
+
+
+def test_identity_equation_matches_steps_engine_wording() -> None:
+    from app.math_engine.steps import generate_steps
+
+    assert _solve("2*x+1=2*x+1") == "Equação verdadeira para qualquer valor real de x — infinitas soluções"
+    assert generate_steps("2*x+1=2*x+1")[-1].title == (
+        "Equação verdadeira para qualquer valor real de x — infinitas soluções"
+    )
+
+
+def test_contradiction_equation_matches_steps_engine_wording() -> None:
+    from app.math_engine.steps import generate_steps
+
+    assert _solve("2*x+1=2*x+3") == "Equação falsa para qualquer valor — a equação não tem solução"
+    assert generate_steps("2*x+1=2*x+3")[-1].title == (
+        "Equação falsa para qualquer valor — a equação não tem solução"
+    )
+
+
+def test_system_with_a_self_contradictory_part_still_raises_as_before() -> None:
+    # Escopo desta correção é DELIBERADAMENTE só a equação isolada (`len(
+    # parts) == 1`) — um sistema onde uma das partes, isolada, já seria
+    # "2x+1=2x+3" (contradição pura) continua pelo caminho antigo
+    # (`_parse_equation`, sem o novo veredito bool), comportamento
+    # inalterado por esta rodada de hardening: ainda rejeita, nunca tenta
+    # tratar como sistema com uma parte "sempre falsa".
+    with pytest.raises(ExpressionError, match="Não foi possível interpretar a equação"):
+        _solve("2*x+1=2*x+3; y=1")
+
+
+def test_degenerate_zero_coefficient_equation_is_a_contradiction() -> None:
+    # Hardening Global — "0*x=5" simplifica para `Eq(0, 5)`, que o SymPy já
+    # colapsa para `BooleanFalse` (0 nunca é 5, para nenhum valor de x).
+    # Antes desta rodada de hardening, `/solve` rejeitava isso com "não foi
+    # possível interpretar a equação" (mesma limitação de "2x+1=2x+3", ver
+    # `equations/dispatcher.py:_parse_single_equation_or_verdict`) — agora
+    # reconhece corretamente como uma contradição sem solução, igual
+    # `/solve/steps` já fazia.
+    assert _solve("0*x=5") == "Equação falsa para qualquer valor — a equação não tem solução"
 
 
 # --- Regressão: equações com parâmetro livre continuam fora de escopo ---
