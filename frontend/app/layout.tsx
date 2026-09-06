@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
+import { ChunkErrorRecovery } from "@/components/layout/ChunkErrorRecovery";
 import { Footer } from "@/components/layout/Footer";
 import { NavBar } from "@/components/layout/NavBar";
 import { RouteTransition } from "@/components/layout/RouteTransition";
@@ -53,6 +54,7 @@ export default function RootLayout({
         >
           Pular para o conteúdo
         </a>
+        <ChunkErrorRecovery />
         <NavBar />
         <main id="main-content" className="flex-1">
           <RouteTransition>{children}</RouteTransition>
