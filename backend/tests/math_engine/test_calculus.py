@@ -129,6 +129,65 @@ def test_implicit_derivative_matches_steps_engine_final_value() -> None:
     assert solve_result == f"Derivada: {steps_result.split('=', 1)[1]}"
 
 
+# --- Hardening "Multiplicação Implícita" — regressão real de produção -----
+#
+# Bug real reproduzido manualmente: `x³+y³=6xy` na Calculadora devolvia
+# "Não foi possível interpretar a equação: x**3+y**3=6xy" em vez de cair
+# no fluxo de derivação implícita. Investigado e confirmado que a causa
+# raiz é 100% do ADAPTER do frontend (`mathfield-to-backend.ts`
+# `parseTerm()`) — nunca inseria "*" entre duas letras soltas coladas
+# ("xy") nem entre uma letra e "(" ("x(y+1)"), então o payload enviado ao
+# backend era literalmente "x**3+y**3=6xy" (sem "derivada(...)" e sem
+# "*"). O backend em si SEMPRE soube resolver esta equação corretamente
+# — `test_implicit_derivative_mixed_powers` acima já cobre exatamente
+# este caso com "6*x*y" — por isso os testes aqui usam a forma já
+# normalizada (com "*"), a mesma que o adapter corrigido agora envia; a
+# cobertura de que "6xy" (sem "*") vira "6*x*y" mora no frontend
+# (`mathfield-to-backend.test.ts`, describe "Hardening 'Multiplicação
+# Implícita'"). Ver também `test_equations.py` e `test_steps_linear_
+# systems.py` para a confirmação de que equações de uma incógnita e
+# sistemas lineares continuam roteando para os solvers de sempre.
+
+
+def test_implicit_derivative_x3_y3_equals_6xy_matches_expected_closed_form() -> None:
+    # Validação explícita pedida: o resultado bate algebricamente com
+    # (2*y-x**2)/(y**2-2*x), não só com a forma que o motor produz.
+    from sympy import Symbol, simplify, sympify
+
+    x, y = Symbol("x"), Symbol("y")
+    raw = solve_expression("derivada(x**3+y**3=6*x*y, x)")
+    mine = sympify(raw.removeprefix("Derivada: "), locals={"x": x, "y": y})
+    expected = sympify("(2*y-x**2)/(y**2-2*x)", locals={"x": x, "y": y})
+    assert simplify(mine - expected) == 0
+
+
+def test_implicit_derivative_x2y_plus_xy2_equals_6() -> None:
+    assert _solve("derivada(x**2*y+x*y**2=6, x)") == "Derivada: (-2x - y)*y/(x*(x + 2y))"
+
+
+def test_implicit_derivative_x_times_y_plus_1_plus_y_times_x_plus_1() -> None:
+    assert _solve("derivada(x*(y+1)+y*(x+1)=10, x)") == "Derivada: (-2y - 1)/(2x + 1)"
+
+
+def test_bare_multivariable_equation_without_derivada_wrapper_still_rejected() -> None:
+    # Item 6/8 do ticket: sem o operador `derivada(...)`, uma equação com
+    # x e y continua sendo tratada como equação comum de duas incógnitas
+    # — nunca sequestrada pro fluxo de derivação implícita. Esse SEMPRE
+    # foi o comportamento correto (ver Hardening Global anterior); o bug
+    # real estava só na normalização de "6xy", nunca no roteamento.
+    with pytest.raises(ExpressionError, match="única incógnita"):
+        solve_expression("x**3+y**3=6*x*y")
+
+
+def test_linear_system_still_classified_correctly_after_implicit_diff_hardening() -> None:
+    assert _solve("x+y=5\nx-y=1") == "x = 3, y = 2"
+
+
+def test_single_variable_equation_still_routes_to_normal_solver() -> None:
+    assert _solve("2*x+4=10") == "x = 3"
+    assert _solve("x**2-4=0") == "x₁ = -2, x₂ = 2"
+
+
 # --- Hotfix V2.15.1: paridade de Euler entre /solve e /solve/steps -------
 #
 # `/solve` (`solve_calculus_text`, acima) já canonicalizava "e" via

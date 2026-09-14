@@ -515,6 +515,49 @@ class LatexParser {
     return inner;
   }
 
+  /**
+   * Hardening "Derivação Implícita — Multiplicação Implícita" — espia o
+   * conteúdo CRU de um grupo `{...}` que começa no cursor atual, sem
+   * consumir nada nem parsear. `null` se o cursor não está em "{".
+   *
+   * Existe só para o denominador de `\frac{d}{dx}` (ver abaixo): o fix de
+   * multiplicação implícita letra-letra em `parseTerm()` (ex. "xy" ->
+   * "x*y") faria "dx" virar "d*x" se lido via `readGroup()` normal,
+   * quebrando a detecção do template de derivada (que exige o padrão CRU
+   * "d" + UMA letra). Ler o texto sem parsear evita essa colisão sem
+   * precisar de exceção nenhuma dentro de `parseTerm()`.
+   */
+  private peekRawGroupText(): string | null {
+    if (this.peek() !== "{") return null;
+    let depth = 0;
+    for (let i = this.pos; i < this.src.length; i++) {
+      if (this.src[i] === "{") depth++;
+      else if (this.src[i] === "}") {
+        depth--;
+        if (depth === 0) return this.src.slice(this.pos + 1, i);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Consome um grupo `{...}` inteiro SEM parsear seu conteúdo — usado
+   * quando o conteúdo já foi decidido via `peekRawGroupText()` (ver
+   * acima) e a forma parseada nunca é necessária (o "dx" do template de
+   * derivada só serve pra extrair a letra da variável via regex).
+   */
+  private skipRawGroup(): void {
+    this.expect("{");
+    let depth = 1;
+    while (depth > 0) {
+      if (this.pos >= this.src.length) throw new Unsupported("grupo não fechado");
+      const ch = this.src[this.pos];
+      if (ch === "{") depth++;
+      else if (ch === "}") depth--;
+      this.pos++;
+    }
+  }
+
   /** Envolve em parênteses só quando o texto não é já um único átomo. */
   private wrap(text: string): string {
     if (/^[0-9.]+$/.test(text)) return text;
@@ -782,7 +825,29 @@ class LatexParser {
         this.src.startsWith(token, this.pos)
       );
       const precedingIsLetter = /[a-zA-Z]/.test(result[result.length - 1] ?? "");
-      const needsExplicitOperator = matrixEnvironment !== undefined || (functionName !== undefined && precedingIsLetter);
+      // Hardening "Derivação Implícita" — achado real testando `x³+y³=6xy`:
+      // uma LETRA solta (nova variável, ex. "y" depois de "x") ou um "("
+      // solto (ex. "x(y+1)") colados direto numa letra anterior, sem
+      // operador nenhum, NUNCA tinham "*" explícito inserido — só nomes de
+      // FUNÇÃO conhecida (`\sin`/`\ln`/etc.) ganhavam esse tratamento.
+      // Confirmado empiricamente contra `safe_parse_expr` que isto quebra
+      // de DUAS formas diferentes no backend: "xy" forma um identificador
+      // de duas letras REJEITADO (`_reject_ambiguous_identifiers`,
+      // `safe_parsing.py`); "x(y+1)" é lido como uma CHAMADA DE FUNÇÃO a
+      // uma função inexistente chamada "x" (SymPy só reconhece
+      // "letra(...)" como multiplicação quando há um operador explícito
+      // ou espaço entre os dois — nunca colado). Mesma exigência
+      // estrutural do caso de nome de função acima (só dispara quando o
+      // fator ANTERIOR termina em letra — nunca incondicional, pra não
+      // regredir "(x+1)y"/"2(x+1)"/"(x+1)(y+1)", todos já confirmados
+      // funcionando sem "*" porque "(" e ")" nunca formam identificador
+      // ambíguo com o que vem antes/depois).
+      const nextIsBareLetterOrParen =
+        matrixEnvironment === undefined && functionName === undefined && /[a-zA-Z(]/.test(next);
+      const needsExplicitOperator =
+        matrixEnvironment !== undefined ||
+        (functionName !== undefined && precedingIsLetter) ||
+        (nextIsBareLetterOrParen && precedingIsLetter);
       const startsFactor =
         matrixEnvironment !== undefined ||
         functionName !== undefined ||
@@ -844,7 +909,6 @@ class LatexParser {
 
     if (this.consume("\\frac")) {
       const numerator = this.readGroup();
-      const denominator = this.readGroup();
       // Sprint V3.0.1 — `\frac{d}{dx}(expr)` é o template de DERIVADA
       // (`d/dx` do teclado), não uma fração de verdade: numerador
       // convertido é exatamente "d" e denominador é "d" + UMA letra
@@ -852,12 +916,23 @@ class LatexParser {
       // `d/dy(...)`/`d/dz(...)` etc. funcionam de graça, sem hardcode).
       // O argumento entre parênteses SEMPRE vem logo depois na fonte
       // (parte fixa do template `\left(\placeholder{}\right)`).
-      const derivativeMatch = numerator === "d" ? /^d([a-zA-Z])$/.exec(denominator) : null;
+      //
+      // Hardening — o denominador precisa ser espiado como texto CRU
+      // (`peekRawGroupText`) ANTES de decidir se é o template de
+      // derivada: parseá-lo via `readGroup()` normal passaria "dx" pelo
+      // fix de multiplicação implícita letra-letra de `parseTerm()`,
+      // transformando-o em "d*x" e quebrando o regex abaixo. Se não for
+      // o template de derivada, o denominador é lido (e parseado) do
+      // jeito normal, como sempre.
+      const rawDenominator = numerator === "d" ? this.peekRawGroupText() : null;
+      const derivativeMatch = rawDenominator !== null ? /^d([a-zA-Z])$/.exec(rawDenominator) : null;
       if (derivativeMatch) {
+        this.skipRawGroup();
         const variable = derivativeMatch[1];
         const expr = this.parseDerivativeArgument();
         return `derivada(${expr}, ${variable})`;
       }
+      const denominator = this.readGroup();
       return `${this.wrap(numerator)}/${this.wrap(denominator)}`;
     }
 

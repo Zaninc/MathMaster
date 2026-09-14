@@ -218,7 +218,13 @@ describe("mathFieldLatexToBackendExpression", () => {
     });
 
     it("uma fração comum (numerador != 'd') continua sendo fração, nunca confundida com derivada", () => {
-      expect(expr("\\frac{2}{dx}")).toBe("2/(dx)");
+      // Hardening "Multiplicação Implícita" — "dx" aqui é uma fração
+      // comum de verdade (numerador "2", não "d"), então "d" e "x" são
+      // DUAS variáveis de uma letra cada, não o idioma "d/dx" — o mesmo
+      // fix que insere "*" em "xy" (ver describe dedicado abaixo) insere
+      // aqui também. Confirmado contra o backend real: "2/(dx)" sozinho
+      // é REJEITADO ("Nome não reconhecido: 'dx'"), "2/(d*x)" funciona.
+      expect(expr("\\frac{2}{dx}")).toBe("2/(d*x)");
     });
 
     it("derivada sem expressão (slot vazio) -> incomplete", () => {
@@ -246,8 +252,16 @@ describe("mathFieldLatexToBackendExpression", () => {
       expect(expr("\\frac{d}{dx}\\left(x^2+y^2=25\\right)")).toBe("derivada(x²+y²=25, x)");
     });
 
-    it("d/dx(x³+y³=6xy) -> derivada(x³+y³=6xy, x) — coeficiente composto preservado", () => {
-      expect(expr("\\frac{d}{dx}\\left(x^3+y^3=6xy\\right)")).toBe("derivada(x³+y³=6xy, x)");
+    it("d/dx(x³+y³=6xy) -> derivada(x³+y³=6x*y, x) — regressão real corrigida: '6xy' agora vira '6x*y'", () => {
+      // Bug real encontrado em produção: "6xy" (dígito seguido de DUAS
+      // variáveis de uma letra cada, sem operador) nunca ganhava "*" entre
+      // "x" e "y" — só nomes de FUNÇÃO conhecida (\sin/\ln/etc.) coladas
+      // numa letra ganhavam esse tratamento. O backend rejeitava "xy" como
+      // identificador de duas letras não reconhecido. Corrigido de forma
+      // estrutural em `parseTerm()` (nunca uma regex específica para este
+      // exemplo — ver `mathfield-to-backend.ts`), então QUALQUER letra
+      // solta colada em outra letra ganha "*", não só este caso.
+      expect(expr("\\frac{d}{dx}\\left(x^3+y^3=6xy\\right)")).toBe("derivada(x³+y³=6x*y, x)");
     });
 
     it("d/dx(sen(y)=x) -> derivada(sin(y)=x, x) — composição com Trigonometria (V3.0.4), sem regressão", () => {
@@ -287,8 +301,18 @@ describe("mathFieldLatexToBackendExpression", () => {
       expect(expr("\\int x\\cdot e^{x}\\,dx")).toBe("integral(x*e^x, x)");
     });
 
-    it("∫2x(x²+1)³ dx -> integral(2x(x²+1)³, x)", () => {
-      expect(expr("\\int 2x\\left(x^2+1\\right)^3\\,dx")).toBe("integral(2x(x²+1)³, x)");
+    it("∫2x(x²+1)³ dx -> integral(2x*(x²+1)³, x)", () => {
+      // Hardening "Multiplicação Implícita" — "x(" (letra colada direto
+      // num "(" sem operador) sempre foi ambíguo pro backend: FORA de um
+      // contexto de cálculo (onde a variável já é conhecida de antemão
+      // via `local_dict`), "x(y+1)" é lido como CHAMADA a uma função
+      // inexistente chamada "x" e rejeitado — confirmado contra
+      // `solve_expression` real. A forma antiga sem "*" só funcionava
+      // aqui por coincidência de a variável do integral já estar
+      // pré-registrada; "integral(2x*(x²+1)³, x)" dá o MESMO resultado
+      // real (`x⁸/4+x⁶+3x⁴/2+x²+C`) e é a forma correta e estrutural,
+      // válida em qualquer contexto, não só dentro de cálculo.
+      expect(expr("\\int 2x\\left(x^2+1\\right)^3\\,dx")).toBe("integral(2x*(x²+1)³, x)");
     });
 
     it("∫sin(x) dx -> integral(sin(x), x)", () => {
@@ -1414,6 +1438,101 @@ describe("mathFieldLatexToBackendExpression", () => {
 
     it("2sen(x)cos(x) — cadeia de 3 fatores implícitos", () => {
       expect(expr("2\\operatorname{sen}\\left(x\\right)\\cos\\left(x\\right)")).toBe("2sin(x)cos(x)");
+    });
+  });
+
+  // --- Hardening "Multiplicação Implícita" — regressão real de produção --
+  //
+  // Bug encontrado testando `x³+y³=6xy` (derivação implícita): "6xy"
+  // nunca ganhava "*" entre "x" e "y" — o mecanismo de multiplicação
+  // implícita só inseria "*" quando o fator SEGUINTE era um nome de
+  // FUNÇÃO conhecida colado numa letra (`xsen(x)` -> `x*sin(x)`), nunca
+  // quando era só outra variável solta (`xy`) ou um "(" solto colado numa
+  // letra (`x(y+1)`). Os dois casos formam algo ambíguo pro backend por
+  // motivos DIFERENTES — confirmado empiricamente contra `solve_
+  // expression` real antes de escrever a correção: "xy" forma um
+  // identificador de duas letras rejeitado
+  // (`safe_parsing._reject_ambiguous_identifiers`); "x(y+1)" é lido como
+  // chamada a uma função inexistente chamada "x" (SymPy só entende
+  // "letra(" como multiplicação quando a letra já é um símbolo CONHECIDO
+  // de antemão via `local_dict` — o caso de `derivada`/`integral`/
+  // `limite`, que sempre declaram a variável ativa; nunca o caso de uma
+  // equação solta ou expressão genérica). A correção é estrutural (mesma
+  // condição "fator anterior termina em letra" já usada pra nomes de
+  // função, generalizada pra QUALQUER letra ou "(" solta) — nunca uma
+  // regex específica pra "xy"/"6xy".
+  describe("Hardening 'Multiplicação Implícita' — letra solta colada em letra ou '(' ", () => {
+    it("xy -> x*y", () => {
+      expect(expr("xy")).toBe("x*y");
+    });
+
+    it("2xy -> 2x*y", () => {
+      expect(expr("2xy")).toBe("2x*y");
+    });
+
+    it("x(y+1) -> x*(y+1)", () => {
+      expect(expr("x\\left(y+1\\right)")).toBe("x*(y+1)");
+    });
+
+    it("y(x+1) -> y*(x+1)", () => {
+      expect(expr("y\\left(x+1\\right)")).toBe("y*(x+1)");
+    });
+
+    it("x²y -> x²y (superescrito já separa, nunca precisou de '*')", () => {
+      expect(expr("x^2y")).toBe("x²y");
+    });
+
+    it("xy² -> x*y² (o '²' só aparece DEPOIS do 'y' — 'xy' ainda cola antes disso)", () => {
+      expect(expr("xy^2")).toBe("x*y²");
+    });
+
+    it("regressão: (x+1)y continua sem '*' (')' nunca forma identificador ambíguo)", () => {
+      expect(expr("\\left(x+1\\right)y")).toBe("(x+1)y");
+    });
+
+    it("regressão: 2(x+1) continua sem '*' (dígito, não letra, precedendo '(')", () => {
+      expect(expr("2\\left(x+1\\right)")).toBe("2(x+1)");
+    });
+
+    it("regressão: (x+1)(y+1) continua sem '*' (')' seguido de '(')", () => {
+      expect(expr("\\left(x+1\\right)\\left(y+1\\right)")).toBe("(x+1)(y+1)");
+    });
+
+    it("regressão: sen(x)cos(x) continua sem '*' (fatores terminam em ')', não letra)", () => {
+      expect(expr("\\operatorname{sen}\\left(x\\right)\\cos\\left(x\\right)")).toBe("sin(x)cos(x)");
+    });
+
+    it("regressão crítica: \\frac{d}{dx}(...) — o 'dx' do template de derivada NUNCA vira 'd*x'", () => {
+      expect(expr("\\frac{d}{dx}\\left(x^2\\right)")).toBe("derivada(x², x)");
+      expect(expr("\\frac{d}{dy}\\left(x^2\\right)")).toBe("derivada(x², y)");
+    });
+
+    it("regressão: uma fração comum com 'dx' de verdade no denominador (numerador != 'd') agora ganha '*' corretamente", () => {
+      expect(expr("\\frac{2}{dx}")).toBe("2/(d*x)");
+    });
+  });
+
+  // --- Hardening "Multiplicação Implícita" — os 4 casos obrigatórios de --
+  // regressão pedidos: cada um comparado com o backend real (ver
+  // test_calculus.py:test_implicit_derivative_* no backend para a mesma
+  // bateria do lado do servidor).
+  describe("Hardening 'Multiplicação Implícita' — casos obrigatórios de derivação implícita", () => {
+    it("x²+y²=25 -> derivada(x²+y²=25, x)", () => {
+      expect(expr("\\frac{d}{dx}\\left(x^2+y^2=25\\right)")).toBe("derivada(x²+y²=25, x)");
+    });
+
+    it("x³+y³=6xy -> derivada(x³+y³=6x*y, x)", () => {
+      expect(expr("\\frac{d}{dx}\\left(x^3+y^3=6xy\\right)")).toBe("derivada(x³+y³=6x*y, x)");
+    });
+
+    it("x²y+xy²=6 -> derivada(x²y+x*y²=6, x) — 'x²y' já é inambíguo (superescrito separa), só 'xy²' precisa de '*'", () => {
+      expect(expr("\\frac{d}{dx}\\left(x^2y+xy^2=6\\right)")).toBe("derivada(x²y+x*y²=6, x)");
+    });
+
+    it("x(y+1)+y(x+1)=10 -> derivada(x*(y+1)+y*(x+1)=10, x)", () => {
+      expect(expr("\\frac{d}{dx}\\left(x\\left(y+1\\right)+y\\left(x+1\\right)=10\\right)")).toBe(
+        "derivada(x*(y+1)+y*(x+1)=10, x)"
+      );
     });
   });
 
