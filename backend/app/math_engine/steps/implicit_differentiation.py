@@ -75,11 +75,13 @@ from sympy import Derivative, Function, Symbol, expand, simplify
 from sympy.core.expr import Expr
 
 from ..calculus.derivatives import compute_derivative
+from ..calculus.dispatcher import parse_derivative_order
 from ..calculus.implicit_differentiation import (
     NO_DEPENDENT_VARIABLE_MESSAGE,
     compute_implicit_derivative,
     looks_like_implicit_derivative_argument,
     parse_implicit_equation,
+    reduce_using_original_equation,
     rename_implicit_derivative_text,
 )
 from ..equations.dispatcher import looks_like_inequality
@@ -100,14 +102,19 @@ _CALL_PATTERN = re.compile(r"^\s*derivada\s*\((.*)\)\s*$", re.DOTALL)
 _VARIABLE_PATTERN = re.compile(r"^[a-zA-Z_]\w*$")
 
 
-def _split_derivative_call(text: str) -> tuple[str, str] | None:
+def _split_derivative_call(text: str) -> tuple[str, str, str | None] | None:
+    """Sprint V3.0.6 (Derivadas de Ordem Superior) — 2 OU 3 argumentos
+    agora (terceiro, opcional, é a ordem — `None` quando ausente, mesmo
+    default "ordem 1" de todo o resto do produto)."""
     match = _CALL_PATTERN.match(text)
     if not match:
         return None
     parts = _split_top_level_args(match.group(1))
-    if len(parts) != 2:
-        return None
-    return parts[0].strip(), parts[1].strip()
+    if len(parts) == 2:
+        return parts[0].strip(), parts[1].strip(), None
+    if len(parts) == 3:
+        return parts[0].strip(), parts[1].strip(), parts[2].strip()
+    return None
 
 
 def _split_top_level_args(text: str) -> list[str]:
@@ -145,7 +152,7 @@ def is_implicit_differentiation_call(text: str) -> bool:
     parts = _split_derivative_call(text)
     if parts is None:
         return False
-    expr_text, _ = parts
+    expr_text, _, _ = parts
     return looks_like_implicit_derivative_argument(expr_text)
 
 
@@ -243,16 +250,16 @@ def _isolate_derivative(
     return isolated, steps
 
 
-def _rename_implicit_steps(steps: list[MathStep], y_name: str, x_name: str) -> list[MathStep]:
+def _rename_implicit_steps(steps: list[MathStep], y_name: str, x_name: str, order: int = 1) -> list[MathStep]:
     return [
         MathStep(
             title=(
-                rename_implicit_derivative_text(step.title, y_name, x_name)
+                rename_implicit_derivative_text(step.title, y_name, x_name, order)
                 if step.title
                 else step.title
             ),
             title_segments=step.title_segments,
-            expression=rename_implicit_derivative_text(step.expression, y_name, x_name),
+            expression=rename_implicit_derivative_text(step.expression, y_name, x_name, order),
             explanation=step.explanation,
         )
         for step in steps
@@ -263,8 +270,13 @@ def generate_implicit_differentiation_steps(text: str) -> list[MathStep]:
     parts = _split_derivative_call(text)
     if parts is None:
         raise ExpressionError(UNSUPPORTED_IMPLICIT_DIFFERENTIATION_MESSAGE)
-    expr_text, var_text = parts
+    expr_text, var_text, order_text = parts
     x_symbol = _parse_variable(var_text)
+    # Sprint V3.0.6 (Derivadas de Ordem Superior) — reaproveita a MESMA
+    # validação de ordem de `calculus/dispatcher.py` (única fonte da
+    # verdade pro intervalo [MIN_DERIVATIVE_ORDER, MAX_DERIVATIVE_ORDER],
+    # nunca duplicada aqui).
+    order = parse_derivative_order(order_text) if order_text is not None else 1
 
     if looks_like_inequality(expr_text):
         raise ExpressionError(UNSUPPORTED_INEQUALITY_MESSAGE)
@@ -287,12 +299,64 @@ def generate_implicit_differentiation_steps(text: str) -> list[MathStep]:
     drhs, rhs_steps = _differentiate_side(rhs, x_symbol, y_func)
     steps.extend(rhs_steps)
 
-    derivative = Derivative(y_func, x_symbol)
-    if not expand(dlhs - drhs).has(derivative):
+    target = Derivative(y_func, x_symbol)
+    diff_eq = expand(dlhs - drhs)
+    if not diff_eq.has(target):
         raise ExpressionError(NO_DEPENDENT_VARIABLE_MESSAGE)
 
-    isolated, isolation_steps = _isolate_derivative(dlhs, drhs, derivative, x_symbol)
+    isolated, isolation_steps = _isolate_derivative(dlhs, drhs, target, x_symbol)
     steps.extend(isolation_steps)
+
+    # Sprint V3.0.6 — rodadas 2..ordem: MESMA técnica (nunca "if order==2"):
+    # deriva a equação "diff_eq = 0" da rodada anterior mais uma vez
+    # (`_differentiate_side`, reaproveitada — nenhuma regra de derivada
+    # nova), isola a derivada de ordem k já sabendo que ela fica LINEAR
+    # (`_isolate_derivative`, também reaproveitada, genérica em qual
+    # `Derivative` é o alvo) e substitui as derivadas de ordem MENOR já
+    # isoladas antes de seguir pra próxima rodada — o "y=y(x)" nunca se
+    # perde porque `y_func` é sempre `Function(x)` (garantia estrutural
+    # de `parse_implicit_equation`, não um truque desta função).
+    substitutions: dict[Expr, Expr] = {}
+    for k in range(2, order + 1):
+        substitutions[target] = isolated
+        steps.append(
+            MathStep(
+                title="Derivando novamente em relação a x",
+                expression=eq_text(f"derivada({diff_eq}, {x_symbol})", "0"),
+            )
+        )
+        d_diff_eq, round_steps = _differentiate_side(diff_eq, x_symbol, y_func)
+        steps.extend(round_steps)
+
+        next_target = Derivative(y_func, x_symbol, k)
+        if not d_diff_eq.has(next_target):
+            raise ExpressionError(NO_DEPENDENT_VARIABLE_MESSAGE)
+        isolated_raw, next_isolation_steps = _isolate_derivative(d_diff_eq, 0, next_target, x_symbol)
+        steps.extend(next_isolation_steps)
+
+        substituted = simplify(isolated_raw.subs(substitutions))
+        if substituted != isolated_raw:
+            steps.append(
+                MathStep(
+                    title="Substituindo a derivada calculada na rodada anterior",
+                    expression=eq_text(next_target, substituted),
+                )
+            )
+
+        diff_eq = d_diff_eq
+        target = next_target
+        isolated = substituted
+
+    if order >= 2:
+        reduced_isolated = reduce_using_original_equation(isolated, lhs, rhs)
+        if simplify(reduced_isolated - isolated) != 0:
+            steps.append(
+                MathStep(
+                    title="Simplificando usando a equação original",
+                    expression=eq_text(target, reduced_isolated),
+                )
+            )
+            isolated = reduced_isolated
 
     # Verificação final: `compute_implicit_derivative` (o MESMO núcleo que
     # `/solve` usa, `calculus/implicit_differentiation.py`) já confere
@@ -301,10 +365,11 @@ def generate_implicit_differentiation_steps(text: str) -> list[MathStep]:
     # de forma independente, termo a termo, só para os PASSOS) contra o
     # valor autoritativo garante que a apresentação nunca diverge do
     # resultado — nunca duas implementações do mesmo cálculo.
-    authoritative = compute_implicit_derivative(lhs, rhs, y_name, x_symbol)
+    authoritative = compute_implicit_derivative(lhs, rhs, y_name, x_symbol, order)
     if simplify(isolated - authoritative) != 0:
         raise ExpressionError(
-            f"Não foi possível verificar a derivação implícita de {lhs}={rhs} nesta versão."
+            f"Não foi possível verificar a derivação implícita de ordem {order} de "
+            f"{lhs}={rhs} nesta versão."
         )
 
-    return _rename_implicit_steps(steps, y_name, x_symbol.name)
+    return _rename_implicit_steps(steps, y_name, x_symbol.name, order)

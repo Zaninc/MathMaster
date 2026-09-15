@@ -86,9 +86,16 @@ def _term_steps(coeff: Expr, exponent: int, symbol: Symbol, *, standalone: bool)
     ]
 
 
-def generate_derivative_steps(text: str) -> list[MathStep]:
-    expr, symbol = parse_derivative_call(text)
-
+def polynomial_derivative_steps(expr: Expr, symbol: Symbol) -> list[MathStep]:
+    """Sprint V3.0.6 (Derivadas de Ordem Superior) — o CORPO de
+    `generate_derivative_steps` (regra da potência/linearidade), extraído
+    puro (sem o passo "Função original" nem reparsear texto) para
+    `higher_order_derivatives.py` reaproveitar em CADA rodada de uma
+    derivada de ordem n, operando direto em `(expr, symbol)` já parseados
+    — nunca gerando e reparseando uma string `derivada(...)` aninhada a
+    cada iteração. `generate_derivative_steps` abaixo continua o único
+    consumidor de `/solve/steps` de primeira ordem; comportamento dela é
+    100% preservado (só passou a delegar para esta função)."""
     # `as_ordered_terms()` (não `Add.make_args`, cuja ordem interna é
     # arbitrária) — grau decrescente, a mesma convenção de leitura "ax²+bx+c"
     # já usada no resto do produto (ex. `quadratic_equations.py`).
@@ -97,22 +104,26 @@ def generate_derivative_steps(text: str) -> list[MathStep]:
     if any(item is None for item in classified):
         raise ExpressionError(UNSUPPORTED_DERIVATIVE_MESSAGE)
 
-    steps = [MathStep(title="Função original", expression=f"derivada({expr}, {symbol})")]
-
     if len(terms) == 1:
         coeff, exponent = classified[0]
-        steps.extend(_term_steps(coeff, exponent, symbol, standalone=True))
-        return steps
+        return _term_steps(coeff, exponent, symbol, standalone=True)
 
-    steps.append(
+    steps = [
         MathStep(
             title="Aplicando a linearidade da derivada",
             expression=linear_combination_expression(terms, symbol, "derivada"),
         )
-    )
+    ]
     for coeff, exponent in classified:
         steps.extend(_term_steps(coeff, exponent, symbol, standalone=False))
 
     total = compute_derivative(expr, symbol)
     steps.append(MathStep(title="Somando os resultados", expression=str(total)))
+    return steps
+
+
+def generate_derivative_steps(text: str) -> list[MathStep]:
+    expr, symbol = parse_derivative_call(text)
+    steps = [MathStep(title="Função original", expression=f"derivada({expr}, {symbol})")]
+    steps.extend(polynomial_derivative_steps(expr, symbol))
     return steps

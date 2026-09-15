@@ -546,6 +546,46 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
         mathLiveInsert: "\\frac{d}{dx}\\left(\\placeholder{}=\\placeholder{}\\right)",
       },
       {
+        // Sprint V3.0.6 (Derivadas de Ordem Superior) — MESMA família de
+        // template do "d/dx" acima, só com o expoente de ORDEM fixo em 2
+        // no numerador e no denominador (nunca um placeholder aqui —
+        // ordem 2 é exatamente o que a tecla promete, sem ambiguidade
+        // possível). `mathfield-to-backend.ts:matchDerivativeOrderInNumerator`/
+        // `matchDerivativeDenominator` reconhecem esse padrão e emitem
+        // `derivada(expr, x, 2)`.
+        label: "d²/dx²",
+        insert: "d^2/dx^2()",
+        cursorOffset: 9,
+        ariaLabel: "Inserir derivada de segunda ordem",
+        latex: "\\dfrac{d^2}{dx^2}",
+        mathLiveInsert: "\\frac{d^2}{dx^2}\\left(\\placeholder{}\\right)",
+      },
+      {
+        label: "d³/dx³",
+        insert: "d^3/dx^3()",
+        cursorOffset: 9,
+        ariaLabel: "Inserir derivada de terceira ordem",
+        latex: "\\dfrac{d^3}{dx^3}",
+        mathLiveInsert: "\\frac{d^3}{dx^3}\\left(\\placeholder{}\\right)",
+      },
+      {
+        // Ordem ARBITRÁRIA — os dois expoentes de ordem são `\placeholder{}`
+        // vazios (nunca um valor default numérico): força o usuário a
+        // digitar a ordem explicitamente nos dois lados, e o hardening
+        // "Ordem Consistente" do adapter recusa com uma mensagem amigável
+        // se as duas ordens digitadas não baterem — nunca aceita
+        // silenciosamente um "d²/dx³". Ordem ainda vazia em qualquer um
+        // dos dois lados é tratada como slot incompleto de sempre
+        // (`\placeholder{}` vazio -> `Incomplete`, mesmo mecanismo
+        // genérico de qualquer outro template desta calculadora).
+        label: "dⁿ/dxⁿ",
+        insert: "d^n/dx^n()",
+        cursorOffset: 9,
+        ariaLabel: "Inserir derivada de ordem n",
+        latex: "\\dfrac{d^n}{dx^n}",
+        mathLiveInsert: "\\frac{d^{\\placeholder{}}}{dx^{\\placeholder{}}}\\left(\\placeholder{}\\right)",
+      },
+      {
         label: "∫ dx",
         insert: "∫() dx",
         cursorOffset: 2,

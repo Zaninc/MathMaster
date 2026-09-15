@@ -559,3 +559,188 @@ def test_free_symbol_extraction_never_overrides_known_names(known_name: str) -> 
     from app.math_engine.safe_parsing import extract_safe_symbols
 
     assert known_name not in extract_safe_symbols(f"{known_name}(x) + {known_name}", exclude={"x"})
+
+
+# --- Sprint V3.0.6 (Derivadas de Ordem Superior) --------------------------
+#
+# `derivada(expr, var, n)` — terceiro argumento OPCIONAL (ordem, padrão 1).
+# `compute_derivative`/`sympy.diff(expr, symbol, n)` é a primitiva NATIVA do
+# SymPy pra derivada de ordem n — nenhum motor novo, nenhum loop escrito à
+# mão pro caso explícito (ver `calculus/derivatives.py`). Para a forma
+# implícita, `compute_implicit_derivative` generaliza por indução (loop
+# genérico, nunca `if order==2`/`if order==3`) — ver `calculus/implicit_
+# differentiation.py`.
+
+
+def test_higher_order_x4_second_derivative() -> None:
+    assert _solve("derivada(x**4, x, 2)") == "Derivada: 12x²"
+
+
+def test_higher_order_x5_third_derivative() -> None:
+    assert _solve("derivada(x**5, x, 3)") == "Derivada: 60x²"
+
+
+def test_higher_order_sin_second_derivative() -> None:
+    assert _solve("derivada(sin(x), x, 2)") == "Derivada: -sin(x)"
+
+
+def test_higher_order_cos_third_derivative() -> None:
+    assert _solve("derivada(cos(x), x, 3)") == "Derivada: sin(x)"
+
+
+def test_higher_order_exp_second_derivative() -> None:
+    assert _solve("derivada(exp(x), x, 2)") == "Derivada: exp(x)"
+
+
+def test_higher_order_ln_second_derivative() -> None:
+    assert _solve("derivada(ln(x), x, 2)") == "Derivada: -1/x²"
+
+
+def test_higher_order_x_times_exp_second_derivative() -> None:
+    assert _solve("derivada(x*exp(x), x, 2)") == "Derivada: (x + 2)*exp(x)"
+
+
+def test_higher_order_reciprocal_second_derivative() -> None:
+    assert _solve("derivada(1/x, x, 2)") == "Derivada: 2/x³"
+
+
+def test_higher_order_polynomial_second_derivative_matches_ticket_example() -> None:
+    # Exemplo do ticket: d²/dx²(x⁴-3x²+2x) -> 12x²-6 — o motor devolve a
+    # forma fatorada "6*(2x²-1)" (o SymPy não expande automaticamente),
+    # algebricamente idêntica; confirmado também por comparação simbólica.
+    from sympy import Symbol, simplify, sympify
+
+    x = Symbol("x")
+    assert _solve("derivada(x**4-3*x**2+2*x, x, 2)") == "Derivada: 6*(2x² - 1)"
+    raw = solve_expression("derivada(x**4-3*x**2+2*x, x, 2)")
+    mine = sympify(raw.removeprefix("Derivada: "), locals={"x": x})
+    assert simplify(mine - (12 * x**2 - 6)) == 0
+
+
+def test_order_1_via_old_2_arg_syntax_unchanged() -> None:
+    assert _solve("derivada(x**2, x)") == "Derivada: 2x"
+
+
+def test_order_1_via_explicit_3_arg_syntax_matches_old_2_arg_syntax() -> None:
+    assert _solve("derivada(x**2, x, 1)") == _solve("derivada(x**2, x)")
+
+
+def test_order_at_maximum_allowed_limit() -> None:
+    assert _solve("derivada(x**2, x, 10)") == "Derivada: 0"
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "derivada(x**2, x, 0)",
+        "derivada(x**2, x, -1)",
+        "derivada(x**2, x, 2.5)",
+        "derivada(x**2, x, )",
+        "derivada(x**2, x, abc)",
+        "derivada(x**2, x, 11)",
+    ],
+)
+def test_invalid_or_out_of_range_order_raises_friendly_error(expression: str) -> None:
+    with pytest.raises(ExpressionError):
+        solve_expression(expression)
+
+
+def test_order_above_limit_message_is_specific() -> None:
+    with pytest.raises(ExpressionError, match="muito alta"):
+        solve_expression("derivada(x**2, x, 11)")
+
+
+def test_order_zero_or_negative_message_is_specific() -> None:
+    with pytest.raises(ExpressionError, match="inteiro positivo"):
+        solve_expression("derivada(x**2, x, 0)")
+    with pytest.raises(ExpressionError, match="inteiro positivo"):
+        solve_expression("derivada(x**2, x, -1)")
+
+
+# --- Derivação implícita de ordem superior --------------------------------
+#
+# Teste de ouro do ticket: d²/dx²(x²+y²=25) -> algebricamente equivalente a
+# -25/y³. `y` continua representado como `Function(x)` durante TODA a
+# cadeia (`parse_implicit_equation`, intocado) — a prova de que "y=y(x)
+# nunca se perde" é estrutural (ver `compute_implicit_derivative`), não
+# testada só pelo valor final: `test_implicit_second_order_matches_steps_
+# engine_final_value` abaixo confirma que /solve e /solve/steps concordam.
+
+
+def test_implicit_second_order_circle_matches_golden_test() -> None:
+    assert _solve("derivada(x**2+y**2=25, x, 2)") == "Derivada: -25/y³"
+
+
+def test_implicit_second_order_never_hardcoded_to_25_or_circle() -> None:
+    # Mesmo formato, raio (constante) e coeficientes DIFERENTES — nunca
+    # "25" nem "círculo" aparecem em código algum do motor.
+    assert _solve("derivada(x**2+y**2=49, x, 2)") == "Derivada: -49/y³"
+    assert _solve("derivada(4*x**2+9*y**2=36, x, 2)") == "Derivada: -16/(9y³)"
+
+
+def test_implicit_second_order_matches_idiff_oracle_before_reduction() -> None:
+    # A verificação fail-closed contra `idiff` acontece DENTRO de
+    # `compute_implicit_derivative`, SEMPRE antes da redução pela equação
+    # original (ver docstring/comentário no código — comparar a versão
+    # JÁ reduzida por "-25/y³" contra o oráculo cru "(-x²-y²)/y³" nunca
+    # bateria como identidade simbólica livre, só vale dado x²+y²=25).
+    # Este teste reproduz esse mesmo cálculo INTERMEDIÁRIO (pré-redução)
+    # diretamente, provando que o valor que de fato é verificado bate com
+    # o oráculo.
+    from sympy import Symbol, idiff, simplify, sympify
+
+    x, y = Symbol("x"), Symbol("y")
+    # `idiff` aceita `y` como Symbol comum aqui (não `Function(x)`) — é
+    # o próprio SymPy que substitui internamente; passar já como Function
+    # dispara um bug conhecido do SymPy (`UnboundLocalError` em `idiff`
+    # pra n > 1) alheio a esta sprint.
+    oracle = idiff(x**2 + y**2 - 25, y, x, 2)
+    unreduced_mine = sympify("(-x**2 - y**2)/y**3", locals={"x": x, "y": y})
+    assert simplify(unreduced_mine - oracle) == 0
+    # E a versão REDUZIDA (a que /solve de fato devolve) é algebricamente
+    # igual à não reduzida — só simplificada usando a restrição original.
+    raw = solve_expression("derivada(x**2+y**2=25, x, 2)")
+    reduced_mine = sympify(raw.removeprefix("Derivada: "), locals={"x": x, "y": y})
+    assert reduced_mine == sympify("-25/y**3", locals={"x": x, "y": y})
+
+
+def test_implicit_first_order_unchanged_after_higher_order_generalization() -> None:
+    # Regressão explícita: os 4 casos obrigatórios da sprint anterior
+    # continuam produzindo exatamente o mesmo resultado — a generalização
+    # por loop nunca muda o comportamento de ordem 1 (loop roda uma única
+    # vez, `substitutions` vazio).
+    assert _solve("derivada(x**2+y**2=25, x)") == "Derivada: -x/y"
+    assert _solve("derivada(x**3+y**3=6*x*y, x)") == "Derivada: (x² - 2y)/(2x - y²)"
+    assert _solve("derivada(x**2*y+x*y**2=6, x)") == "Derivada: (-2x - y)*y/(x*(x + 2y))"
+    assert _solve("derivada(x*(y+1)+y*(x+1)=10, x)") == "Derivada: (-2y - 1)/(2x + 1)"
+
+
+def test_implicit_second_order_matches_steps_engine_final_value() -> None:
+    from app.math_engine.steps import generate_steps
+
+    solve_result = solve_expression("derivada(x**2+y**2=25, x, 2)")
+    steps_result = generate_steps("derivada(x**2+y**2=25, x, 2)")[-1].expression
+    assert solve_result == f"Derivada: {steps_result.split('=', 1)[1]}"
+
+
+# --- Regressões explícitas: nada existente pode quebrar -------------------
+
+
+def test_regression_product_rule_derivative_unaffected() -> None:
+    assert _solve("derivada(x*sin(x), x)") == "Derivada: x*cos(x) + sin(x)"
+
+
+def test_regression_quotient_rule_derivative_unaffected() -> None:
+    assert _solve("derivada(x/sin(x), x)") == "Derivada: -x*cos(x)/sin(x)² + 1/sin(x)"
+
+
+def test_regression_chain_rule_derivative_unaffected() -> None:
+    assert _solve("derivada((x**2+1)**3, x)") == "Derivada: 6x*(x² + 1)²"
+
+
+def test_regression_single_variable_equation_still_routes_to_equation_solver() -> None:
+    assert _solve("x**2-4=0") == "x₁ = -2, x₂ = 2"
+
+
+def test_regression_linear_system_still_classified_correctly() -> None:
+    assert _solve("x+y=5\nx-y=1") == "x = 3, y = 2"

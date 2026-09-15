@@ -24,7 +24,9 @@ casos, não escondê-la atrás da expansão polinomial — por isso a detecção
 acontece sobre a árvore ORIGINAL (nunca expandida)."""
 from __future__ import annotations
 
-from sympy import cos, exp, sin
+import re
+
+from sympy import cos, exp, log, sin
 from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
@@ -34,6 +36,19 @@ from ..errors import ExpressionError
 from .formatting import wrap_if_sum
 from .models import MathStep
 from .validation import UNSUPPORTED_DERIVATIVE_MESSAGE
+
+# Mesma convenção/técnica já usada em `quotient_rule.py`/`calculus/
+# dispatcher.py` (duplicada aqui deliberadamente — cada módulo de `steps/`
+# é self-contained): "log(" que sobreviver num valor real do SymPy é
+# sempre log NATURAL neste produto — necessário porque a Sprint V3.0.6
+# (ver `is_trivial_elementary_shape`/`trivial_elementary_derivative_steps`
+# abaixo) passou a cobrir `ln(x)` isolado, o primeiro caso deste módulo
+# que produz "log(" na saída.
+_NATURAL_LOG_PATTERN = re.compile(r"\blog(?=\()")
+
+
+def _rename_natural_log(text: str) -> str:
+    return _NATURAL_LOG_PATTERN.sub("ln", text)
 
 _ChainShape = tuple[str, Expr, int | None]
 
@@ -86,6 +101,42 @@ def is_product_or_chain_shape(expr: Expr, symbol: Symbol) -> bool:
     if expr.as_numer_denom()[1] != 1:
         return False
     return _product_shape(expr, symbol) is not None or _chain_shape(expr, symbol) is not None
+
+
+_TRIVIAL_ELEMENTARY_FUNCS = {sin: "sin", cos: "cos", exp: "exp", log: "ln"}
+
+
+def is_trivial_elementary_shape(expr: Expr, symbol: Symbol) -> bool:
+    """Sprint V3.0.6 (Derivadas de Ordem Superior) — achado testando os
+    casos obrigatórios desta sprint (`d²/dx²(sin(x))`, `d²/dx²(exp(x))`,
+    `d²/dx²(ln(x))`): `sin(x)`/`cos(x)`/`exp(x)`/`ln(x)` SOZINHOS (sem
+    produto/quociente/composição em volta, argumento sendo a PRÓPRIA
+    variável — o caso mais simples possível), com um coeficiente
+    numérico OPCIONAL na frente (`-sin(x)`, `2*cos(x)` — achado testando
+    `d³/dx³(cos(x))`: a SEGUNDA rodada precisa derivar `-sin(x)`, a
+    própria derivada da primeira rodada, então o coeficiente -1 também
+    precisa ser reconhecido aqui, não só o caso "sem coeficiente")
+    nunca tinham passo a passo de primeira ordem nesta versão —
+    `is_product_or_chain_shape` os rejeita de propósito (`_chain_shape`
+    exige argumento DIFERENTE da variável — "cadeia de verdade", ver
+    docstring do módulo), e caem no motor polinomial (`derivatives.py`),
+    que só entende `coeficiente*x^n` e rejeita qualquer função
+    transcendental — gap PRÉ-EXISTENTE (não causado por esta sprint, mas
+    bloqueava diretamente os casos obrigatórios de ordem superior desta
+    sprint, que aplicam o motor de primeira ordem repetidamente).
+    Corrigido de forma genérica (nenhuma exceção específica a
+    `sin(x)`/`d²/dx²`): um único passo com o valor real de `compute_
+    derivative`, MESMO padrão trivial que `factor_derivative_steps` já
+    usa pra uma parte isolada de produto/quociente, promovido aqui pra
+    também valer como expressão de TOPO."""
+    _, rest = expr.as_coeff_Mul()
+    return rest.func in _TRIVIAL_ELEMENTARY_FUNCS and rest.args == (symbol,)
+
+
+def trivial_elementary_derivative_steps(expr: Expr, symbol: Symbol) -> list[MathStep]:
+    derivative = compute_derivative(expr, symbol)
+    label = _rename_natural_log(str(expr))
+    return [MathStep(title=f"Derivando {label}", expression=_rename_natural_log(str(derivative)))]
 
 
 def _outer_derivative_at_u(kind: str, exponent: int | None, u: Symbol) -> Expr:
@@ -197,26 +248,39 @@ def _product_rule_steps(expr: Expr, f: Expr, g: Expr, symbol: Symbol) -> list[Ma
     return steps
 
 
-def generate_advanced_derivative_steps(text: str) -> list[MathStep]:
-    expr, symbol = parse_derivative_call(text)
-    steps = [MathStep(title="Função original", expression=f"derivada({expr}, {symbol})")]
-
+def advanced_derivative_steps(expr: Expr, symbol: Symbol) -> list[MathStep]:
+    """Sprint V3.0.6 (Derivadas de Ordem Superior) — o CORPO de `generate_
+    advanced_derivative_steps` (produto/cadeia/elementar trivial),
+    extraído puro (sem o passo "Função original" nem reparsear texto)
+    para `higher_order_derivatives.py` reaproveitar em cada rodada de uma
+    derivada de ordem n. `generate_advanced_derivative_steps` abaixo
+    continua o único consumidor de `/solve/steps` de primeira ordem;
+    comportamento dela é 100% preservado."""
     if expr.as_numer_denom()[1] != 1:
         raise ExpressionError(UNSUPPORTED_DERIVATIVE_MESSAGE)
 
     product = _product_shape(expr, symbol)
     if product is not None:
         f, g = product
-        steps.extend(_product_rule_steps(expr, f, g, symbol))
-        return steps
+        return _product_rule_steps(expr, f, g, symbol)
 
     chain = _chain_shape(expr, symbol)
     if chain is not None:
         _, chain_steps = _chain_rule_steps(expr, symbol, chain)
-        steps.extend(chain_steps)
-        return steps
+        return chain_steps
+
+    if is_trivial_elementary_shape(expr, symbol):
+        return trivial_elementary_derivative_steps(expr, symbol)
 
     # Nunca deveria acontecer no fluxo normal — `steps/dispatcher.py` só
-    # chama esta função quando `is_product_or_chain_shape` já confirmou
-    # uma das duas formas. Defesa contra uso indevido direto deste módulo.
+    # chama esta função quando `is_product_or_chain_shape`/`is_trivial_
+    # elementary_shape` já confirmou uma das formas. Defesa contra uso
+    # indevido direto deste módulo.
     raise ExpressionError(UNSUPPORTED_DERIVATIVE_MESSAGE)
+
+
+def generate_advanced_derivative_steps(text: str) -> list[MathStep]:
+    expr, symbol = parse_derivative_call(text)
+    steps = [MathStep(title="Função original", expression=f"derivada({expr}, {symbol})")]
+    steps.extend(advanced_derivative_steps(expr, symbol))
+    return steps

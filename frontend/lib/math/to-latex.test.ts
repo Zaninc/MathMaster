@@ -1391,6 +1391,50 @@ describe("previewLatex (pipeline único da pré-visualização e do histórico)"
     expect(normalized(await previewLatex("limite(sen(x)/x, x, 0)"))).toContain("\\operatorname{sen}");
   });
 
+  // --- Sprint V3.0.6 (Derivadas de Ordem Superior) --------------------------
+  //
+  // Bug real encontrado testando d²/dx²(x²+y²=25) (derivação implícita de
+  // ordem 2) no navegador de produção: o RESULTADO (-25/y³, via `value
+  // ToLatex`/mathjs) já renderizava corretamente, mas o ECHO da expressão
+  // resolvida (`previewLatex`, usado por `useSolveLatex`/`ResultPanel`)
+  // caía no `\operatorname{derivada}(...)` genérico — `previewLatex` usa
+  // um parser tolerante PRÓPRIO (`renderCall`, nunca mathjs — necessário
+  // pra tolerar "=" dentro do argumento de uma equação implícita), cujo
+  // reconhecimento de `derivada(...)` só sabia 2 argumentos.
+  describe("Derivadas de ordem superior (echo via previewLatex, parser tolerante próprio)", () => {
+    it("d²/dx²(x⁴) -> \\frac{d^2}{dx^2}(x⁴)", async () => {
+      expect(normalized(await previewLatex("derivada(x**4, x, 2)"))).toContain(
+        "\\frac{d^{2}}{dx^{2}}"
+      );
+    });
+
+    it("d³/dx³(x⁵) -> \\frac{d^3}{dx^3}(x⁵)", async () => {
+      expect(normalized(await previewLatex("derivada(x**5, x, 3)"))).toContain(
+        "\\frac{d^{3}}{dx^{3}}"
+      );
+    });
+
+    it("regressão crítica: derivação implícita de ordem 2 — d²/dx²(x²+y²=25) -> \\frac{d^2}{dx^2}(...), nunca \\operatorname{derivada}", async () => {
+      const latex = normalized(await previewLatex("derivada(x**2+y**2=25, x, 2)"));
+      expect(latex).toContain("\\frac{d^{2}}{dx^{2}}");
+      expect(latex).not.toContain("operatorname");
+    });
+
+    it("ordem 1 (2 ou 3 argumentos) continua \\frac{d}{dx} simples, nunca d^1", async () => {
+      const twoArg = normalized(await previewLatex("derivada(x**2, x)"));
+      const threeArgOrder1 = normalized(await previewLatex("derivada(x**2, x, 1)"));
+      expect(twoArg).toBe(threeArgOrder1);
+      expect(twoArg).toContain("\\frac{d}{dx}");
+      expect(twoArg).not.toContain("d^{1}");
+    });
+
+    it("ordem ainda não numérica (placeholder da tecla dⁿ/dxⁿ não editado) nunca quebra o preview — cai no fallback de ordem 1", async () => {
+      const latex = await previewLatex("derivada(x**2, x, n)");
+      expect(latex).not.toBeNull();
+      assertRendersSafely(latex as string, "derivada(x**2, x, n)");
+    });
+  });
+
   it("reconhece a sintaxe principal do somatório, completa ou ainda em digitação", async () => {
     expect(normalized(await previewLatex("Σ(i=1..10) i"))).toContain("\\sum_{i=1}^{10}");
 

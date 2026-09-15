@@ -157,7 +157,12 @@ def test_solve_steps_derivative_with_title_segments(client: TestClient) -> None:
 
 
 def test_solve_steps_derivative_unsupported_returns_friendly_400(client: TestClient) -> None:
-    response = client.post("/solve/steps", json={"expression": "d/dx(sin(x))"})
+    # Sprint V3.0.6 (Derivadas de Ordem Superior) — `d/dx(sin(x))` (usado
+    # aqui antes) passou a ser suportado (gap pré-existente fechado, ver
+    # `test_steps_derivatives.py`/`test_steps_advanced_derivatives.py`);
+    # expoente fracionário continua genuinamente fora de escopo, mantendo
+    # a cobertura real de "existe um caso 400" neste teste.
+    response = client.post("/solve/steps", json={"expression": "d/dx(x**(1/2))"})
     assert response.status_code == 400
     assert "ainda não foi implementado" in response.json()["detail"]
 
@@ -166,9 +171,9 @@ def test_solve_endpoint_unaffected_by_unsupported_derivative_steps(client: TestC
     """`/solve` continua calculando normalmente qualquer derivada, mesmo
     quando `/solve/steps` ainda não sabe explicá-la passo a passo — o
     motor de cálculo (`calculus/derivatives.py`) nunca foi alterado."""
-    response = client.post("/solve", json={"expression": "d/dx(sin(x))"})
+    response = client.post("/solve", json={"expression": "d/dx(x**(1/2))"})
     assert response.status_code == 200
-    assert response.json()["result"] == "Derivada: cos(x)"
+    assert response.json()["result"] == "Derivada: 1/(2√x)"
 
 
 # --- Sprint V2.10.1: integrais --------------------------------------------------

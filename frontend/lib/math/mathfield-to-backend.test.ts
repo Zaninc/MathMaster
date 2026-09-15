@@ -1667,6 +1667,83 @@ describe("mathFieldLatexToBackendExpression", () => {
     });
   });
 
+  // --- Sprint V3.0.6 (Derivadas de Ordem Superior) --------------------------
+  //
+  // `\frac{d^n}{dx^n}(expr)` (teclas "d²/dx²"/"d³/dx³"/"dⁿ/dxⁿ") ->
+  // `derivada(expr, x, n)`. `n` é decodificado do NUMERADOR já parseado
+  // (`readGroup()` normal — um dígito vira Unicode superescrito via
+  // `applyPower`, o MESMO caminho genérico de "x^2"->"x²" usado em
+  // qualquer lugar do produto) e do DENOMINADOR como texto CRU (mesmo
+  // motivo de sempre: "dx" parseado normalmente viraria "d*x"). As duas
+  // ordens precisam bater — nunca aceito silenciosamente quando
+  // divergem. `derivada(expr, x)` (2 argumentos) continua representando
+  // ordem 1 em TODO lugar, byte a byte igual a antes desta sprint.
+  describe("Sprint V3.0.6 — Derivadas de Ordem Superior (\\frac{d^n}{dx^n}(...))", () => {
+    it("d²/dx²(x⁴) -> derivada(x⁴, x, 2)", () => {
+      expect(expr("\\frac{d^2}{dx^2}\\left(x^4\\right)")).toBe("derivada(x⁴, x, 2)");
+    });
+
+    it("d³/dx³(x⁵) -> derivada(x⁵, x, 3)", () => {
+      expect(expr("\\frac{d^3}{dx^3}\\left(x^5\\right)")).toBe("derivada(x⁵, x, 3)");
+    });
+
+    it("forma com chaves d^{2}/dx^{2} — mesmo resultado da forma sem chaves", () => {
+      expect(expr("\\frac{d^{2}}{dx^{2}}\\left(\\sin(x)\\right)")).toBe("derivada(sin(x), x, 2)");
+    });
+
+    it("ordem digitada via placeholder já preenchido (tecla dⁿ/dxⁿ editada) -> mesmo resultado", () => {
+      expect(
+        expr("\\frac{d^{\\placeholder{2}}}{dx^{\\placeholder{2}}}\\left(x^4\\right)")
+      ).toBe("derivada(x⁴, x, 2)");
+    });
+
+    it("ordem máxima (10, 2 dígitos — nunca vira Unicode superescrito, cai no fallback 'd^N')", () => {
+      expect(expr("\\frac{d^{10}}{dx^{10}}\\left(x^{15}\\right)")).toBe("derivada(x^15, x, 10)");
+    });
+
+    it("tecla dⁿ/dxⁿ nunca editada (ordem vazia) -> incomplete, nunca 'unsupported'", () => {
+      expect(
+        mathFieldLatexToBackendExpression(
+          "\\frac{d^{\\placeholder{}}}{dx^{\\placeholder{}}}\\left(x^4\\right)"
+        )
+      ).toEqual({ ok: false, reason: "incomplete" });
+    });
+
+    it("d²/dx²(□) — argumento vazio continua bloqueado, igual a d/dx(□)", () => {
+      expect(
+        mathFieldLatexToBackendExpression("\\frac{d^2}{dx^2}\\left(\\placeholder{}\\right)")
+      ).toEqual({ ok: false, reason: "incomplete" });
+    });
+
+    it("Hardening 'Ordem Consistente' — d²/dx³ e d³/dx² nunca aceitos silenciosamente", () => {
+      expect(mathFieldLatexToBackendExpression("\\frac{d^2}{dx^3}\\left(x^4\\right)")).toEqual({
+        ok: false,
+        reason: "unsupported",
+      });
+      expect(mathFieldLatexToBackendExpression("\\frac{d^3}{dx^2}\\left(x^4\\right)")).toEqual({
+        ok: false,
+        reason: "unsupported",
+      });
+    });
+
+    it("regressão: d/dx (2 argumentos, ordem 1) continua byte a byte igual a antes desta sprint", () => {
+      expect(expr("\\frac{d}{dx}\\left(x^2\\right)")).toBe("derivada(x², x)");
+      expect(expr("\\frac{d}{dx}\\left(x^2+y^2=25\\right)")).toBe("derivada(x²+y²=25, x)");
+    });
+
+    it("composição livre com derivação implícita: d²/dx²(x²+y²=25) -> derivada(x²+y²=25, x, 2)", () => {
+      expect(expr("\\frac{d^2}{dx^2}\\left(x^2+y^2=25\\right)")).toBe("derivada(x²+y²=25, x, 2)");
+    });
+
+    it("nunca confunde uma fração comum 'd²/5' com um template de derivada (denominador não tem forma dx^n)", () => {
+      expect(expr("\\frac{d^2}{5}")).toBe("(d²)/5");
+    });
+
+    it("regressão: \\frac{2}{dx} (fração comum, numerador != 'd') continua intocada por este hardening", () => {
+      expect(expr("\\frac{2}{dx}")).toBe("2/(d*x)");
+    });
+  });
+
   describe("Sprint V3.0.4 — equações trigonométricas (mecanismo genérico de '=', nenhum código novo de equação)", () => {
     it("sen(x)=0, cos(x)=1, tan(x)=0, sen(x)=1/2, cos(x)=1/2", () => {
       expect(expr("\\operatorname{sen}\\left(x\\right)=0")).toBe("sin(x)=0");

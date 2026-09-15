@@ -206,7 +206,7 @@ from ..calculus.dispatcher import (
     is_derivative_call,
     is_indefinite_integral_call,
     is_limit_call,
-    parse_derivative_call,
+    parse_derivative_call_with_order,
     parse_integral_call,
     parse_limit_call,
 )
@@ -228,7 +228,11 @@ from ..polynomials.dispatcher import is_polynomial_domain_expression
 from ..probability.dispatcher import is_probability_domain_expression
 from ..summation.dispatcher import is_summation_domain_expression
 from ..trigonometry.dispatcher import is_trigonometry_domain_expression
-from .advanced_derivatives import generate_advanced_derivative_steps, is_product_or_chain_shape
+from .advanced_derivatives import (
+    generate_advanced_derivative_steps,
+    is_product_or_chain_shape,
+    is_trivial_elementary_shape,
+)
 from .definite_integrals import generate_definite_integral_steps
 from .derivatives import generate_derivative_steps
 from .exponential_equations import generate_exponential_equation_steps, is_exponential_equation_shape
@@ -236,6 +240,7 @@ from .exponential_substitution_equations import (
     generate_exponential_substitution_steps,
     is_exponential_substitution_shape,
 )
+from .higher_order_derivatives import generate_higher_order_derivative_steps
 from .implicit_differentiation import (
     generate_implicit_differentiation_steps,
     is_implicit_differentiation_call,
@@ -331,8 +336,20 @@ def generate_steps(expression: str) -> list[MathStep]:
             raise ExpressionError(UNSUPPORTED_INEQUALITY_MESSAGE)
         if is_implicit_differentiation_call(normalized):
             return generate_implicit_differentiation_steps(normalized)
-        expr, symbol = parse_derivative_call(normalized)
-        if is_product_or_chain_shape(expr, symbol):
+        # Sprint V3.0.6 (Derivadas de Ordem Superior) — a ORDEM decide o
+        # roteamento ANTES de qualquer classificação de forma: order > 1
+        # vai inteiramente para `higher_order_derivatives.py` (que decide
+        # a forma de CADA rodada internamente, reaproveitando os mesmos
+        # `is_product_or_chain_shape`/`is_trivial_elementary_shape`/`is_
+        # quotient_shape` abaixo — nunca uma segunda cópia da cascata).
+        # `order == 1` continua exatamente pelo caminho de sempre, agora
+        # também reconhecendo `is_trivial_elementary_shape` (gap fechado
+        # nesta sprint — ver `advanced_derivatives.py`) antes do fallback
+        # polinomial.
+        expr, symbol, order = parse_derivative_call_with_order(normalized)
+        if order > 1:
+            return generate_higher_order_derivative_steps(expr, symbol, order)
+        if is_product_or_chain_shape(expr, symbol) or is_trivial_elementary_shape(expr, symbol):
             return generate_advanced_derivative_steps(normalized)
         if is_quotient_shape(expr, symbol) is not None:
             return generate_quotient_rule_steps(normalized)

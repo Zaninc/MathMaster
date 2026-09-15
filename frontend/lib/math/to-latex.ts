@@ -757,9 +757,23 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
     if (nodeArgs.length === 2) return `\\int ${body}\\,d${variable}`;
   }
 
-  if ((name === "Derivative" || name === "derivada") && nodeArgs.length === 2) {
+  if (
+    (name === "Derivative" || name === "derivada") &&
+    (nodeArgs.length === 2 || nodeArgs.length === 3)
+  ) {
     const body = texOf(nodeArgs[0], options);
     const variable = texOf(nodeArgs[1], options);
+    // Sprint V3.0.6 (Derivadas de Ordem Superior) — terceiro argumento
+    // OPCIONAL, a ordem: só muda o expoente do "d" quando é um literal
+    // numérico >= 2 (`constantNumber`, já usado por `binomialLatex` pra
+    // extrair um argumento numérico puro) — ordem 1 explícita
+    // (`derivada(expr,x,1)`) renderiza EXATAMENTE igual à forma de 2
+    // argumentos, preservando o contrato "derivada(expr,x) == ordem 1"
+    // também na apresentação.
+    const order = nodeArgs.length === 3 ? constantNumber(nodeArgs[2]) : null;
+    if (order !== null && order >= 2) {
+      return `\\frac{d^{${order}}}{d${variable}^{${order}}}\\left(${body}\\right)`;
+    }
     return `\\frac{d}{d${variable}}\\left(${body}\\right)`;
   }
 
@@ -1508,7 +1522,26 @@ function renderCall(name: string, argsText: string): string {
   if (args.length === 1 && name in PREVIEW_UNARY_LATEX) {
     return PREVIEW_UNARY_LATEX[name](args[0]);
   }
-  if (DERIVATIVE_NAMES.has(name) && args.length === 2) {
+  if (DERIVATIVE_NAMES.has(name) && (args.length === 2 || args.length === 3)) {
+    // Sprint V3.0.6 (Derivadas de Ordem Superior) — MESMA extensão de
+    // `renderCall(name, "Derivative"|"derivada", ...)` em `texOf` acima,
+    // duplicada aqui porque `previewLatex` usa este parser tolerante
+    // PRÓPRIO (nunca mathjs — é o único jeito de tolerar "=" dentro do
+    // argumento de uma derivação implícita, que o `mathjs.parse()` real
+    // rejeitaria). Achado testando `d²/dx²(x²+y²=25)` no navegador: o
+    // ECHO da expressão resolvida (`previewLatex`, usado por `useSolve
+    // Latex`) caía no `\operatorname{derivada}(...)` genérico — nunca
+    // batia neste `if` porque ele só reconhecia 2 argumentos — mesmo com
+    // o RESULTADO (`-25/y³`, via `valueToLatex`/mathjs) já renderizando
+    // corretamente. `order` só afeta o expoente do "d"; a ordem em si
+    // nunca precisa ser reconstruída aqui (só ecoada), então um texto
+    // não-numérico (`derivada(expr, x, n)` com "n" ainda não editado)
+    // simplesmente cai no fallback de ordem 1 — nunca quebra o preview.
+    const orderText = args.length === 3 ? rawArgs[2].trim() : null;
+    const order = orderText !== null && /^\d+$/.test(orderText) ? Number(orderText) : null;
+    if (order !== null && order >= 2) {
+      return `\\frac{d^{${order}}}{d${rawArgs[1]}^{${order}}}\\left(${args[0]}\\right)`;
+    }
     return `\\frac{d}{d${rawArgs[1]}}\\left(${args[0]}\\right)`;
   }
   if (name === "integral" && args.length === 2) {

@@ -223,3 +223,81 @@ def test_solve_endpoint_regression_for_plain_derivative() -> None:
     from app.math_engine.dispatcher import solve_expression
 
     assert solve_expression("derivada(x*sin(x), x)") == "Derivada: x*cos(x) + sin(x)"
+
+
+# --- Sprint V3.0.6 — Derivação Implícita de Ordem Superior ------------------
+#
+# Teste de ouro do ticket: d²/dx²(x²+y²=25) -> -25/y³, com o passo a passo
+# passando literalmente pela sequência pedida (equação -> derivar -> isolar
+# y' -> derivar de novo -> isolar y'' -> substituir y' -> simplificar usando
+# a equação original). "y=y(x)" nunca se perde: `y` continua representado
+# como `Function(x)` (mesma garantia estrutural de `parse_implicit_
+# equation`, intocada) em toda a segunda diferenciação.
+
+
+def test_second_order_circle_matches_golden_test() -> None:
+    final = _final_expression("derivada(x**2+y**2=25, x, 2)")
+    assert final == "derivada(y, x, 2)=-25/y**3"
+
+
+def test_second_order_step_narrative_matches_the_exact_sequence_requested() -> None:
+    titles = _titles("derivada(x**2+y**2=25, x, 2)")
+    # x²+y²=25 -> derivar -> ... -> isolar y' -> derivar de novo -> ... ->
+    # isolar y'' -> substituir y' -> simplificar usando a equação original.
+    assert titles[0] == "Equação original"
+    assert titles.count("Isolando a derivada") == 2
+    assert "Derivando novamente em relação a x" in titles
+    assert "Substituindo a derivada calculada na rodada anterior" in titles
+    assert titles[-1] == "Simplificando usando a equação original"
+
+
+def test_second_order_never_hardcoded_to_25_or_circle() -> None:
+    # Mesmo raio/coeficientes DIFERENTES — nunca "25" nem "círculo"
+    # aparecem em código algum do motor (`reduce_using_original_equation`
+    # é genérica, base de Gröbner de UM polinômio).
+    assert _final_expression("derivada(x**2+y**2=49, x, 2)") == "derivada(y, x, 2)=-49/y**3"
+
+
+def test_second_order_matches_expected_closed_form_for_multiple_constraints() -> None:
+    # A verificação contra o oráculo `idiff` já acontece DENTRO de
+    # `compute_implicit_derivative` (fail-closed, ver `calculus/implicit_
+    # differentiation.py`) ANTES da redução pela equação original — este
+    # teste confirma o valor FINAL (já reduzido) pra 3 restrições
+    # diferentes, provando que a redução (`reduce_using_original_
+    # equation`) é genérica, nunca hardcoded pra "25"/"círculo".
+    assert _final_expression("derivada(x**2+y**2=25, x, 2)") == "derivada(y, x, 2)=-25/y**3"
+    assert _final_expression("derivada(x**2+y**2=49, x, 2)") == "derivada(y, x, 2)=-49/y**3"
+    assert _final_expression("derivada(4*x**2+9*y**2=36, x, 2)") == "derivada(y, x, 2)=-16/(9*y**3)"
+
+
+def test_first_order_output_unchanged_after_higher_order_generalization() -> None:
+    # Regressão explícita: a generalização por loop nunca muda ordem 1
+    # (loop roda uma única vez, `substitutions` vazio) — mesmos 2 casos
+    # obrigatórios já cobertos acima, comparando agora `derivada(expr, x)`
+    # (2 args) contra `derivada(expr, x, 1)` (3 args explícito).
+    assert _final_expression("derivada(x**2+y**2=25, x)") == _final_expression(
+        "derivada(x**2+y**2=25, x, 1)"
+    )
+    assert _titles("derivada(x**2+y**2=25, x)") == _titles("derivada(x**2+y**2=25, x, 1)")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "derivada(x**2+y**2=25, x, 0)",
+        "derivada(x**2+y**2=25, x, -1)",
+        "derivada(x**2+y**2=25, x, 2.5)",
+        "derivada(x**2+y**2=25, x, )",
+        "derivada(x**2+y**2=25, x, abc)",
+        "derivada(x**2+y**2=25, x, 11)",
+    ],
+)
+def test_invalid_or_out_of_range_order_raises_friendly_error(text: str) -> None:
+    with pytest.raises(ExpressionError):
+        generate_steps(text)
+
+
+def test_solve_endpoint_second_order_golden_test() -> None:
+    from app.math_engine.dispatcher import solve_expression
+
+    assert solve_expression("derivada(x**2+y**2=25, x, 2)") == "Derivada: -25/y**3"

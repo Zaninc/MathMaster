@@ -112,6 +112,17 @@ const SUPERSCRIPT_DIGITS: Record<string, string> = {
   "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
 };
 
+/**
+ * Sprint V3.0.6 (Derivadas de Ordem Superior) — inverso de
+ * `SUPERSCRIPT_DIGITS`, usado por `matchDerivativeOrderInNumerator` para
+ * decodificar o expoente de UM dígito que `applyPower` já converteu pra
+ * Unicode superescrito (ex. "d²" -> "2") — nunca reimplementado como
+ * switch/if por dígito, só a inversão mecânica do mapa que já existe.
+ */
+const SUPERSCRIPT_TO_DIGIT: Record<string, string> = Object.fromEntries(
+  Object.entries(SUPERSCRIPT_DIGITS).map(([digit, superscript]) => [superscript, digit])
+);
+
 const STRUCTURED_ENVIRONMENTS = ["cases", "bmatrix", "pmatrix", "matrix", "vmatrix"] as const;
 
 /**
@@ -743,6 +754,61 @@ class LatexParser {
   }
 
   /**
+   * Sprint V3.0.6 (Derivadas de Ordem Superior) — decide se um NUMERADOR
+   * de `\frac{...}` JÁ PARSEADO (via `readGroup()`, o parse normal —
+   * nunca texto cru aqui, ao contrário do denominador logo abaixo)
+   * representa a ordem de um template de derivada: "d" sozinho (ordem 1,
+   * o template de sempre desde a V3.0.1) ou "d" + expoente de ordem.
+   *
+   * Um expoente de UM dígito já chega convertido pra Unicode superescrito
+   * (`applyPower`, o MESMO caminho genérico de "x^2" -> "x²" em qualquer
+   * lugar do produto — nada específico de derivada); `SUPERSCRIPT_TO_
+   * DIGIT` decodifica de volta. Um expoente de 2 dígitos (só a ordem 10
+   * no catálogo atual) nunca bate no atalho de um dígito só de `apply
+   * Power` — sobra como "d^10" (sem chaves: `wrap()` nunca envolve uma
+   * sequência só de dígitos em parênteses), reconhecido pelo segundo
+   * regex. `null` para qualquer outro numerador — sinal de que é uma
+   * fração de verdade, nunca uma suposição.
+   */
+  private matchDerivativeOrderInNumerator(numerator: string): string | null {
+    if (numerator === "d") return "1";
+    if (numerator.length === 2 && numerator[0] === "d") {
+      const digit = SUPERSCRIPT_TO_DIGIT[numerator[1]];
+      if (digit !== undefined) return digit;
+    }
+    const multiDigit = /^d\^(\d+)$/.exec(numerator);
+    return multiDigit ? multiDigit[1] : null;
+  }
+
+  /**
+   * Sprint V3.0.6 (Derivadas de Ordem Superior) — mesma ideia de
+   * `matchDerivativeOrderInNumerator`, mas para o denominador, que
+   * PRECISA continuar sendo texto CRU (`peekRawGroupText`, nunca `read
+   * Group()`) pelo mesmo motivo já documentado onde esta função é
+   * chamada: "dx" parseado normalmente viraria "d*x" (fix de
+   * multiplicação implícita letra-letra) antes de qualquer detecção.
+   *
+   * "dx" sozinho é ordem 1 (o template de sempre). "dx^..." tem sua
+   * porção de expoente (que pode ser um dígito cru, "{N}" com chaves, ou
+   * um `\placeholder{}` ainda não preenchido — a tecla "dⁿ/dxⁿ" usa
+   * exatamente essa forma pro segundo expoente) parseada por uma
+   * instância NOVA de `LatexParser` isolada só naquele fragmento — reusa
+   * o parser recursivo inteiro (parênteses, placeholder vazio -> `Incom
+   * plete`, o que for) em vez de inventar uma segunda gramática pra texto
+   * cru, e nunca sofre a corrupção "dx"->"d*x" porque o fragmento
+   * analisado começa DEPOIS do "d<letra>^" fixo, nunca contém a letra da
+   * variável.
+   */
+  private matchDerivativeDenominator(raw: string): { variable: string; order: string } | null {
+    const simple = /^d([a-zA-Z])$/.exec(raw);
+    if (simple) return { variable: simple[1], order: "1" };
+    const powered = /^d([a-zA-Z])\^(.+)$/.exec(raw);
+    if (!powered) return null;
+    const order = new LatexParser(powered[2]).parseExpression();
+    return { variable: powered[1], order };
+  }
+
+  /**
    * Sprint V3.0.1 — captura o restante do escopo ATUAL como texto CRU (sem
    * converter ainda), parando no fim da string ou num fechamento `)`/`}`
    * que pertence a um grupo MAIS EXTERNO (nunca aberto por este método) —
@@ -1029,20 +1095,48 @@ class LatexParser {
       // O argumento entre parênteses SEMPRE vem logo depois na fonte
       // (parte fixa do template `\left(\placeholder{}\right)`).
       //
+      // Sprint V3.0.6 (Derivadas de Ordem Superior) — `\frac{d^n}{dx^n}
+      // (expr)` (teclas "d²/dx²"/"d³/dx³"/"dⁿ/dxⁿ") é a MESMA família de
+      // template, só com um expoente de ORDEM em cima do "d" e embutido
+      // no "dx" do denominador. `numerator` AQUI JÁ passou por
+      // `readGroup()` (parse normal) — isso converte um expoente de UM
+      // dígito pra Unicode superescrito via `applyPower` (mesmo caminho
+      // genérico de QUALQUER "x^2" no produto, nada específico de
+      // derivada), então "d^2" vira "d²" e "d^{10}" (2 dígitos, não bate
+      // no atalho de um dígito só) vira "d^10" — `matchDerivativeOrder
+      // InNumerator` reconhece as duas formas. Um placeholder de ordem
+      // ainda vazio (tecla "dⁿ/dxⁿ") já lança `Incomplete` sozinho bem
+      // aqui, dentro do PRÓPRIO `readGroup()` (o mesmo mecanismo genérico
+      // de slot vazio de `parseAtom`, nunca um caso novo) — nunca chega
+      // a decidir se é derivada ou fração de verdade.
+      const numeratorOrder = this.matchDerivativeOrderInNumerator(numerator);
       // Hardening — o denominador precisa ser espiado como texto CRU
       // (`peekRawGroupText`) ANTES de decidir se é o template de
       // derivada: parseá-lo via `readGroup()` normal passaria "dx" pelo
       // fix de multiplicação implícita letra-letra de `parseTerm()`,
-      // transformando-o em "d*x" e quebrando o regex abaixo. Se não for
-      // o template de derivada, o denominador é lido (e parseado) do
+      // transformando-o em "d*x" e quebrando a detecção abaixo. Se não
+      // for o template de derivada, o denominador é lido (e parseado) do
       // jeito normal, como sempre.
-      const rawDenominator = numerator === "d" ? this.peekRawGroupText() : null;
-      const derivativeMatch = rawDenominator !== null ? /^d([a-zA-Z])$/.exec(rawDenominator) : null;
-      if (derivativeMatch) {
+      const rawDenominator = numeratorOrder !== null ? this.peekRawGroupText() : null;
+      const denominatorMatch = rawDenominator !== null ? this.matchDerivativeDenominator(rawDenominator) : null;
+      if (numeratorOrder !== null && denominatorMatch !== null) {
+        // Hardening "Ordem Consistente" — o expoente do numerador e o do
+        // denominador precisam representar a MESMA ordem (d²/dx³, d³/dx²
+        // etc. nunca são aceitos silenciosamente). Comparação de TEXTO
+        // (nunca numérica aqui — "01" vs "1" não deveria acontecer na
+        // prática, e mesmo que acontecesse cairia no fallback de fração
+        // comum abaixo, nunca um resultado matemático errado).
+        if (numeratorOrder !== denominatorMatch.order) {
+          throw new Unsupported(
+            `ordem do numerador (d^${numeratorOrder}) não corresponde à ordem do denominador (dx^${denominatorMatch.order})`
+          );
+        }
         this.skipRawGroup();
-        const variable = derivativeMatch[1];
+        const variable = denominatorMatch.variable;
         const expr = this.parseDerivativeArgument();
-        return `derivada(${expr}, ${variable})`;
+        return numeratorOrder === "1"
+          ? `derivada(${expr}, ${variable})`
+          : `derivada(${expr}, ${variable}, ${numeratorOrder})`;
       }
       const denominator = this.readGroup();
       return `${this.wrap(numerator)}/${this.wrap(denominator)}`;

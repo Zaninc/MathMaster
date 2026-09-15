@@ -127,15 +127,14 @@ def quotient_rule_steps(
     return total, steps
 
 
-def generate_quotient_rule_steps(text: str) -> list[MathStep]:
-    expr, symbol = parse_derivative_call(text)
-    steps = [
-        MathStep(
-            title="Função original",
-            expression=_rename_natural_log(f"derivada({expr}, {symbol})"),
-        )
-    ]
-
+def quotient_derivative_steps(expr: Expr, symbol: Symbol) -> list[MathStep]:
+    """Sprint V3.0.6 (Derivadas de Ordem Superior) — o CORPO de `generate_
+    quotient_rule_steps` (regra do quociente), extraído puro (sem o passo
+    "Função original" nem reparsear texto) para `higher_order_
+    derivatives.py` reaproveitar em cada rodada de uma derivada de ordem
+    n. `generate_quotient_rule_steps` abaixo continua o único consumidor
+    de `/solve/steps` de primeira ordem; comportamento dela é 100%
+    preservado."""
     quotient = is_quotient_shape(expr, symbol)
     if quotient is None:
         # Nunca deveria acontecer no fluxo normal — `steps/dispatcher.py`
@@ -145,5 +144,16 @@ def generate_quotient_rule_steps(text: str) -> list[MathStep]:
 
     numer, denom = quotient
     _, quotient_steps = quotient_rule_steps(expr, numer, denom, symbol)
-    steps.extend(quotient_steps)
+    return quotient_steps
+
+
+def generate_quotient_rule_steps(text: str) -> list[MathStep]:
+    expr, symbol = parse_derivative_call(text)
+    steps = [
+        MathStep(
+            title="Função original",
+            expression=_rename_natural_log(f"derivada({expr}, {symbol})"),
+        )
+    ]
+    steps.extend(quotient_derivative_steps(expr, symbol))
     return steps

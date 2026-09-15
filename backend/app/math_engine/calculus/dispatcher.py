@@ -56,6 +56,51 @@ _TRANSFORMATIONS = standard_transformations + (implicit_multiplication_applicati
 _CALL_PATTERN = re.compile(r"^\s*(derivada|integral|limite)\s*\((.*)\)\s*$", re.DOTALL)
 _VARIABLE_PATTERN = re.compile(r"^[a-zA-Z_]\w*$")
 
+# Sprint V3.0.6 (Derivadas de Ordem Superior) — `derivada(expr, var, n)` é
+# a extensão ADITIVA de `derivada(expr, var)`: terceiro argumento OPCIONAL,
+# nunca outra sintaxe/nome de função (evita duplicar o roteamento que já
+# existe pra "derivada" em `is_derivative_call`/`solve_calculus_text`/
+# `steps/dispatcher.py`). `derivada(expr, var)` continua representando
+# ordem 1 em TODO lugar — este módulo nunca reescreve chamadas de 2
+# argumentos para 3 antes de despachar.
+MIN_DERIVATIVE_ORDER = 1
+# Limite superior — justificado empiricamente (não um número arbitrário):
+# medido `sympy.diff` + `simplify` aplicados repetidamente ao pior caso
+# realista testado (composição aninhada tipo `exp(sin(x))`, onde o
+# tamanho da expressão cresce mais rápido que polinômios/quocientes/
+# funções elementares simples) — ~0.4s cumulativos até ordem 10, ~0.56s
+# até ordem 12. 10 mantém qualquer requisição bem abaixo de 1s com
+# margem confortável, sem limitar nenhum uso pedagógico real (nenhum
+# caso desta sprint pede além de 3ª ordem).
+MAX_DERIVATIVE_ORDER = 10
+
+_DERIVATIVE_ORDER_PATTERN = re.compile(r"^\s*-?\d+\s*$")
+
+
+def parse_derivative_order(text: str) -> int:
+    stripped = text.strip()
+    if not stripped:
+        raise ExpressionError(
+            "Ordem de derivação vazia. Informe um número inteiro entre "
+            f"{MIN_DERIVATIVE_ORDER} e {MAX_DERIVATIVE_ORDER}."
+        )
+    if not _DERIVATIVE_ORDER_PATTERN.match(stripped):
+        raise ExpressionError(
+            f"Ordem de derivação inválida: '{text}'. Informe um número inteiro "
+            f"entre {MIN_DERIVATIVE_ORDER} e {MAX_DERIVATIVE_ORDER}."
+        )
+    order = int(stripped)
+    if order < MIN_DERIVATIVE_ORDER:
+        raise ExpressionError(
+            "Ordem de derivação deve ser um número inteiro positivo "
+            f"(mínimo {MIN_DERIVATIVE_ORDER})."
+        )
+    if order > MAX_DERIVATIVE_ORDER:
+        raise ExpressionError(
+            f"Ordem de derivação muito alta para esta versão (máximo {MAX_DERIVATIVE_ORDER})."
+        )
+    return order
+
 # "log(" nativo do SymPy que sobreviver na saída é sempre log natural (a
 # nossa base 10 nunca aparece como um nó "log(...)" isolado — mesmo
 # raciocínio já usado por `logarithms/dispatcher.py`/`functions/dispatcher.py`).
@@ -155,6 +200,28 @@ def _parse_fragment(text: str, symbol: Symbol):
         raise ExpressionError(f"Não foi possível interpretar a expressão: {text}") from exc
 
 
+def _split_derivative_parts(expression: str) -> tuple[str, str, str | None]:
+    """Sprint V3.0.6 — núcleo de parsing compartilhado por `parse_
+    derivative_call` (2-tupla, ordem 1 sempre implícita — API antiga
+    100% preservada) e `parse_derivative_call_with_order` (3-tupla, ordem
+    explícita quando o terceiro argumento vier). Só separa o TEXTO dos
+    argumentos (nunca decide nada sobre ordem aqui — `_parse_derivative_
+    order` faz isso, só quando quem chama realmente precisa dela)."""
+    match = _CALL_PATTERN.match(expression)
+    if not match or match.group(1) != "derivada":
+        raise ExpressionError(f"Não foi possível interpretar a expressão: {expression}")
+    _, argumentos = match.groups()
+    partes = _split_top_level_args(argumentos)
+    if len(partes) == 2:
+        return partes[0], partes[1], None
+    if len(partes) == 3:
+        return partes[0], partes[1], partes[2]
+    raise ExpressionError(
+        "derivada(...) espera 2 argumentos (expressão e variável) ou 3 "
+        "(expressão, variável e ordem)."
+    )
+
+
 def parse_derivative_call(expression: str) -> tuple[Expr, Symbol]:
     """Sprint V2.10 (Passo a Passo — Derivadas) — reaproveitável por
     `math_engine.steps.derivatives`: mesmo parsing que `solve_calculus_text`
@@ -167,19 +234,35 @@ def parse_derivative_call(expression: str) -> tuple[Expr, Symbol]:
 
     Hotfix V2.15.1 (paridade de Euler) — `expr` sai daqui já passado por
     `canonicalize_euler_constant` (ver nota completa em `parse_integral_call`
-    abaixo)."""
-    match = _CALL_PATTERN.match(expression)
-    if not match or match.group(1) != "derivada":
-        raise ExpressionError(f"Não foi possível interpretar a expressão: {expression}")
-    _, argumentos = match.groups()
-    partes = _split_top_level_args(argumentos)
-    if len(partes) != 2:
-        raise ExpressionError(
-            "derivada(...) espera exatamente 2 argumentos: expressão e variável."
-        )
-    symbol = _parse_variable(partes[1])
-    expr = canonicalize_euler_constant(_parse_fragment(partes[0], symbol))
+    abaixo).
+
+    Sprint V3.0.6 — API 100% preservada: aceita `derivada(expr, var)` OU
+    `derivada(expr, var, ordem)` (a ordem é simplesmente IGNORADA aqui —
+    quem precisa dela usa `parse_derivative_call_with_order` abaixo).
+    Reservada aos consumidores de PRIMEIRA ordem existentes (`steps/
+    derivatives.py`/`advanced_derivatives.py`/`quotient_rule.py`), nunca
+    chamada pelo roteamento de ordem superior (`steps/dispatcher.py`
+    despacha um `derivada(..., n)` com n>1 pro orquestrador dedicado
+    ANTES de qualquer um destes três módulos — ver `higher_order_
+    derivatives.py` — então esta função nunca silenciosamente descarta
+    uma ordem que importava)."""
+    expr_text, var_text, _order_text = _split_derivative_parts(expression)
+    symbol = _parse_variable(var_text)
+    expr = canonicalize_euler_constant(_parse_fragment(expr_text, symbol))
     return expr, symbol
+
+
+def parse_derivative_call_with_order(expression: str) -> tuple[Expr, Symbol, int]:
+    """Sprint V3.0.6 (Derivadas de Ordem Superior) — mesmo parsing de
+    `parse_derivative_call`, mas devolvendo também a ORDEM: 1 se o
+    terceiro argumento não veio (mesmo default de `derivada(expr, var)`
+    em todo o resto do produto), validada contra [`MIN_DERIVATIVE_ORDER`,
+    `MAX_DERIVATIVE_ORDER`] sempre que vier."""
+    expr_text, var_text, order_text = _split_derivative_parts(expression)
+    symbol = _parse_variable(var_text)
+    expr = canonicalize_euler_constant(_parse_fragment(expr_text, symbol))
+    order = parse_derivative_order(order_text) if order_text is not None else 1
+    return expr, symbol, order
 
 
 def parse_integral_call(expression: str) -> tuple[Expr, Symbol]:
@@ -290,11 +373,17 @@ def solve_calculus_text(expression: str) -> str:
     partes = _split_top_level_args(argumentos)
 
     if operacao == "derivada":
-        if len(partes) != 2:
+        if len(partes) not in (2, 3):
             raise ExpressionError(
-                "derivada(...) espera exatamente 2 argumentos: expressão e variável."
+                "derivada(...) espera 2 argumentos (expressão e variável) ou 3 "
+                "(expressão, variável e ordem)."
             )
         symbol = _parse_variable(partes[1])
+        # Sprint V3.0.6 (Derivadas de Ordem Superior) — terceiro argumento
+        # OPCIONAL; ausente = ordem 1, o comportamento de sempre (API
+        # antiga 100% preservada — `derivada(expr, var)` nunca muda de
+        # significado).
+        order = parse_derivative_order(partes[2]) if len(partes) == 3 else 1
 
         # Hardening Global — achado testando a nova tecla "dy/dx" no
         # navegador: `derivada(EQUAÇÃO, x)` já funcionava em `/solve/steps`
@@ -304,16 +393,21 @@ def solve_calculus_text(expression: str) -> str:
         # (`calculus/implicit_differentiation.py`) são o MESMO núcleo
         # reaproveitado por `steps/implicit_differentiation.py` — nenhuma
         # regra de derivada duplicada, só o valor final aqui (sem passos).
+        #
+        # Sprint V3.0.6 — `order` passado direto pra `compute_implicit_
+        # derivative`/`compute_derivative` (ambas já sabem generalizar por
+        # ordem — ver `calculus/implicit_differentiation.py`/`calculus/
+        # derivatives.py`), nunca um `if order==2`/`if order==3` aqui.
         if looks_like_implicit_derivative_argument(partes[0]):
             lhs, rhs, y_name = parse_implicit_equation(partes[0], symbol)
             resultado = canonicalize_euler_constant(
-                compute_implicit_derivative(lhs, rhs, y_name, symbol)
+                compute_implicit_derivative(lhs, rhs, y_name, symbol, order)
             )
-            texto = rename_implicit_derivative_text(str(resultado), y_name, symbol.name)
+            texto = rename_implicit_derivative_text(str(resultado), y_name, symbol.name, order)
             return _rename_natural_log(f"Derivada: {texto}")
 
         expr = canonicalize_euler_constant(_parse_fragment(partes[0], symbol))
-        resultado = canonicalize_euler_constant(compute_derivative(expr, symbol))
+        resultado = canonicalize_euler_constant(compute_derivative(expr, symbol, order))
         return _rename_natural_log(f"Derivada: {resultado}")
 
     if operacao == "limite":

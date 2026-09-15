@@ -116,17 +116,23 @@ def test_full_polynomial_matches_solve_result_and_reads_in_degree_order() -> Non
 # --- Fora de escopo: erro amigável, nunca interno ---------------------------------
 
 
-def test_sin_rejected_with_friendly_message() -> None:
-    with pytest.raises(ExpressionError, match="ainda não foi implementado"):
-        generate_steps("d/dx(sin(x))")
+def test_sin_now_supported_as_trivial_elementary_derivative() -> None:
+    # Sprint V3.0.6 (Derivadas de Ordem Superior) — gap PRÉ-EXISTENTE
+    # fechado: `sin(x)` sozinho (sem produto/quociente/cadeia de verdade
+    # em volta) nunca tinha passo a passo de primeira ordem — descoberto
+    # testando `d²/dx²(sin(x))` (a segunda rodada precisa derivar
+    # `cos(x)`, mesma forma trivial). Ver `advanced_derivatives.is_
+    # trivial_elementary_shape`/`test_steps_advanced_derivatives.py`.
+    steps = generate_steps("d/dx(sin(x))")
+    assert steps[-1].expression == "cos(x)"
 
 
-def test_exp_rejected_with_friendly_message() -> None:
-    with pytest.raises(ExpressionError, match="ainda não foi implementado"):
-        generate_steps("d/dx(exp(x))")
+def test_exp_now_supported_as_trivial_elementary_derivative() -> None:
+    steps = generate_steps("d/dx(exp(x))")
+    assert steps[-1].expression == "exp(x)"
 
 
-def test_sin_still_works_via_solve_despite_steps_rejection() -> None:
+def test_sin_solve_and_steps_now_agree_since_the_trivial_gap_was_closed() -> None:
     from app.math_engine.dispatcher import solve_expression
 
     assert solve_expression("d/dx(sin(x))") == "Derivada: cos(x)"

@@ -345,6 +345,82 @@ describe("CalculatorWorkspace", () => {
       expect(field.value).toBe("\\frac{d}{dx}\\left(\\placeholder{}\\right)");
     });
 
+    // --- Sprint V3.0.6 (Derivadas de Ordem Superior) ------------------------
+
+    it("tecla d²/dx² insere \\frac{d^2}{dx^2}(placeholder) estruturado", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToCalculo();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir derivada de segunda ordem" }));
+      expect(field.value).toBe("\\frac{d^2}{dx^2}\\left(\\placeholder{}\\right)");
+    });
+
+    it("tecla d³/dx³ insere \\frac{d^3}{dx^3}(placeholder) estruturado", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToCalculo();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir derivada de terceira ordem" }));
+      expect(field.value).toBe("\\frac{d^3}{dx^3}\\left(\\placeholder{}\\right)");
+    });
+
+    it("tecla dⁿ/dxⁿ insere os dois expoentes de ordem como placeholders independentes e vazios", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToCalculo();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir derivada de ordem n" }));
+      expect(field.value).toBe(
+        "\\frac{d^{\\placeholder{}}}{dx^{\\placeholder{}}}\\left(\\placeholder{}\\right)"
+      );
+    });
+
+    it("d²/dx²(x⁴) resolve ponta-a-ponta chamando o backend com a sintaxe canônica derivada(x⁴, x, 2)", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({ expression: "derivada(x⁴, x, 2)", result: "12x²", approx: null });
+
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      setFieldLatex(field, "\\frac{d^2}{dx^2}\\left(x^4\\right)");
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith("derivada(x⁴, x, 2)"));
+    });
+
+    it("d²/dx² com ordem do numerador != ordem do denominador mostra erro amigável, nunca chama o backend", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      setFieldLatex(field, "\\frac{d^2}{dx^3}\\left(x^4\\right)");
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      expect(
+        await screen.findByText("Esta notação ainda não é suportada pela calculadora.")
+      ).toBeInTheDocument();
+      expect(apiClient.solve).not.toHaveBeenCalled();
+    });
+
+    it("tecla dⁿ/dxⁿ nunca editada (ordem vazia) mostra 'Preencha todos os espaços...', nunca chama o backend", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToCalculo();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir derivada de ordem n" }));
+      setFieldLatex(field, "\\frac{d^{\\placeholder{}}}{dx^{\\placeholder{}}}\\left(x^4\\right)");
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      expect(await screen.findByText("Preencha todos os espaços antes de resolver.")).toBeInTheDocument();
+      expect(apiClient.solve).not.toHaveBeenCalled();
+    });
+
     it("tecla ∫ dx insere integral indefinida estruturada", async () => {
       vi.mocked(apiClient.getHistory).mockResolvedValue([]);
       const { container } = render(<CalculatorWorkspace />);

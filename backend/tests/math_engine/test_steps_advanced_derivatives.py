@@ -188,14 +188,20 @@ def test_simple_polynomial_derivatives_still_use_v2_10_path(expr: str, expected:
     assert steps[-1].expression == expected
 
 
-def test_bare_sin_still_rejected_no_chain_needed() -> None:
-    with pytest.raises(ExpressionError, match="ainda não foi implementado"):
-        generate_steps("d/dx(sin(x))")
+def test_bare_sin_no_chain_needed_now_supported_as_trivial_elementary() -> None:
+    # Sprint V3.0.6 (Derivadas de Ordem Superior) — gap PRÉ-EXISTENTE
+    # fechado: `sin(x)` sozinho (argumento = a própria variável, sem
+    # cadeia de verdade) nunca tinha passo a passo de primeira ordem —
+    # necessário pra `d²/dx²(sin(x))` funcionar (a SEGUNDA rodada precisa
+    # derivar `cos(x)`, também uma forma elementar trivial). Ver
+    # `advanced_derivatives.is_trivial_elementary_shape`.
+    steps = generate_steps("d/dx(sin(x))")
+    assert steps[-1].expression == "cos(x)"
 
 
-def test_bare_exp_still_rejected_no_chain_needed() -> None:
-    with pytest.raises(ExpressionError, match="ainda não foi implementado"):
-        generate_steps("d/dx(exp(x))")
+def test_bare_exp_no_chain_needed_now_supported_as_trivial_elementary() -> None:
+    steps = generate_steps("d/dx(exp(x))")
+    assert steps[-1].expression == "exp(x)"
 
 
 # --- Regressão: quociente tem seu próprio módulo dedicado desde a V2.13 --------
