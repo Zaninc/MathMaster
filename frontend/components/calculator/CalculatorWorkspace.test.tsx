@@ -465,6 +465,77 @@ describe("CalculatorWorkspace", () => {
       await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith("derivada(√(x²+1), x)"));
     });
 
+    // --- Hotfix "Completude Semântica" — não bloquear por placeholders que
+    // não são semanticamente necessários (ver relatório do hotfix e a
+    // bateria dedicada em `mathfield-to-backend.test.ts`, describe
+    // "Hotfix 'Completude Semântica'"). Os dois testes abaixo cobrem os
+    // itens 7 e 9 da checklist de hardening pedida: uma estrutura
+    // construída em VÁRIOS passos (clique de tecla + digitação simulada
+    // em cada slot, nunca um LaTeX final montado de uma vez só) precisa
+    // resolver no final, mesmo tendo passado por estados intermediários
+    // com placeholder.
+
+    it("integral definida montada em vários passos pelo teclado (clique + navegação entre os 3 slots) resolve no final", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({
+        expression: "integral(x², x, 0, 1)",
+        result: "r",
+        approx: null,
+      });
+
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToCalculo();
+
+      // Clique de tecla — mesmo caminho real do usuário, nunca LaTeX
+      // final digitado de uma vez.
+      fireEvent.click(screen.getByRole("button", { name: "Inserir integral definida" }));
+      expect(field.value).toBe("\\int_{\\placeholder{}}^{\\placeholder{}}\\placeholder{}\\,dx");
+
+      // Preenche o limite inferior (1º slot) — estado intermediário, os
+      // outros 2 ainda vazios.
+      setFieldLatex(field, "\\int_{0}^{\\placeholder{}}\\placeholder{}\\,dx");
+      // Preenche o limite superior (2º slot) — estado intermediário, o
+      // integrando ainda vazio.
+      setFieldLatex(field, "\\int_{0}^{1}\\placeholder{}\\,dx");
+      // Preenche o integrando (3º e último slot) — agora sim completo.
+      setFieldLatex(field, "\\int_{0}^{1}x^2\\,dx");
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith("integral(x², x, 0, 1)"));
+    });
+
+    it("expressão que passou por vários placeholders intermediários durante a edição, mas terminou válida, resolve (nunca bloqueada por estado antigo do editor)", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({
+        expression: "derivada(x²+y²=4x*y, x)",
+        result: "r",
+        approx: null,
+      });
+
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToCalculo();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir derivação implícita" }));
+      expect(field.value).toBe("\\frac{d}{dx}\\left(\\placeholder{}=\\placeholder{}\\right)");
+
+      // Sequência de estados intermediários que o campo real passa
+      // enquanto o usuário digita, um caractere de cada vez, ambos os
+      // lados — nenhum deles é o valor final.
+      setFieldLatex(field, "\\frac{d}{dx}\\left(x=\\placeholder{}\\right)");
+      setFieldLatex(field, "\\frac{d}{dx}\\left(x^2=\\placeholder{}\\right)");
+      setFieldLatex(field, "\\frac{d}{dx}\\left(x^2+y^2=\\placeholder{}\\right)");
+      setFieldLatex(field, "\\frac{d}{dx}\\left(x^2+y^2=4\\right)");
+      // Estado FINAL, válido — nenhum placeholder sobrando.
+      setFieldLatex(field, "\\frac{d}{dx}\\left(x^2+y^2=4xy\\right)");
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith("derivada(x²+y²=4x*y, x)"));
+    });
+
     it("clicar num exemplo de Cálculo preenche o campo com o LaTeX equivalente (via previewLatex real)", async () => {
       vi.mocked(apiClient.getHistory).mockResolvedValue([]);
       const { container } = render(<CalculatorWorkspace />);

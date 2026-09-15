@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   mathFieldLatexToBackendExpression,
+  repairFenceEscape,
   repairMathLiveEnvironmentEscape,
   repairMathLiveInput,
   repairNestedFenceCorruption,
@@ -1533,6 +1534,136 @@ describe("mathFieldLatexToBackendExpression", () => {
       expect(expr("\\frac{d}{dx}\\left(x\\left(y+1\\right)+y\\left(x+1\\right)=10\\right)")).toBe(
         "derivada(x*(y+1)+y*(x+1)=10, x)"
       );
+    });
+  });
+
+  // --- HOTFIX "Completude Semântica — não bloquear por placeholders não --
+  // necessários" ------------------------------------------------------------
+  //
+  // Bug real reportado em produção: `d/dx(x²+y²=4xy)` — visualmente e
+  // semanticamente completo — era recusado com "Preencha todos os espaços
+  // antes de resolver.". Causa raiz: o mesmo bug do Hotfix V3.0.2a (a
+  // barra de espaço do MathLive sai da estrutura INTEIRA de uma vez, não
+  // só do nível mais interno), só que num delimitador `\left(...\right)`
+  // (a tecla "dy/dx" — `\frac{d}{dx}\left(\placeholder{}=\placeholder{}
+  // \right)`), nunca antes coberto (o V3.0.2a só reparava
+  // `\begin{...}\end{...}`). Confirmado no navegador real: digitar "x^2 "
+  // (espaço ainda dentro do expoente "2") dentro do argumento da tecla
+  // escapa a fence INTEIRA — o campo vira
+  // `\frac{d}{dx}\left(x^2=\placeholder{}\right)`, com o cursor JÁ fora
+  // dela; o que o usuário digita a seguir ("+y^2") vira conteúdo órfão
+  // depois de `\right)`, e o segundo `\placeholder{}` (nunca alcançado)
+  // fica vazio — o "=☐" final é discreto o bastante pra passar
+  // despercebido, exatamente como relatado.
+  //
+  // A validação em si NUNCA foi ingênua ("existe \placeholder{} => bloqueia
+  // tudo") — sempre foi o parser real encontrando um slot genuinamente
+  // vazio na posição em que uma VALOR é exigido (ver `parseAtom`, "slot
+  // vazio"). O reparo (`repairFenceEscape`, generalização de
+  // `repairMathLiveEnvironmentEscape` pra fences `\left(...\right)`) só
+  // reconecta conteúdo órfão quando existe PROVA ESTRUTURAL de
+  // incompletude (um trecho final de `\placeholder{}` ainda vazio) —
+  // nunca uma suposição, e nunca uma exceção amarrada a este exemplo:
+  // funciona pra QUALQUER fence com placeholders separados por um token
+  // fixo do template ("=", "&", "\\"), não só `d/dx`.
+  describe("Hotfix 'Completude Semântica' — repairFenceEscape (fence \\left(...\\right) escapada pela barra de espaço)", () => {
+    it("caso relatado: d/dx(x²+y²=4xy) sobrevive ao pulo de fence e resolve", () => {
+      // Valor EXATO capturado no navegador real depois do MathLive
+      // processar "x^2 " (espaço) dentro da tecla "dy/dx" — ver relatório
+      // do hotfix.
+      const malformado = "\\frac{d}{dx}\\left(x^2=\\placeholder{}\\right)+y^2";
+      expect(repairFenceEscape(malformado)).toBe("\\frac{d}{dx}\\left(x^2+y^2=\\placeholder{}\\right)");
+      // Reparado, o slot da direita AINDA está genuinamente vazio — nunca
+      // "resolve por engano" antes do usuário terminar de digitar "4xy".
+      expect(mathFieldLatexToBackendExpression(malformado)).toEqual({ ok: false, reason: "incomplete" });
+      // Uma vez preenchido (fluxo real: `setValue()` já reposiciona o
+      // cursor no placeholder restante, ver `StructuredMathInput.test.tsx`)
+      expect(expr("\\frac{d}{dx}\\left(x^2+y^2=4xy\\right)")).toBe("derivada(x²+y²=4x*y, x)");
+    });
+
+    it("d/dx(x³+y³=6xy) — mesma classe de bug, variável diferente — sobrevive ao pulo de fence e resolve", () => {
+      const malformado = "\\frac{d}{dx}\\left(x^3=\\placeholder{}\\right)+y^3";
+      expect(repairFenceEscape(malformado)).toBe("\\frac{d}{dx}\\left(x^3+y^3=\\placeholder{}\\right)");
+      expect(expr("\\frac{d}{dx}\\left(x^3+y^3=6xy\\right)")).toBe("derivada(x³+y³=6x*y, x)");
+    });
+
+    it("nunca mexe em conteúdo legítimo depois de uma fence 100% fechada (nenhum placeholder sobrando dentro)", () => {
+      expect(repairFenceEscape("\\sin\\left(x\\right)^2")).toBe("\\sin\\left(x\\right)^2");
+      expect(repairFenceEscape("\\left(x+1\\right)\\left(y+1\\right)")).toBe("\\left(x+1\\right)\\left(y+1\\right)");
+    });
+
+    it("nunca reconecta quando a fence inteira ainda está vazia (nenhum conteúdo real editado ainda)", () => {
+      const malformado = "\\frac{d}{dx}\\left(\\placeholder{}\\right)x^2";
+      expect(repairFenceEscape(malformado)).toBe(malformado);
+      expect(mathFieldLatexToBackendExpression(malformado)).toEqual({ ok: false, reason: "incomplete" });
+    });
+
+    it("fence aninhada: o pulo acontece no nível EXTERNO, o parêntese interno já fechado nunca é corrompido", () => {
+      const malformado = "\\left(x+\\left(y+1\\right)=\\placeholder{}\\right)+z";
+      expect(repairFenceEscape(malformado)).toBe("\\left(x+\\left(y+1\\right)+z=\\placeholder{}\\right)");
+    });
+  });
+
+  describe("Hardening 'Completude Semântica' — só bloquear quando um slot vazio impede a construção de uma expressão válida", () => {
+    it("d/dx(□) continua bloqueado — nunca digitou nada", () => {
+      expect(mathFieldLatexToBackendExpression("\\frac{d}{dx}\\left(\\placeholder{}\\right)")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+
+    it("x^□ (potência sem expoente) continua bloqueado", () => {
+      expect(mathFieldLatexToBackendExpression("x^{\\placeholder{}}")).toEqual({ ok: false, reason: "incomplete" });
+    });
+
+    it("(x²+1)/□ (fração sem denominador) continua bloqueado", () => {
+      expect(mathFieldLatexToBackendExpression("\\frac{x^2+1}{\\placeholder{}}")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+
+    it("ln(□) (logaritmo sem argumento) continua bloqueado", () => {
+      expect(mathFieldLatexToBackendExpression("\\ln\\left(\\placeholder{}\\right)")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+
+    it("integral definida completa (∫₀¹x²dx) resolve — nenhum placeholder sobrando depois de preencher os 3 slots", () => {
+      expect(expr("\\int_{0}^{1}x^2\\,dx")).toBe("integral(x², x, 0, 1)");
+    });
+
+    it("integral sem integrando (só os limites preenchidos) continua bloqueada", () => {
+      expect(mathFieldLatexToBackendExpression("\\int_{0}^{1}\\placeholder{}\\,dx")).toEqual({
+        ok: false,
+        reason: "incomplete",
+      });
+    });
+
+    it("matriz/sistema com uma célula/equação realmente faltando continua bloqueado (nenhuma regressão do hardening de fence)", () => {
+      expect(
+        mathFieldLatexToBackendExpression("\\begin{bmatrix}1&\\placeholder{}\\\\3&4\\end{bmatrix}")
+      ).toEqual({ ok: false, reason: "incomplete" });
+      expect(
+        mathFieldLatexToBackendExpression("\\begin{cases}x+y=5\\\\\\placeholder{}\\end{cases}")
+      ).toEqual({ ok: false, reason: "incomplete" });
+    });
+
+    it("regressão: um placeholder JÁ substituído pelo usuário (\\placeholder{conteúdo}, não vazio) nunca é tratado como incompleto por estado antigo do editor", () => {
+      // MathLive às vezes preserva o envelope `\placeholder{...}` mesmo
+      // depois do usuário digitar dentro dele (em vez de substituir pelo
+      // conteúdo cru) — `parseAtom` já lê o conteúdo interno nesse caso
+      // (só um `\placeholder{}` VAZIO é "slot vazio" de verdade). Cobre
+      // fence simples, o slot da direita de "dy/dx" e uma célula de
+      // matriz, pra provar que não é uma exceção de um lugar só.
+      expect(expr("\\frac{d}{dx}\\left(\\placeholder{x^2+3x}\\right)")).toBe("derivada(x²+3x, x)");
+      expect(expr("\\frac{d}{dx}\\left(\\placeholder{x^2+y^2}=\\placeholder{4xy}\\right)")).toBe(
+        "derivada(x²+y²=4x*y, x)"
+      );
+      expect(
+        expr("\\begin{bmatrix}\\placeholder{1}&2\\\\3&\\placeholder{4}\\end{bmatrix}")
+      ).toBe("[[1,2],[3,4]]");
     });
   });
 

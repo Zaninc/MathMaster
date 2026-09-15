@@ -418,6 +418,118 @@ export function repairMathLiveEnvironmentEscape(latex: string): string {
   return result;
 }
 
+const FENCE_TOKEN_PATTERN = /\\(left\(|right\))/g;
+
+/**
+ * Acha o `\right)` que fecha de verdade o `\left(` que acabou de ser
+ * consumido em `afterLeftIdx` — mesma lógica de profundidade de
+ * `findMatchingEnvironmentEnd`, aplicada ao par `\left(`/`\right)` (o
+ * único delimitador que o catálogo desta sprint insere — nenhuma tecla
+ * estruturada usa `\left[`/`\left|`/`\left\{`).
+ */
+function findMatchingFenceEnd(text: string, afterLeftIdx: number): number | null {
+  FENCE_TOKEN_PATTERN.lastIndex = afterLeftIdx;
+  let depth = 0;
+  let match: RegExpExecArray | null;
+  while ((match = FENCE_TOKEN_PATTERN.exec(text)) !== null) {
+    if (match[1] === "left(") {
+      depth++;
+    } else if (depth === 0) {
+      return match.index;
+    } else {
+      depth--;
+    }
+  }
+  return null;
+}
+
+/**
+ * Mesma ideia de `TRAILING_EMPTY_PLACEHOLDERS`, mas para o corpo de uma
+ * fence `\left(...\right)`: além de "&"/"\\" (separador de célula de
+ * matriz/sistema), reconhece também "=" como separador FIXO de template
+ * entre dois placeholders. Hoje o único template do catálogo com dois
+ * placeholders dentro de UMA fence é a tecla "dy/dx" (`\left(\placeholder{}
+ * =\placeholder{}\right)`, ver `repairFenceEscape`), mas a regra em si é
+ * genérica — qualquer separador fixo do TEMPLATE (nunca um dígito/letra
+ * digitado pelo usuário) entre placeholders não deveria impedir reconhecer
+ * "ainda existe conteúdo real antes daqui, e um trecho vazio depois".
+ */
+const TRAILING_EMPTY_PLACEHOLDERS_FENCE = /(?:\s*(?:&|\\\\|=)?\s*\\placeholder\{\})+$/;
+
+/**
+ * Hardening "Completude Semântica — Fence `\left(...\right)`" — MESMO bug
+ * do Hotfix V3.0.2a (a barra de espaço do MathLive sai da estrutura
+ * INTEIRA de uma vez, não só do nível mais interno), mas confirmado agora
+ * num delimitador `\left(...\right)`, não num `\begin{...}\end{...}`:
+ * digitar "x^2 " (com espaço) dentro do argumento da tecla "dy/dx"
+ * (`\frac{d}{dx}\left(\placeholder{}=\placeholder{}\right)`) — AINDA
+ * dentro do expoente "2" no momento do espaço — escapa não só do expoente
+ * como de TODA a fence de uma vez: o campo vira
+ * `\frac{d}{dx}\left(x^2=\placeholder{}\right)` com o cursor JÁ fora
+ * dela, então o que o usuário digita em seguida ("+y^2"/"4xy"...) vira
+ * conteúdo órfão depois de `\right)`, e o segundo `\placeholder{}` —
+ * nunca alcançado — fica vazio para sempre. Reproduz exatamente o bug
+ * relatado (`d/dx(x²+y²=4xy)`): visualmente quase completo (o "=☐" final,
+ * colado ao fechamento, é fácil de não notar), mas o parser recusa
+ * corretamente — aquele placeholder é real, ninguém nunca digitou nada
+ * nele.
+ *
+ * Reparo puramente textual, mesmo princípio do V3.0.2a: só reconecta
+ * conteúdo órfão quando existe PROVA ESTRUTURAL de incompletude (um
+ * trecho final de `\placeholder{}` ainda vazio, nunca uma suposição) —
+ * nunca mexe em conteúdo legítimo depois de `\right)` sem nenhum
+ * placeholder sobrando dentro (ex. `\sin\left(x\right)^2`: "^2" é uma
+ * continuação real, `trailingMatch` simplesmente não bate, texto
+ * devolvido intocado). Roda por ÚLTIMO no pipeline (`repairMathLiveInput`)
+ * porque depende de `\right)` já estar na posição final e correta — a
+ * mesma razão pela qual `repairMathLiveEnvironmentEscape` já roda depois
+ * de `repairNestedFenceCorruption`.
+ */
+export function repairFenceEscape(latex: string): string {
+  let result = latex;
+  const beginToken = "\\left(";
+  const endToken = "\\right)";
+  let searchFrom = 0;
+  for (;;) {
+    const beginIdx = result.indexOf(beginToken, searchFrom);
+    if (beginIdx === -1) break;
+    const bodyStart = beginIdx + beginToken.length;
+    const endIdx = findMatchingFenceEnd(result, bodyStart);
+    if (endIdx === null) break;
+    const afterEnd = endIdx + endToken.length;
+    const body = result.slice(bodyStart, endIdx);
+
+    // Nunca engole uma fence seguinte de verdade (ex. "(x+1)(y+1)"): o
+    // conteúdo órfão para no próximo `\left(`, nunca além dele.
+    const nextBeginIdx = result.indexOf(beginToken, afterEnd);
+    const strayEnd = nextBeginIdx === -1 ? result.length : nextBeginIdx;
+    const stray = result.slice(afterEnd, strayEnd);
+    if (stray.trim() === "") {
+      searchFrom = afterEnd;
+      continue;
+    }
+
+    // Igual ao guard de matriz em `repairMathLiveEnvironmentEscape`: só
+    // reconecta quando o trecho final de placeholders NÃO cobre o corpo
+    // inteiro (`index !== 0`) — sem conteúdo real antes dele não existe
+    // "o que o usuário estava editando" pra estender, e um `\right)`
+    // legítimo seguido de conteúdo real (ex. uma fence recém-fechada,
+    // vazia, com uma multiplicação de verdade depois) nunca deve ser
+    // corrompido.
+    const trailingMatchRaw = body.match(TRAILING_EMPTY_PLACEHOLDERS_FENCE);
+    const trailingMatch = trailingMatchRaw && trailingMatchRaw.index !== 0 ? trailingMatchRaw : null;
+    if (!trailingMatch) {
+      searchFrom = afterEnd;
+      continue;
+    }
+
+    const insertAt = bodyStart + trailingMatch.index!;
+    result = result.slice(0, insertAt) + stray + result.slice(insertAt, afterEnd) + result.slice(strayEnd);
+    searchFrom = afterEnd + stray.length;
+  }
+  return result;
+}
+
 class Unsupported extends Error {}
 class Incomplete extends Error {}
 
@@ -1201,19 +1313,25 @@ class LatexParser {
 }
 
 /**
- * Hotfix V3.0.2c — compõe os 3 reparos textuais nesta ordem fixa:
- * desaninha estruturas primeiro (`repairNestedStructuralTemplate`),
- * depois desfaz a corrupção de cerca `\right)/\right.` (
- * `repairNestedFenceCorruption` — o `\begin{...}` da assinatura dela
- * precisa estar no formato final, não mais aninhado), só então repara o
- * pulo de ambiente da barra de espaço (`repairMathLiveEnvironmentEscape`
- * — Hotfix V3.0.2a). Único ponto de entrada usado tanto no envio
- * (`mathFieldLatexToBackendExpression`) quanto ao vivo, a cada tecla
- * (`StructuredMathInput.tsx`), garantindo que os dois caminhos vejam
- * exatamente a mesma correção.
+ * Hotfix V3.0.2c / Hardening "Completude Semântica" — compõe os 4 reparos
+ * textuais nesta ordem fixa: desaninha estruturas primeiro
+ * (`repairNestedStructuralTemplate`), depois desfaz a corrupção de cerca
+ * `\right)/\right.` (`repairNestedFenceCorruption` — o `\begin{...}` da
+ * assinatura dela precisa estar no formato final, não mais aninhado), só
+ * então repara o pulo de AMBIENTE da barra de espaço
+ * (`repairMathLiveEnvironmentEscape` — Hotfix V3.0.2a) e por ÚLTIMO o
+ * pulo de FENCE `\left(...\right)` da barra de espaço
+ * (`repairFenceEscape` — mesmo bug, delimitador diferente; roda por
+ * último pela mesma razão que os outros dois já rodam antes dele: depende
+ * de todo `\right)` já estar na posição final). Único ponto de entrada
+ * usado tanto no envio (`mathFieldLatexToBackendExpression`) quanto ao
+ * vivo, a cada tecla (`StructuredMathInput.tsx`), garantindo que os dois
+ * caminhos vejam exatamente a mesma correção.
  */
 export function repairMathLiveInput(latex: string): string {
-  return repairMathLiveEnvironmentEscape(repairNestedFenceCorruption(repairNestedStructuralTemplate(latex)));
+  return repairFenceEscape(
+    repairMathLiveEnvironmentEscape(repairNestedFenceCorruption(repairNestedStructuralTemplate(latex)))
+  );
 }
 
 export function mathFieldLatexToBackendExpression(latex: string): MathfieldConversion {

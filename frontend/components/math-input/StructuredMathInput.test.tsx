@@ -368,6 +368,44 @@ describe("StructuredMathInput", () => {
     expect(onChange).toHaveBeenLastCalledWith("x^2-4=0");
   });
 
+  // --- Hardening "Completude Semântica — Fence \left(...\right)" ---------
+  //
+  // MESMO bug do Hotfix V3.0.2a (barra de espaço sai da estrutura INTEIRA
+  // de uma vez), mas descoberto num delimitador `\left(...\right)`, não num
+  // `\begin{...}\end{...}` — reproduzido no navegador real digitando
+  // "x^2 " (com espaço, ainda dentro do expoente "2") dentro do argumento
+  // da tecla "dy/dx" (`\frac{d}{dx}\left(\placeholder{}=\placeholder{}
+  // \right)`): o valor malformado abaixo é EXATAMENTE o que o MathLive
+  // real produz (capturado via `math-field.value` no navegador real), o
+  // caso relatado como bug real (`d/dx(x²+y²=4xy)` recusado como
+  // "Preencha todos os espaços...", apesar de visualmente quase completo —
+  // o "=☐" final, colado ao fechamento, é fácil de não notar).
+
+  it("campo malformado por um pulo de FENCE (barra de espaço dentro de d/dx(...)=...) é corrigido ao vivo via setValue", () => {
+    const onChange = vi.fn();
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={onChange} />);
+    const field = getField(container) as MockFieldWithSetValue;
+
+    field.value = "\\frac{d}{dx}\\left(x^2=\\placeholder{}\\right)+y^2";
+    field.dispatchEvent(new Event("input"));
+
+    expect(field.lastSetValueCall?.value).toBe("\\frac{d}{dx}\\left(x^2+y^2=\\placeholder{}\\right)");
+    expect(field.lastExecutedCommand).toBeNull();
+    expect(onChange).toHaveBeenLastCalledWith("\\frac{d}{dx}\\left(x^2+y^2=\\placeholder{}\\right)");
+  });
+
+  it("campo já bem-formado (sem pulo de fence) nunca chama setValue por causa do reparo de fence", () => {
+    const onChange = vi.fn();
+    const { container } = render(<StructuredMathInput id="campo" value="" onChange={onChange} />);
+    const field = getField(container) as MockFieldWithSetValue;
+
+    field.value = "\\frac{d}{dx}\\left(x^2+y^2=4xy\\right)";
+    field.dispatchEvent(new Event("input"));
+
+    expect(field.lastSetValueCall).toBeNull();
+    expect(onChange).toHaveBeenLastCalledWith("\\frac{d}{dx}\\left(x^2+y^2=4xy\\right)");
+  });
+
   // --- Hotfix V3.0.2c — reparo acionado explicitamente em api.insert() ----
 
   it("api.insert() aciona o reparo mesmo sem o campo despachar 'input' sozinho (MathLive real não dispara input em insert() — só digitação física dispara)", async () => {
