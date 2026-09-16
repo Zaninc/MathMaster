@@ -1744,38 +1744,46 @@ describe("mathFieldLatexToBackendExpression", () => {
     });
   });
 
-  // --- Sprint V3.0.7 (Séries de Taylor e Maclaurin) --------------------------
+  // --- Hotfix "Template Taylor sem slot de ordem visível" --------------------
   //
-  // `\operatorname{Taylor}(f(x), x, a, n)` (teclas "Taylor"/"Maclaurin") ->
-  // `taylor(f(x), x, a, n)`. Os 4 argumentos são lidos por
-  // `parseCommaSeparatedArguments` — cada um pelo parser recursivo INTEIRO
-  // (`parseExpression()`), então placeholder vazio em QUALQUER um dos 4
-  // campos já lança `Incomplete` sozinho, sem nenhum código novo pra
-  // "centro vazio"/"ordem vazia". Validação semântica de que a ordem é um
-  // inteiro no intervalo permitido é 100% responsabilidade do backend
-  // (`calculus/taylor.py:parse_taylor_order`) — mesma divisão de
-  // responsabilidade já estabelecida pela ordem de derivada (V3.0.6).
-  describe("Sprint V3.0.7 — Séries de Taylor e Maclaurin (\\operatorname{Taylor}(...))", () => {
-    it("Taylor(e^x, x, 0, 4) -> taylor(exp(x), x, 0, 4)", () => {
+  // `\operatorname{Taylor}_{n}(f(x), x, a)` (teclas "Taylor"/"Maclaurin") ->
+  // `taylor(f(x), x, a, n)`. A ordem agora é um SUBSCRITO de verdade (igual
+  // ao "n" de `\sum_{i=1}^{n}`), estruturalmente distinto dos outros 3
+  // campos — nunca mais uma 4ª caixa vazia idêntica dentro da mesma fence
+  // (a forma antiga, `\operatorname{Taylor}(f,x,a,n)`, permitia digitar a
+  // ordem colada no nome "Taylor" por engano, produzindo "Taylor4(...)",
+  // rejeitado como notação não suportada). Os 3 argumentos comuns (função,
+  // variável, centro) continuam lidos por `parseCommaSeparatedArguments` —
+  // cada um pelo parser recursivo INTEIRO (`parseExpression()`), então
+  // placeholder vazio em QUALQUER um deles já lança `Incomplete` sozinho. A
+  // ordem em si é lida como `readGroup()`/`parseAtom()` (mesmo mecanismo do
+  // expoente de "x^2"), então um `\placeholder{}` vazio no subscrito também
+  // lança `Incomplete` de graça, sem código novo algum. Validação semântica
+  // de que a ordem é um inteiro no intervalo permitido é 100%
+  // responsabilidade do backend (`calculus/taylor.py:parse_taylor_order`) —
+  // mesma divisão de responsabilidade já estabelecida pela ordem de
+  // derivada (V3.0.6).
+  describe("Hotfix — Séries de Taylor e Maclaurin (\\operatorname{Taylor}_{n}(...))", () => {
+    it("Taylor_4(e^x, x, 0) -> taylor(exp(x), x, 0, 4)", () => {
       expect(
-        expr("\\operatorname{Taylor}\\left(\\exponentialE^{x},x,0,4\\right)")
+        expr("\\operatorname{Taylor}_{4}\\left(\\exponentialE^{x},x,0\\right)")
       ).toBe("taylor(exp(x), x, 0, 4)");
     });
 
-    it("Taylor(sin(x), x, 0, 5) -> taylor(sin(x), x, 0, 5)", () => {
-      expect(expr("\\operatorname{Taylor}\\left(\\sin(x),x,0,5\\right)")).toBe(
+    it("Taylor_5(sin(x), x, 0) -> taylor(sin(x), x, 0, 5)", () => {
+      expect(expr("\\operatorname{Taylor}_{5}\\left(\\sin(x),x,0\\right)")).toBe(
         "taylor(sin(x), x, 0, 5)"
       );
     });
 
     it("centro simbólico (π/2) passa intacto pro backend — teste de ouro", () => {
       expect(
-        expr("\\operatorname{Taylor}\\left(\\sin(x),x,\\frac{\\pi}{2},4\\right)")
+        expr("\\operatorname{Taylor}_{4}\\left(\\sin(x),x,\\frac{\\pi}{2}\\right)")
       ).toBe("taylor(sin(x), x, π/2, 4)");
     });
 
     it("Maclaurin explícito (centro=1/(1-x) digitado à mão) continua igual a Taylor com a=0", () => {
-      expect(expr("\\operatorname{Taylor}\\left(\\frac{1}{1-x},x,0,5\\right)")).toBe(
+      expect(expr("\\operatorname{Taylor}_{5}\\left(\\frac{1}{1-x},x,0\\right)")).toBe(
         "taylor(1/(1-x), x, 0, 5)"
       );
     });
@@ -1783,7 +1791,7 @@ describe("mathFieldLatexToBackendExpression", () => {
     it("função vazia -> incomplete", () => {
       expect(
         mathFieldLatexToBackendExpression(
-          "\\operatorname{Taylor}\\left(\\placeholder{},x,0,4\\right)"
+          "\\operatorname{Taylor}_{4}\\left(\\placeholder{},x,0\\right)"
         )
       ).toEqual({ ok: false, reason: "incomplete" });
     });
@@ -1791,7 +1799,7 @@ describe("mathFieldLatexToBackendExpression", () => {
     it("variável vazia -> incomplete", () => {
       expect(
         mathFieldLatexToBackendExpression(
-          "\\operatorname{Taylor}\\left(x^2,\\placeholder{},0,4\\right)"
+          "\\operatorname{Taylor}_{4}\\left(x^2,\\placeholder{},0\\right)"
         )
       ).toEqual({ ok: false, reason: "incomplete" });
     });
@@ -1799,24 +1807,32 @@ describe("mathFieldLatexToBackendExpression", () => {
     it("centro vazio -> incomplete", () => {
       expect(
         mathFieldLatexToBackendExpression(
-          "\\operatorname{Taylor}\\left(x^2,x,\\placeholder{},4\\right)"
+          "\\operatorname{Taylor}_{4}\\left(x^2,x,\\placeholder{}\\right)"
         )
       ).toEqual({ ok: false, reason: "incomplete" });
     });
 
-    it("ordem vazia -> incomplete", () => {
+    it("ordem vazia (subscrito ainda não preenchido) -> incomplete", () => {
       expect(
         mathFieldLatexToBackendExpression(
-          "\\operatorname{Taylor}\\left(x^2,x,0,\\placeholder{}\\right)"
+          "\\operatorname{Taylor}_{\\placeholder{}}\\left(x^2,x,0\\right)"
         )
       ).toEqual({ ok: false, reason: "incomplete" });
+    });
+
+    it("sem subscrito nenhum (forma antiga \"Taylor(f,x,a,n)\") -> unsupported, nunca \"Taylor4\" colado", () => {
+      expect(
+        mathFieldLatexToBackendExpression(
+          "\\operatorname{Taylor}\\left(x^2,x,0,4\\right)"
+        )
+      ).toEqual({ ok: false, reason: "unsupported" });
     });
 
     it("ordem negativa/decimal/não numérica passam intactas pro backend (única fonte da verdade pra validação de ordem)", () => {
-      expect(expr("\\operatorname{Taylor}\\left(x^2,x,0,-1\\right)")).toBe(
+      expect(expr("\\operatorname{Taylor}_{-1}\\left(x^2,x,0\\right)")).toBe(
         "taylor(x², x, 0, -1)"
       );
-      expect(expr("\\operatorname{Taylor}\\left(x^2,x,0,2.5\\right)")).toBe(
+      expect(expr("\\operatorname{Taylor}_{2.5}\\left(x^2,x,0\\right)")).toBe(
         "taylor(x², x, 0, 2.5)"
       );
     });
@@ -1826,7 +1842,7 @@ describe("mathFieldLatexToBackendExpression", () => {
       // pelo usuário nos campos restantes — centro "0" nunca é um
       // placeholder, é um dígito literal editável como qualquer outro.
       expect(
-        expr("\\operatorname{Taylor}\\left(\\exponentialE^{x},x,0,4\\right)")
+        expr("\\operatorname{Taylor}_{4}\\left(\\exponentialE^{x},x,0\\right)")
       ).toBe("taylor(exp(x), x, 0, 4)");
     });
   });

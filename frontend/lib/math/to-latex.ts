@@ -790,11 +790,16 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
   // visualmente do que o usuário digitou. Maclaurin não tem branch
   // próprio aqui — é só `taylor(f, x, 0, n)`, renderiza igual.
   if (name === "taylor" && nodeArgs.length === 4) {
+    // Hotfix "Template Taylor sem slot de ordem visível" — ordem agora
+    // em SUBSCRITO (`T_n(f, x, a)`, mesma notação do template de
+    // entrada em `data/keyboard.ts`), não mais um 4º argumento em fila
+    // dentro da mesma fence — o echo precisa continuar batendo com o
+    // que o teclado estruturado produz.
     const body = texOf(nodeArgs[0], options);
     const variable = texOf(nodeArgs[1], options);
     const center = texOf(nodeArgs[2], options);
     const order = texOf(nodeArgs[3], options);
-    return `\\operatorname{Taylor}\\left(${body},\\ ${variable},\\ ${center},\\ ${order}\\right)`;
+    return `\\operatorname{Taylor}_{${order}}\\left(${body},\\ ${variable},\\ ${center}\\right)`;
   }
 
   // Aliases secundários do somatório (sintaxe principal é "Σ(var=inf..sup)
@@ -1567,12 +1572,13 @@ function renderCall(name: string, argsText: string): string {
     return `\\lim_{${rawArgs[1]} \\to ${args[2]}} ${args[0]}`;
   }
   if (name.toLowerCase() === "taylor" && args.length === 4) {
-    // Sprint V3.0.7 (Séries de Taylor e Maclaurin) — MESMA extensão do
-    // branch "taylor" em `texOf` acima, duplicada aqui pelo mesmo motivo
-    // já documentado pra "derivada"/ordem superior: `previewLatex` usa
-    // este parser tolerante PRÓPRIO (nunca mathjs), então o ECHO da
-    // expressão resolvida precisa do seu próprio reconhecimento.
-    return `\\operatorname{Taylor}\\left(${args[0]},\\ ${args[1]},\\ ${args[2]},\\ ${args[3]}\\right)`;
+    // Hotfix "Template Taylor sem slot de ordem visível" — MESMA
+    // extensão do branch "taylor" em `texOf` acima (ordem em subscrito,
+    // `T_n(f, x, a)`), duplicada aqui pelo mesmo motivo já documentado
+    // pra "derivada"/ordem superior: `previewLatex` usa este parser
+    // tolerante PRÓPRIO (nunca mathjs), então o ECHO da expressão
+    // resolvida precisa do seu próprio reconhecimento.
+    return `\\operatorname{Taylor}_{${args[3]}}\\left(${args[0]},\\ ${args[1]},\\ ${args[2]}\\right)`;
   }
   if (SUM_NAMES.has(name) && args.length === 4) {
     // Ordem oficial: variável, limite inferior, limite superior, expressão

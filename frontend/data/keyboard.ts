@@ -586,37 +586,46 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
         mathLiveInsert: "\\frac{d^{\\placeholder{}}}{dx^{\\placeholder{}}}\\left(\\placeholder{}\\right)",
       },
       {
-        // Sprint V3.0.7 (Séries de Taylor e Maclaurin) — 4 slots
-        // independentes (função, variável, centro, ordem), nunca uma
-        // notação compacta tipo "T_n[f](x;a)" (rejeitada — exigiria o
-        // adapter decompor sub/sobrescrito E argumento numa única
-        // estrutura, mais frágil que 4 campos claramente separados por
-        // vírgula dentro de UMA fence, o mesmo padrão já usado por
-        // `\int_{a}^{b}`/`\operatorname{Taylor}` reaproveitando o parser
-        // recursivo inteiro). Variável é texto LITERAL "x" (nunca um
-        // placeholder) — MESMA convenção já usada pela tecla "d/dx"
-        // (`\frac{d}{dx}`, o "x" também é literal editável, não
-        // placeholder) — achado real no navegador: um `\placeholder{f(x)}`
-        // com conteúdo default NÃO É desenhado visualmente pelo MathLive
-        // (aparece como caixa vazia idêntica a um placeholder genuinamente
-        // vazio), mas continua sendo texto REAL se o campo nunca for
-        // tocado — o adapter parsearia "f(x)" como "f*x" (multiplicação
-        // implícita letra-parêntese) silenciosamente, em vez de rejeitar
-        // com "Preencha todos os espaços...". Função/centro/ordem ficam
-        // genuinamente VAZIOS (mesma convenção da tecla "dⁿ/dxⁿ") —
-        // nenhum default que possa ser esquecido sem querer.
+        // Hotfix "Template Taylor sem slot de ordem visível" — a forma
+        // anterior (4 argumentos em fila dentro da MESMA fence,
+        // `Taylor(□,x,□,□)`) renderizava os 3 placeholders como caixas
+        // IDÊNTICAS, sem nenhum jeito visual de saber qual era a ordem —
+        // achado real no navegador: o usuário digitou o "4" colado no
+        // nome "Taylor" (fora de qualquer placeholder) por não achar o
+        // slot, produzindo "Taylor4(...)", nunca reconhecido. Corrigido
+        // com a ordem em SUBSCRITO de verdade (`T_n`, convenção padrão
+        // de livro didático) — visualmente inconfundível com os outros
+        // campos, mesmo princípio já usado pelo somatório (`\sum_{i=1}
+        // ^{n}`, sub/sobrescrito = papel estrutural diferente de um
+        // argumento comum). Variável usa `\placeholder{x}` — um
+        // placeholder DE VERDADE (nunca texto literal fixo), por pedido
+        // explícito de que os 4 campos sejam placeholders próprios.
+        // ACHADO REAL (teste via navegador, hotfix seguinte): o conteúdo
+        // default "x" só aparece no `.value` serializado logo após a
+        // inserção do template — assim que QUALQUER outro campo é
+        // editado (ordem/função/centro), o MathLive já normaliza esse
+        // placeholder de volta pra `\placeholder{}` vazio. Na prática,
+        // como todo uso real envolve editar pelo menos a ordem, o
+        // usuário SEMPRE precisa clicar na variável e digitar algo
+        // (normalmente "x") — o default nunca "sobrevive" sozinho até o
+        // clique em Resolver. Isso é aceitável (nunca produz payload
+        // errado silencioso — só bloqueia como "incomplete" até o
+        // usuário preencher), mas não confie neste default como atalho
+        // funcional; ele existe só pra caixa nunca aparecer com texto
+        // fixo "hardcoded". Função e centro ficam genuinamente VAZIOS
+        // (sem default sensato).
         label: "Taylor",
         insert: "Taylor(,x,0,4)",
         cursorOffset: 7,
         ariaLabel: "Inserir polinômio de Taylor",
         latex: "\\operatorname{T}_n(x)",
         mathLiveInsert:
-          "\\operatorname{Taylor}\\left(\\placeholder{},x,\\placeholder{},\\placeholder{}\\right)",
+          "\\operatorname{Taylor}_{\\placeholder{}}\\left(\\placeholder{},\\placeholder{x},\\placeholder{}\\right)",
       },
       {
         // MESMO template do "Taylor" acima, só com o centro já
-        // pré-preenchido como "0" (dígito literal editável, mesmo
-        // espírito do "x" da variável — nunca um placeholder) —
+        // pré-preenchido como "0" (dígito literal editável — nunca um
+        // placeholder, mesmo espírito do default "x" da variável) —
         // Maclaurin é CONCEITUALMENTE Taylor centrado em a=0 (ver
         // `calculus/taylor.py`), nunca um caminho de código/sintaxe
         // separado; esta tecla só poupa o usuário de digitar "0" no
@@ -627,7 +636,7 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
         ariaLabel: "Inserir polinômio de Maclaurin (Taylor centrado em 0)",
         latex: "\\operatorname{M}_n(x)",
         mathLiveInsert:
-          "\\operatorname{Taylor}\\left(\\placeholder{},x,0,\\placeholder{}\\right)",
+          "\\operatorname{Taylor}_{\\placeholder{}}\\left(\\placeholder{},\\placeholder{x},0\\right)",
       },
       {
         label: "∫ dx",

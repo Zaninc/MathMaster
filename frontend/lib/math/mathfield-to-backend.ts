@@ -1339,26 +1339,43 @@ class LatexParser {
       }
     }
 
-    // Sprint V3.0.7 (Séries de Taylor e Maclaurin) — `\operatorname{Taylor}
-    // (f(x), x, a, n)` (teclas "Taylor"/"Maclaurin", ver `data/keyboard.ts`)
-    // -> `taylor(f(x), x, a, n)`. Quatro argumentos separados por vírgula
-    // dentro de UMA fence, cada um parseado pelo parser recursivo INTEIRO
-    // (`parseCommaSeparatedArguments` abaixo) — reaproveita de graça o
-    // mecanismo genérico de slot vazio (`\placeholder{}` vazio em
-    // qualquer um dos 4 campos -> `Incomplete`, nunca um caso especial
-    // pra "centro vazio"/"ordem vazia"). Validação SEMÂNTICA de "a ordem
-    // é um inteiro no intervalo permitido" é responsabilidade exclusiva
-    // do backend (`parse_taylor_order`, única fonte da verdade) — o
-    // adapter só extrai o TEXTO de cada campo, igual ao resto do
-    // catálogo desde a V3.0.6 (ordem de derivada de ordem superior).
+    // Hotfix "Template Taylor sem slot de ordem visível" — a forma
+    // anterior (`\operatorname{Taylor}\left(f,x,a,n\right)`, 4 argumentos
+    // em fila dentro da MESMA fence) renderizava os 4 slots como caixas
+    // vazias IDÊNTICAS, sem nenhum jeito visual de saber qual delas era
+    // a ordem — achado real reproduzido no navegador: o usuário, sem
+    // achar onde "n" deveria ir, digitou o "4" colado no NOME "Taylor"
+    // (fora de qualquer placeholder), produzindo "Taylor4(...)" — nunca
+    // reconhecido, "Esta notação ainda não é suportada". Corrigido
+    // adotando a MESMA convenção de livro didático pedida (`T_n(f(x), x,
+    // a)`): a ordem vira um SUBSCRITO de verdade — `\operatorname{Taylor}
+    // _{n}\left(f,x,a\right)` — visualmente inconfundível com os outros
+    // 3 campos (nenhum outro campo deste produto usa subscrito pra
+    // "argumento comum"; o mesmo princípio de "sub/sobrescrito = papel
+    // estrutural diferente" já usado pelo somatório, `\sum_{i=1}^{n}`).
+    // `consumeFunctionName("Taylor")` continua a mesma (3 grafias de
+    // `\operatorname`), só o que vem DEPOIS mudou: um "_" obrigatório
+    // seguido do subscrito da ordem, então os 3 argumentos comuns
+    // (função, variável, centro) dentro de UMA fence — cada um ainda
+    // parseado pelo parser recursivo INTEIRO, reaproveitando de graça o
+    // mecanismo genérico de slot vazio. Validação SEMÂNTICA de "a ordem
+    // é um inteiro no intervalo permitido" continua 100% no backend
+    // (`parse_taylor_order`) — o adapter só reordena o TEXTO já extraído
+    // pro contrato `taylor(expr, var, center, order)`, que NUNCA mudou.
     if (this.consumeFunctionName("Taylor")) {
-      const args = this.parseCommaSeparatedArguments();
-      if (args.length !== 4) {
+      if (!this.consume("_")) {
         throw new Unsupported(
-          "Taylor(...) espera 4 argumentos: função, variável, centro e ordem"
+          "Taylor(...) precisa da ordem em subscrito: Taylor_n(f(x), x, a)"
         );
       }
-      const [body, variable, center, order] = args;
+      const order = this.peek() === "{" ? this.readGroup() : this.parseAtom();
+      const args = this.parseCommaSeparatedArguments();
+      if (args.length !== 3) {
+        throw new Unsupported(
+          "Taylor_n(...) espera 3 argumentos: função, variável e centro"
+        );
+      }
+      const [body, variable, center] = args;
       return `taylor(${body}, ${variable}, ${center}, ${order})`;
     }
 

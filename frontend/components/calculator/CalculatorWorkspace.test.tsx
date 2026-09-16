@@ -421,17 +421,30 @@ describe("CalculatorWorkspace", () => {
       expect(apiClient.solve).not.toHaveBeenCalled();
     });
 
-    // --- Sprint V3.0.7 (Séries de Taylor e Maclaurin) -----------------------
+    // --- Hotfix "Template Taylor sem slot de ordem visível" -----------------
 
-    it("tecla Taylor insere \\operatorname{Taylor}(...) com variável literal 'x' e função/centro/ordem genuinamente vazios", async () => {
-      // Achado real no navegador: um `\placeholder{f(x)}` com conteúdo
+    it("tecla Taylor insere \\operatorname{Taylor}_{n}(...) com ordem em subscrito próprio e função/variável/centro genuinamente vazios", async () => {
+      // Achado real no navegador: a forma antiga (`Taylor(f,x,a,n)`, 4
+      // argumentos em fila dentro da MESMA fence) renderizava 4 caixas
+      // vazias IDÊNTICAS — sem jeito visual de achar o slot de ordem, o
+      // usuário digitou "4" colado no nome "Taylor", fora de qualquer
+      // placeholder, produzindo "Taylor4(...)" (nunca reconhecido).
+      // Corrigido: ordem vira um SUBSCRITO de verdade (mesma convenção do
+      // somatório, `\sum_{i=1}^{n}`), estruturalmente distinto dos outros
+      // 3 campos. Um `\placeholder{f(x)}`/`\placeholder{a}` com conteúdo
       // default NÃO é desenhado visualmente pelo MathLive (aparece como
       // caixa vazia idêntica a um placeholder genuinamente vazio), mas
-      // continua sendo TEXTO REAL se o campo nunca for editado — o
-      // adapter parsearia "f(x)" como "f*x" silenciosamente em vez de
-      // bloquear como incompleto. Por isso função/centro/ordem usam
-      // `\placeholder{}` vazio — só a variável é texto literal "x"
-      // (mesma convenção já usada pela tecla "d/dx").
+      // continua sendo TEXTO REAL se o campo nunca for editado — por isso
+      // ordem/função/centro usam `\placeholder{}` vazio. A variável usa
+      // `\placeholder{x}` (placeholder GENUÍNO e distinto dos outros 3,
+      // por pedido explícito do usuário). ACHADO REAL (teste no
+      // navegador): esse "x" default só aparece no `.value` logo após a
+      // inserção — assim que qualquer OUTRO campo é editado, o MathLive
+      // já normaliza a variável de volta pra `\placeholder{}` vazio, então
+      // na prática o usuário sempre precisa preencher a variável também
+      // (nunca é um atalho funcional; só evita texto fixo "hardcoded" na
+      // caixa). Nunca vira payload silenciosamente errado — só bloqueia
+      // como "incomplete" até ser preenchida, igual função/centro.
       vi.mocked(apiClient.getHistory).mockResolvedValue([]);
       const { container } = render(<CalculatorWorkspace />);
       const field = await getField(container);
@@ -439,7 +452,7 @@ describe("CalculatorWorkspace", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Inserir polinômio de Taylor" }));
       expect(field.value).toBe(
-        "\\operatorname{Taylor}\\left(\\placeholder{},x,\\placeholder{},\\placeholder{}\\right)"
+        "\\operatorname{Taylor}_{\\placeholder{}}\\left(\\placeholder{},\\placeholder{x},\\placeholder{}\\right)"
       );
     });
 
@@ -453,11 +466,11 @@ describe("CalculatorWorkspace", () => {
         screen.getByRole("button", { name: "Inserir polinômio de Maclaurin (Taylor centrado em 0)" })
       );
       expect(field.value).toBe(
-        "\\operatorname{Taylor}\\left(\\placeholder{},x,0,\\placeholder{}\\right)"
+        "\\operatorname{Taylor}_{\\placeholder{}}\\left(\\placeholder{},\\placeholder{x},0\\right)"
       );
     });
 
-    it("Taylor(e^x, x, 0, 4) resolve ponta-a-ponta chamando o backend com a sintaxe canônica taylor(exp(x), x, 0, 4)", async () => {
+    it("Taylor_4(e^x, x, 0) resolve ponta-a-ponta chamando o backend com a sintaxe canônica taylor(exp(x), x, 0, 4)", async () => {
       vi.mocked(apiClient.getHistory).mockResolvedValue([]);
       vi.mocked(apiClient.solve).mockResolvedValue({
         expression: "taylor(exp(x), x, 0, 4)",
@@ -467,7 +480,7 @@ describe("CalculatorWorkspace", () => {
 
       const { container } = render(<CalculatorWorkspace />);
       const field = await getField(container);
-      setFieldLatex(field, "\\operatorname{Taylor}\\left(\\exponentialE^{x},x,0,4\\right)");
+      setFieldLatex(field, "\\operatorname{Taylor}_{4}\\left(\\exponentialE^{x},x,0\\right)");
 
       fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
 
@@ -483,7 +496,7 @@ describe("CalculatorWorkspace", () => {
       fireEvent.click(screen.getByRole("button", { name: "Inserir polinômio de Taylor" }));
       setFieldLatex(
         field,
-        "\\operatorname{Taylor}\\left(x^2,x,\\placeholder{},4\\right)"
+        "\\operatorname{Taylor}_{4}\\left(x^2,x,\\placeholder{}\\right)"
       );
 
       fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
@@ -496,7 +509,7 @@ describe("CalculatorWorkspace", () => {
       vi.mocked(apiClient.getHistory).mockResolvedValue([]);
       const { container } = render(<CalculatorWorkspace />);
       const field = await getField(container);
-      setFieldLatex(field, "\\operatorname{Taylor}\\left(x^2,x,0,n\\right)");
+      setFieldLatex(field, "\\operatorname{Taylor}_{n}\\left(x^2,x,0\\right)");
 
       fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
 
