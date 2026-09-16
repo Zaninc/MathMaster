@@ -1435,6 +1435,33 @@ describe("previewLatex (pipeline único da pré-visualização e do histórico)"
     });
   });
 
+  // --- Sprint V3.0.7 (Séries de Taylor e Maclaurin) --------------------------
+  describe("Séries de Taylor e Maclaurin (echo via previewLatex E resultado via valueToLatex)", () => {
+    it("previewLatex: taylor(exp(x), x, 0, 4) -> \\operatorname{Taylor}(...), nunca o fallback genérico", async () => {
+      const latex = normalized(await previewLatex("taylor(exp(x), x, 0, 4)"));
+      expect(latex).toContain("\\operatorname{Taylor}");
+      expect(latex).not.toContain("\\operatorname{taylor}");
+    });
+
+    it("previewLatex: centro simbólico (π/2, teste de ouro) renderiza sem quebrar", async () => {
+      const latex = await previewLatex("taylor(sin(x), x, pi/2, 4)");
+      expect(latex).not.toBeNull();
+      assertRendersSafely(latex as string, "taylor(sin(x), x, pi/2, 4)");
+    });
+
+    it("valueToLatex: o RESULTADO (já um polinômio comum, sem 'taylor(' nenhum) renderiza pela via genérica normal", async () => {
+      const latex = normalized(await valueToLatex("1+x+x**2/2+x**3/6+x**4/24"));
+      expect(latex).not.toBeNull();
+      expect(latex).not.toContain("operatorname{Taylor}");
+    });
+
+    it("ordem ainda não numérica (placeholder não editado) nunca quebra o preview", async () => {
+      const latex = await previewLatex("taylor(x**2, x, 0, n)");
+      expect(latex).not.toBeNull();
+      assertRendersSafely(latex as string, "taylor(x**2, x, 0, n)");
+    });
+  });
+
   it("reconhece a sintaxe principal do somatório, completa ou ainda em digitação", async () => {
     expect(normalized(await previewLatex("Σ(i=1..10) i"))).toContain("\\sum_{i=1}^{10}");
 

@@ -421,6 +421,88 @@ describe("CalculatorWorkspace", () => {
       expect(apiClient.solve).not.toHaveBeenCalled();
     });
 
+    // --- Sprint V3.0.7 (Séries de Taylor e Maclaurin) -----------------------
+
+    it("tecla Taylor insere \\operatorname{Taylor}(...) com variável literal 'x' e função/centro/ordem genuinamente vazios", async () => {
+      // Achado real no navegador: um `\placeholder{f(x)}` com conteúdo
+      // default NÃO é desenhado visualmente pelo MathLive (aparece como
+      // caixa vazia idêntica a um placeholder genuinamente vazio), mas
+      // continua sendo TEXTO REAL se o campo nunca for editado — o
+      // adapter parsearia "f(x)" como "f*x" silenciosamente em vez de
+      // bloquear como incompleto. Por isso função/centro/ordem usam
+      // `\placeholder{}` vazio — só a variável é texto literal "x"
+      // (mesma convenção já usada pela tecla "d/dx").
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToCalculo();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir polinômio de Taylor" }));
+      expect(field.value).toBe(
+        "\\operatorname{Taylor}\\left(\\placeholder{},x,\\placeholder{},\\placeholder{}\\right)"
+      );
+    });
+
+    it("tecla Maclaurin insere o MESMO template, com o centro já preenchido como 0 literal", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToCalculo();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Inserir polinômio de Maclaurin (Taylor centrado em 0)" })
+      );
+      expect(field.value).toBe(
+        "\\operatorname{Taylor}\\left(\\placeholder{},x,0,\\placeholder{}\\right)"
+      );
+    });
+
+    it("Taylor(e^x, x, 0, 4) resolve ponta-a-ponta chamando o backend com a sintaxe canônica taylor(exp(x), x, 0, 4)", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      vi.mocked(apiClient.solve).mockResolvedValue({
+        expression: "taylor(exp(x), x, 0, 4)",
+        result: "1+x+x²/2+x³/6+x⁴/24",
+        approx: null,
+      });
+
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      setFieldLatex(field, "\\operatorname{Taylor}\\left(\\exponentialE^{x},x,0,4\\right)");
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith("taylor(exp(x), x, 0, 4)"));
+    });
+
+    it("Taylor com centro vazio (tecla clicada, campo de centro nunca preenchido) mostra 'Preencha todos os espaços...', nunca chama o backend", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      switchToCalculo();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inserir polinômio de Taylor" }));
+      setFieldLatex(
+        field,
+        "\\operatorname{Taylor}\\left(x^2,x,\\placeholder{},4\\right)"
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      expect(await screen.findByText("Preencha todos os espaços antes de resolver.")).toBeInTheDocument();
+      expect(apiClient.solve).not.toHaveBeenCalled();
+    });
+
+    it("Taylor com ordem inválida (texto não numérico) passa intacto pro backend — payload correto, nunca bloqueado no frontend", async () => {
+      vi.mocked(apiClient.getHistory).mockResolvedValue([]);
+      const { container } = render(<CalculatorWorkspace />);
+      const field = await getField(container);
+      setFieldLatex(field, "\\operatorname{Taylor}\\left(x^2,x,0,n\\right)");
+
+      fireEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+      await waitFor(() => expect(apiClient.solve).toHaveBeenCalledWith("taylor(x², x, 0, n)"));
+    });
+
     it("tecla ∫ dx insere integral indefinida estruturada", async () => {
       vi.mocked(apiClient.getHistory).mockResolvedValue([]);
       const { container } = render(<CalculatorWorkspace />);

@@ -754,6 +754,24 @@ class LatexParser {
   }
 
   /**
+   * Sprint V3.0.7 (Séries de Taylor e Maclaurin) — lê uma fence `(...)`
+   * com N argumentos separados por vírgula, cada um pelo parser
+   * recursivo INTEIRO (`parseExpression()` — placeholder vazio já lança
+   * `Incomplete` sozinho, sem checagem extra aqui). Só usada por
+   * `\operatorname{Taylor}(...)` hoje, mas genérica o bastante pra
+   * qualquer operador futuro de aridade fixa nomeada.
+   */
+  private parseCommaSeparatedArguments(): string[] {
+    this.expect("(");
+    const args = [this.parseExpression()];
+    while (this.consume(",")) {
+      args.push(this.parseExpression());
+    }
+    this.expect(")");
+    return args;
+  }
+
+  /**
    * Sprint V3.0.6 (Derivadas de Ordem Superior) — decide se um NUMERADOR
    * de `\frac{...}` JÁ PARSEADO (via `readGroup()`, o parse normal —
    * nunca texto cru aqui, ao contrário do denominador logo abaixo)
@@ -1319,6 +1337,29 @@ class LatexParser {
         const arg = this.parseParenthesizedOrAtom();
         return `${name}(${arg})`;
       }
+    }
+
+    // Sprint V3.0.7 (Séries de Taylor e Maclaurin) — `\operatorname{Taylor}
+    // (f(x), x, a, n)` (teclas "Taylor"/"Maclaurin", ver `data/keyboard.ts`)
+    // -> `taylor(f(x), x, a, n)`. Quatro argumentos separados por vírgula
+    // dentro de UMA fence, cada um parseado pelo parser recursivo INTEIRO
+    // (`parseCommaSeparatedArguments` abaixo) — reaproveita de graça o
+    // mecanismo genérico de slot vazio (`\placeholder{}` vazio em
+    // qualquer um dos 4 campos -> `Incomplete`, nunca um caso especial
+    // pra "centro vazio"/"ordem vazia"). Validação SEMÂNTICA de "a ordem
+    // é um inteiro no intervalo permitido" é responsabilidade exclusiva
+    // do backend (`parse_taylor_order`, única fonte da verdade) — o
+    // adapter só extrai o TEXTO de cada campo, igual ao resto do
+    // catálogo desde a V3.0.6 (ordem de derivada de ordem superior).
+    if (this.consumeFunctionName("Taylor")) {
+      const args = this.parseCommaSeparatedArguments();
+      if (args.length !== 4) {
+        throw new Unsupported(
+          "Taylor(...) espera 4 argumentos: função, variável, centro e ordem"
+        );
+      }
+      const [body, variable, center, order] = args;
+      return `taylor(${body}, ${variable}, ${center}, ${order})`;
     }
 
     if (this.consume("\\sqrt")) {

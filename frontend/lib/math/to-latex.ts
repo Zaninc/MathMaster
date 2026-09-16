@@ -784,6 +784,19 @@ function productHandler(node: MathNode, options: TexOptions): string | undefined
     return `\\lim_{${variable} \\to ${point}} ${body}`;
   }
 
+  // Sprint V3.0.7 (Séries de Taylor e Maclaurin) — `taylor(f(x), x, a, n)`
+  // -> mesma notação `\operatorname{Taylor}(...)` usada pela tecla de
+  // entrada (`data/keyboard.ts`), pra o echo/histórico nunca divergir
+  // visualmente do que o usuário digitou. Maclaurin não tem branch
+  // próprio aqui — é só `taylor(f, x, 0, n)`, renderiza igual.
+  if (name === "taylor" && nodeArgs.length === 4) {
+    const body = texOf(nodeArgs[0], options);
+    const variable = texOf(nodeArgs[1], options);
+    const center = texOf(nodeArgs[2], options);
+    const order = texOf(nodeArgs[3], options);
+    return `\\operatorname{Taylor}\\left(${body},\\ ${variable},\\ ${center},\\ ${order}\\right)`;
+  }
+
   // Aliases secundários do somatório (sintaxe principal é "Σ(var=inf..sup)
   // expr", tratada à parte em `inputToLatex`/`tryWholeSum" — esta forma só
   // existe porque "sum(...)"/"somatorio(...)" já É sintaxe mathjs válida
@@ -1552,6 +1565,14 @@ function renderCall(name: string, argsText: string): string {
   }
   if (LIMIT_NAMES.has(name) && args.length === 3) {
     return `\\lim_{${rawArgs[1]} \\to ${args[2]}} ${args[0]}`;
+  }
+  if (name.toLowerCase() === "taylor" && args.length === 4) {
+    // Sprint V3.0.7 (Séries de Taylor e Maclaurin) — MESMA extensão do
+    // branch "taylor" em `texOf` acima, duplicada aqui pelo mesmo motivo
+    // já documentado pra "derivada"/ordem superior: `previewLatex` usa
+    // este parser tolerante PRÓPRIO (nunca mathjs), então o ECHO da
+    // expressão resolvida precisa do seu próprio reconhecimento.
+    return `\\operatorname{Taylor}\\left(${args[0]},\\ ${args[1]},\\ ${args[2]},\\ ${args[3]}\\right)`;
   }
   if (SUM_NAMES.has(name) && args.length === 4) {
     // Ordem oficial: variável, limite inferior, limite superior, expressão

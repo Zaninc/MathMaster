@@ -586,6 +586,50 @@ export const KEYBOARD_CATEGORIES: KeyboardCategory[] = [
         mathLiveInsert: "\\frac{d^{\\placeholder{}}}{dx^{\\placeholder{}}}\\left(\\placeholder{}\\right)",
       },
       {
+        // Sprint V3.0.7 (Séries de Taylor e Maclaurin) — 4 slots
+        // independentes (função, variável, centro, ordem), nunca uma
+        // notação compacta tipo "T_n[f](x;a)" (rejeitada — exigiria o
+        // adapter decompor sub/sobrescrito E argumento numa única
+        // estrutura, mais frágil que 4 campos claramente separados por
+        // vírgula dentro de UMA fence, o mesmo padrão já usado por
+        // `\int_{a}^{b}`/`\operatorname{Taylor}` reaproveitando o parser
+        // recursivo inteiro). Variável é texto LITERAL "x" (nunca um
+        // placeholder) — MESMA convenção já usada pela tecla "d/dx"
+        // (`\frac{d}{dx}`, o "x" também é literal editável, não
+        // placeholder) — achado real no navegador: um `\placeholder{f(x)}`
+        // com conteúdo default NÃO É desenhado visualmente pelo MathLive
+        // (aparece como caixa vazia idêntica a um placeholder genuinamente
+        // vazio), mas continua sendo texto REAL se o campo nunca for
+        // tocado — o adapter parsearia "f(x)" como "f*x" (multiplicação
+        // implícita letra-parêntese) silenciosamente, em vez de rejeitar
+        // com "Preencha todos os espaços...". Função/centro/ordem ficam
+        // genuinamente VAZIOS (mesma convenção da tecla "dⁿ/dxⁿ") —
+        // nenhum default que possa ser esquecido sem querer.
+        label: "Taylor",
+        insert: "Taylor(,x,0,4)",
+        cursorOffset: 7,
+        ariaLabel: "Inserir polinômio de Taylor",
+        latex: "\\operatorname{T}_n(x)",
+        mathLiveInsert:
+          "\\operatorname{Taylor}\\left(\\placeholder{},x,\\placeholder{},\\placeholder{}\\right)",
+      },
+      {
+        // MESMO template do "Taylor" acima, só com o centro já
+        // pré-preenchido como "0" (dígito literal editável, mesmo
+        // espírito do "x" da variável — nunca um placeholder) —
+        // Maclaurin é CONCEITUALMENTE Taylor centrado em a=0 (ver
+        // `calculus/taylor.py`), nunca um caminho de código/sintaxe
+        // separado; esta tecla só poupa o usuário de digitar "0" no
+        // campo de centro.
+        label: "Maclaurin",
+        insert: "Taylor(,x,0,4)",
+        cursorOffset: 7,
+        ariaLabel: "Inserir polinômio de Maclaurin (Taylor centrado em 0)",
+        latex: "\\operatorname{M}_n(x)",
+        mathLiveInsert:
+          "\\operatorname{Taylor}\\left(\\placeholder{},x,0,\\placeholder{}\\right)",
+      },
+      {
         label: "∫ dx",
         insert: "∫() dx",
         cursorOffset: 2,

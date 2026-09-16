@@ -206,6 +206,7 @@ from ..calculus.dispatcher import (
     is_derivative_call,
     is_indefinite_integral_call,
     is_limit_call,
+    is_taylor_call,
     parse_derivative_call_with_order,
     parse_integral_call,
     parse_limit_call,
@@ -257,6 +258,7 @@ from .partial_fractions import find_partial_fractions, generate_partial_fraction
 from .polynomial_division import find_polynomial_division, generate_polynomial_division_steps
 from .quadratic_equations import generate_quadratic_equation_steps
 from .quotient_rule import generate_quotient_rule_steps, is_quotient_shape
+from .taylor import generate_taylor_steps
 from .trig_integrals import generate_trig_integral_steps, is_trig_power_shape
 from .trig_substitution import find_trig_substitution, generate_trig_substitution_steps
 from .trigonometric_limits import (
@@ -381,6 +383,9 @@ def generate_steps(expression: str) -> list[MathStep]:
         if is_lhopital_shape(expr, symbol, point):
             return generate_lhopital_steps(normalized)
         return generate_limit_steps(normalized)
+
+    if is_taylor_call(normalized):
+        return generate_taylor_steps(normalized)
 
     if is_logarithm_domain_expression(normalized) and looks_like_equation(normalized):
         lhs, rhs = parse_equation_sides(normalized)

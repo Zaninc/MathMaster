@@ -1744,6 +1744,93 @@ describe("mathFieldLatexToBackendExpression", () => {
     });
   });
 
+  // --- Sprint V3.0.7 (Séries de Taylor e Maclaurin) --------------------------
+  //
+  // `\operatorname{Taylor}(f(x), x, a, n)` (teclas "Taylor"/"Maclaurin") ->
+  // `taylor(f(x), x, a, n)`. Os 4 argumentos são lidos por
+  // `parseCommaSeparatedArguments` — cada um pelo parser recursivo INTEIRO
+  // (`parseExpression()`), então placeholder vazio em QUALQUER um dos 4
+  // campos já lança `Incomplete` sozinho, sem nenhum código novo pra
+  // "centro vazio"/"ordem vazia". Validação semântica de que a ordem é um
+  // inteiro no intervalo permitido é 100% responsabilidade do backend
+  // (`calculus/taylor.py:parse_taylor_order`) — mesma divisão de
+  // responsabilidade já estabelecida pela ordem de derivada (V3.0.6).
+  describe("Sprint V3.0.7 — Séries de Taylor e Maclaurin (\\operatorname{Taylor}(...))", () => {
+    it("Taylor(e^x, x, 0, 4) -> taylor(exp(x), x, 0, 4)", () => {
+      expect(
+        expr("\\operatorname{Taylor}\\left(\\exponentialE^{x},x,0,4\\right)")
+      ).toBe("taylor(exp(x), x, 0, 4)");
+    });
+
+    it("Taylor(sin(x), x, 0, 5) -> taylor(sin(x), x, 0, 5)", () => {
+      expect(expr("\\operatorname{Taylor}\\left(\\sin(x),x,0,5\\right)")).toBe(
+        "taylor(sin(x), x, 0, 5)"
+      );
+    });
+
+    it("centro simbólico (π/2) passa intacto pro backend — teste de ouro", () => {
+      expect(
+        expr("\\operatorname{Taylor}\\left(\\sin(x),x,\\frac{\\pi}{2},4\\right)")
+      ).toBe("taylor(sin(x), x, π/2, 4)");
+    });
+
+    it("Maclaurin explícito (centro=1/(1-x) digitado à mão) continua igual a Taylor com a=0", () => {
+      expect(expr("\\operatorname{Taylor}\\left(\\frac{1}{1-x},x,0,5\\right)")).toBe(
+        "taylor(1/(1-x), x, 0, 5)"
+      );
+    });
+
+    it("função vazia -> incomplete", () => {
+      expect(
+        mathFieldLatexToBackendExpression(
+          "\\operatorname{Taylor}\\left(\\placeholder{},x,0,4\\right)"
+        )
+      ).toEqual({ ok: false, reason: "incomplete" });
+    });
+
+    it("variável vazia -> incomplete", () => {
+      expect(
+        mathFieldLatexToBackendExpression(
+          "\\operatorname{Taylor}\\left(x^2,\\placeholder{},0,4\\right)"
+        )
+      ).toEqual({ ok: false, reason: "incomplete" });
+    });
+
+    it("centro vazio -> incomplete", () => {
+      expect(
+        mathFieldLatexToBackendExpression(
+          "\\operatorname{Taylor}\\left(x^2,x,\\placeholder{},4\\right)"
+        )
+      ).toEqual({ ok: false, reason: "incomplete" });
+    });
+
+    it("ordem vazia -> incomplete", () => {
+      expect(
+        mathFieldLatexToBackendExpression(
+          "\\operatorname{Taylor}\\left(x^2,x,0,\\placeholder{}\\right)"
+        )
+      ).toEqual({ ok: false, reason: "incomplete" });
+    });
+
+    it("ordem negativa/decimal/não numérica passam intactas pro backend (única fonte da verdade pra validação de ordem)", () => {
+      expect(expr("\\operatorname{Taylor}\\left(x^2,x,0,-1\\right)")).toBe(
+        "taylor(x², x, 0, -1)"
+      );
+      expect(expr("\\operatorname{Taylor}\\left(x^2,x,0,2.5\\right)")).toBe(
+        "taylor(x², x, 0, 2.5)"
+      );
+    });
+
+    it("tecla Maclaurin (centro=0 pré-preenchido) — o mesmo template, só com o 3º campo literal", () => {
+      // Simula o mathLiveInsert exato da tecla "Maclaurin" já preenchido
+      // pelo usuário nos campos restantes — centro "0" nunca é um
+      // placeholder, é um dígito literal editável como qualquer outro.
+      expect(
+        expr("\\operatorname{Taylor}\\left(\\exponentialE^{x},x,0,4\\right)")
+      ).toBe("taylor(exp(x), x, 0, 4)");
+    });
+  });
+
   describe("Sprint V3.0.4 — equações trigonométricas (mecanismo genérico de '=', nenhum código novo de equação)", () => {
     it("sen(x)=0, cos(x)=1, tan(x)=0, sen(x)=1/2, cos(x)=1/2", () => {
       expect(expr("\\operatorname{sen}\\left(x\\right)=0")).toBe("sin(x)=0");

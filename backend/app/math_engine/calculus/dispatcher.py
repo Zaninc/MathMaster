@@ -50,10 +50,15 @@ from .implicit_differentiation import (
 )
 from .integrals import compute_definite_integral, compute_indefinite_integral, verify_antiderivative
 from .limits import compute_limit
+from .taylor import compute_taylor_polynomial_text, parse_taylor_order
 
 _TRANSFORMATIONS = standard_transformations + (implicit_multiplication_application,)
 
-_CALL_PATTERN = re.compile(r"^\s*(derivada|integral|limite)\s*\((.*)\)\s*$", re.DOTALL)
+# Sprint V3.0.7 (Taylor/Maclaurin) — "taylor" entra na MESMA sintaxe por
+# vírgula de sempre (`taylor(expr, var, centro, ordem)`), nunca uma
+# gramática nova: reaproveita 100% de `_split_top_level_args`/`_parse_
+# variable`/`_parse_fragment` já usados por derivada/integral/limite.
+_CALL_PATTERN = re.compile(r"^\s*(derivada|integral|limite|taylor)\s*\((.*)\)\s*$", re.DOTALL)
 _VARIABLE_PATTERN = re.compile(r"^[a-zA-Z_]\w*$")
 
 # Sprint V3.0.6 (Derivadas de Ordem Superior) — `derivada(expr, var, n)` é
@@ -156,6 +161,14 @@ def is_limit_call(expression: str) -> bool:
     `integral`, que são operações distintas do mesmo `_CALL_PATTERN`)."""
     match = _CALL_PATTERN.match(expression)
     return bool(match) and match.group(1) == "limite"
+
+
+def is_taylor_call(expression: str) -> bool:
+    """Sprint V3.0.7 (Taylor/Maclaurin) — mesmo padrão de `is_derivative_
+    call`, restrito à operação `taylor` (sempre 4 argumentos: expressão,
+    variável, centro e ordem)."""
+    match = _CALL_PATTERN.match(expression)
+    return bool(match) and match.group(1) == "taylor"
 
 
 def _split_top_level_args(text: str) -> list[str]:
@@ -364,6 +377,35 @@ def parse_limit_call(expression: str) -> tuple[Expr, Symbol, Expr]:
     return expr, symbol, point
 
 
+def parse_taylor_call(expression: str) -> tuple[Expr, Symbol, Expr, int]:
+    """Sprint V3.0.7 (Taylor/Maclaurin) — reaproveitável por `math_engine.
+    steps.taylor`: mesmo parsing que `solve_calculus_text` já faz para
+    `taylor(expr, var, centro, ordem)` (`_CALL_PATTERN`, `_split_top_
+    level_args`, `_parse_variable`, `_parse_fragment` — nunca regex
+    frágil novo), devolvendo `(expr, symbol, center, order)` já prontos.
+    `centro` é uma EXPRESSÃO comum (ex. "pi/2", "1", "-3") — mesmo
+    parsing de um limite de integral definida (`parte[2]`/`parte[3]` de
+    `parse_definite_integral_call`), nunca restrita a literais numéricos.
+    `ordem` usa `parse_taylor_order` (intervalo [0, `MAX_TAYLOR_ORDER`] —
+    nunca o de `parse_derivative_order`, que começa em 1: ordem 0 é
+    válida pra Taylor, P₀(x)=f(a))."""
+    match = _CALL_PATTERN.match(expression)
+    if not match or match.group(1) != "taylor":
+        raise ExpressionError(f"Não foi possível interpretar a expressão: {expression}")
+    _, argumentos = match.groups()
+    partes = _split_top_level_args(argumentos)
+    if len(partes) != 4:
+        raise ExpressionError(
+            "taylor(...) espera exatamente 4 argumentos: expressão, variável, "
+            "centro e ordem."
+        )
+    symbol = _parse_variable(partes[1])
+    expr = canonicalize_euler_constant(_parse_fragment(partes[0], symbol))
+    center = canonicalize_euler_constant(_parse_fragment(partes[2], symbol))
+    order = parse_taylor_order(partes[3])
+    return expr, symbol, center, order
+
+
 def solve_calculus_text(expression: str) -> str:
     match = _CALL_PATTERN.match(expression)
     if not match:
@@ -465,5 +507,18 @@ def solve_calculus_text(expression: str) -> str:
         raise ExpressionError(
             "integral(...) espera 2 argumentos (indefinida) ou 4 argumentos (definida)."
         )
+
+    if operacao == "taylor":
+        if len(partes) != 4:
+            raise ExpressionError(
+                "taylor(...) espera exatamente 4 argumentos: expressão, variável, "
+                "centro e ordem."
+            )
+        symbol = _parse_variable(partes[1])
+        expr = canonicalize_euler_constant(_parse_fragment(partes[0], symbol))
+        center = canonicalize_euler_constant(_parse_fragment(partes[2], symbol))
+        order = parse_taylor_order(partes[3])
+        resultado = _rename_natural_log(compute_taylor_polynomial_text(expr, symbol, center, order))
+        return f"Taylor: {resultado}"
 
     raise ExpressionError(f"Operação de cálculo não reconhecida: {operacao}")
